@@ -1,0 +1,16 @@
+{
+  "name": "@infra/d1",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "migrate:create": "wrangler d1 migrations create starter-db",
+    "migrate:local": "wrangler d1 migrations apply starter-db --local --persist-to ../../.wrangler/state",
+    "migrate:remote": "wrangler d1 migrations apply starter-db --remote",
+    "seed:local": "wrangler d1 execute starter-db --local --persist-to ../../.wrangler/state --file=./seeds/0001_seed.sql",
+    "seed:remote": "wrangler d1 execute starter-db --remote --file=./seeds/0001_seed.sql",
+    "tables:local": "wrangler d1 execute starter-db --local --persist-to ../../.wrangler/state --command \"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\""
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  }
+}

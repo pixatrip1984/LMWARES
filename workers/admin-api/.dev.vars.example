@@ -1,0 +1,5 @@
+# El Admin API no requiere secretos: Cloudflare Access se verifica con claves
+# públicas (JWKS). En local, ACCESS_DISABLED="1" salta la verificación y usa
+# el header X-Dev-Email (por defecto admin@example.com).
+#
+# Copia este archivo a .dev.vars solo si necesitas overrides locales.

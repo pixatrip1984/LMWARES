@@ -1,0 +1,109 @@
+import type {
+  AuditEvent,
+  Paginated,
+  Publication,
+  PublicationImage,
+  Request,
+  RequestNote,
+  RequestStatus,
+  StatusHistory,
+} from '@starter/domain';
+import type {
+  CreatePublicationInput,
+  CreateRequestNoteInput,
+  UpdatePublicationInput,
+  UpdatePublicationStatusInput,
+} from '@starter/validation';
+import { createHttpClient } from './http';
+
+export interface AdminPublicationDetail extends Publication {
+  images: Array<{ id: string; url: string; alt: string | null; position: number }>;
+}
+
+export interface AdminMe {
+  email: string;
+  name: string | null;
+  role: string;
+}
+
+/**
+ * Cliente del Admin API Worker. Usa credenciales (cookie de Cloudflare Access)
+ * en cada petición. Nunca incluye secretos: la identidad la maneja Access.
+ */
+export function createAdminClient(baseUrl: string) {
+  const http = createHttpClient({ baseUrl, withCredentials: true });
+
+  return {
+    me() {
+      return http.get<AdminMe>('/admin/me');
+    },
+
+    // ── Publicaciones ────────────────────────────────────────
+    getPublication(id: string) {
+      return http.get<AdminPublicationDetail>(`/admin/publications/${id}`);
+    },
+    listPublications(params: { page?: number; pageSize?: number } = {}) {
+      const qs = new URLSearchParams();
+      if (params.page) qs.set('page', String(params.page));
+      if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return http.get<Paginated<Publication>>(`/admin/publications${suffix}`);
+    },
+    createPublication(input: CreatePublicationInput) {
+      return http.post<Publication>('/admin/publications', input);
+    },
+    updatePublication(id: string, input: UpdatePublicationInput) {
+      return http.patch<Publication>(`/admin/publications/${id}`, input);
+    },
+    updatePublicationStatus(id: string, input: UpdatePublicationStatusInput) {
+      return http.patch<Publication>(`/admin/publications/${id}/status`, input);
+    },
+    uploadPublicationImage(
+      id: string,
+      file: File | Blob,
+      meta: { alt?: string; position?: number } = {},
+    ) {
+      const form = new FormData();
+      form.set('file', file);
+      if (meta.alt != null) form.set('alt', meta.alt);
+      if (meta.position != null) form.set('position', String(meta.position));
+      return http.post<PublicationImage>(`/admin/publications/${id}/images`, form);
+    },
+    deletePublicationImage(id: string, imageId: string) {
+      return http.del<void>(`/admin/publications/${id}/images/${imageId}`);
+    },
+
+    // ── Solicitudes ──────────────────────────────────────────
+    listRequests(
+      params: { page?: number; pageSize?: number; status?: RequestStatus; type?: string } = {},
+    ) {
+      const qs = new URLSearchParams();
+      if (params.page) qs.set('page', String(params.page));
+      if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+      if (params.status) qs.set('status', params.status);
+      if (params.type) qs.set('type', params.type);
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return http.get<Paginated<Request>>(`/admin/requests${suffix}`);
+    },
+    getRequest(id: string) {
+      return http.get<{
+        request: Request;
+        notes: RequestNote[];
+        history: StatusHistory[];
+      }>(`/admin/requests/${id}`);
+    },
+    updateRequestStatus(id: string, status: RequestStatus, reason?: string) {
+      return http.patch<Request>(`/admin/requests/${id}/status`, { status, reason });
+    },
+    addRequestNote(id: string, input: CreateRequestNoteInput) {
+      return http.post<RequestNote>(`/admin/requests/${id}/notes`, input);
+    },
+
+    // ── Auditoría ────────────────────────────────────────────
+    listAudit() {
+      return http.get<AuditEvent[]>('/admin/audit');
+    },
+  };
+}
+
+export type AdminClient = ReturnType<typeof createAdminClient>;

@@ -1,0 +1,26 @@
+{
+  "name": "@workers/public-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --persist-to ../../.wrangler/state",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types",
+    "lint": "echo \"(public-api) no lint configured\""
+  },
+  "dependencies": {
+    "@starter/config": "workspace:*",
+    "@starter/db": "workspace:*",
+    "@starter/domain": "workspace:*",
+    "@starter/validation": "workspace:*",
+    "hono": "^4.6.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240925.0",
+    "typescript": "^5.6.2",
+    "wrangler": "^4.20.0"
+  }
+}

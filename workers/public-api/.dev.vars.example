@@ -1,0 +1,3 @@
+# Copia este archivo a .dev.vars (en .gitignore) para desarrollo local.
+# Secreto de Turnstile (lado servidor). Obtenlo en el dashboard de Cloudflare.
+TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"

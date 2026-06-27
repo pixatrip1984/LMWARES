@@ -1,0 +1,8 @@
+[
+  {
+    "AllowedOrigins": ["http://localhost:5173", "https://tu-dominio-publico.com"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]

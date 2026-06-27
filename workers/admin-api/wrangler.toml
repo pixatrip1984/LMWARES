@@ -1,0 +1,36 @@
+name = "starter-admin-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-25"
+
+# Fase 2 (admin con Access): descomenta y reemplaza <DOMINIO>.
+# IMPORTANTE: 'routes' va a NIVEL SUPERIOR (antes de [vars]); si queda dentro
+# de [vars], wrangler lo trata como variable y NO aplica las rutas.
+# routes = [
+#   { pattern = "admin.<DOMINIO>/admin/*", zone_name = "<DOMINIO>" },
+#   { pattern = "admin.<DOMINIO>/health",  zone_name = "<DOMINIO>" }
+# ]
+
+[vars]
+ALLOWED_ORIGINS = "http://localhost:5174"
+MEDIA_BASE_URL = ""
+MEDIA_BUCKET_NAME = "starter-media"
+# URL del Public API para previsualizar imágenes (o usa MEDIA_BASE_URL/CDN).
+PUBLIC_API_URL = "http://localhost:8787"
+PROJECT_SLUG = "starter"
+# Dominio del equipo de Access (incluye https://). Reemplaza por el tuyo.
+ACCESS_TEAM_DOMAIN = "https://REEMPLAZAR.cloudflareaccess.com"
+# AUD tag de la aplicación de Access que protege este Worker.
+ACCESS_AUD = "REEMPLAZAR_CON_TU_AUD"
+# Crea automáticamente un AdminUser (rol viewer) al primer login válido.
+AUTO_PROVISION_ADMINS = "1"
+# En local deja "1" para saltar Access (usa X-Dev-Email). En producción pon "0".
+ACCESS_DISABLED = "1"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "starter-db"
+database_id = "REEMPLAZAR_CON_TU_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "starter-media"

@@ -1,0 +1,26 @@
+{
+  "name": "@starter/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"(api-client) no lint configured\""
+  },
+  "dependencies": {
+    "@starter/domain": "workspace:*",
+    "@starter/validation": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2"
+  }
+}
