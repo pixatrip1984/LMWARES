@@ -1,23 +1,34 @@
 # Setup local
 
 Guía para levantar la plantilla en tu máquina y crear los recursos de Cloudflare.
+En Windows usa `C:\dev\<proyecto>` como ruta de trabajo; evita `Documents` para
+no chocar con sandboxing, OneDrive o Controlled Folder Access.
 
 ## 1. Requisitos
 
 - **Node.js 20+** (`node -v`)
-- **pnpm 9+** — habilítalo con Corepack:
-  ```bash
-  corepack enable && corepack prepare pnpm@9.12.0 --activate
-  ```
-- **Cuenta de Cloudflare** + Wrangler (incluido como devDependency; se invoca con `pnpm`).
+- **npm 10+** (`npm -v`)
+- **Cuenta de Cloudflare** para despliegue. Wrangler va fijado en el workspace y
+  tambien se puede invocar con `npx wrangler@4.105.0`.
 
-## 2. Instalar dependencias
+## 2. Camino rapido local
 
-```bash
-pnpm install
+Desde la raiz del repo:
+
+```powershell
+npm run setup:local
 ```
 
-## 3. Variables de entorno
+Ese script:
+
+- verifica que la ruta sea escribible y que Node/npm existan;
+- ejecuta `npm install`;
+- copia `.env.example` y `.dev.vars.example`;
+- aplica migraciones D1 locales con `--persist-to ./.wrangler/state`;
+- carga seed local;
+- corre typecheck.
+
+## 3. Variables de entorno manuales
 
 Copia los ejemplos (ninguno contiene secretos reales):
 
@@ -31,21 +42,21 @@ cp workers/public-api/.dev.vars.example workers/public-api/.dev.vars
 
 Detalle de cada variable en [env.md](./env.md).
 
-## 4. Crear recursos de Cloudflare
+## 4. Crear recursos de Cloudflare para produccion
 
 ```bash
-pnpm dlx wrangler login
+npx wrangler@4.105.0 login
 
 # D1
-pnpm dlx wrangler d1 create starter-db
-# → copia el "database_id" devuelto en los TRES wrangler.toml:
+npx wrangler@4.105.0 d1 create starter-db
+# -> copia el "database_id" devuelto en los TRES wrangler.toml:
 #   infra/d1/wrangler.toml, workers/public-api/wrangler.toml, workers/admin-api/wrangler.toml
 
 # R2
-pnpm dlx wrangler r2 bucket create starter-media
+npx wrangler@4.105.0 r2 bucket create starter-media
 ```
 
-> En local puedes saltarte la creación remota: D1 y R2 funcionan en modo local
+> En local puedes saltarte la creacion remota: D1 y R2 funcionan en modo local
 > (miniflare). Solo necesitas crear los recursos al desplegar a producción.
 
 ## 5. Migrar y sembrar la base (local)
@@ -54,19 +65,25 @@ Las migraciones y ambos Workers comparten el MISMO estado local
 (`.wrangler/state`), por lo que los datos son consistentes entre servicios.
 
 ```bash
-pnpm db:migrate:local
-pnpm db:seed:local      # datos de ejemplo (opcional)
+npm run db:migrate:local
+npm run db:seed:local      # datos de ejemplo (opcional)
 ```
 
 ## 6. Levantar todo en desarrollo
 
-En terminales separadas (o `pnpm dev` para todo en paralelo con Turborepo):
+En terminales separadas (o `npm run dev` para todo en paralelo con Turborepo):
 
 ```bash
-pnpm --filter @workers/public-api dev   # http://localhost:8787
-pnpm --filter @workers/admin-api dev    # http://localhost:8788
-pnpm --filter @apps/public-web dev      # http://localhost:5173
-pnpm --filter @apps/admin-web dev       # http://localhost:5174
+npm run dev --workspace @workers/public-api   # http://localhost:8787
+npm run dev --workspace @workers/admin-api    # http://localhost:8788
+npm run dev --workspace @apps/public-web      # http://localhost:5173
+npm run dev --workspace @apps/admin-web       # http://localhost:5174
+```
+
+O usa el wrapper con preflight de puertos:
+
+```powershell
+npm run dev:local
 ```
 
 - **En local Turnstile y Access están desactivados** (`TURNSTILE_DISABLED=1`,
@@ -75,18 +92,25 @@ pnpm --filter @apps/admin-web dev       # http://localhost:5174
 
 ## 7. Probar el flujo
 
-1. Abre el portal admin (5174) → crea una publicación → súbele una imagen →
+1. Ejecuta la validacion automatica:
+
+   ```powershell
+   npm run validate:local
+   ```
+
+2. Abre el portal admin (5174) → crea una publicación → súbele una imagen →
    cámbiala a `published`.
-2. Abre el frontend público (5173) → debe aparecer en el catálogo y su detalle.
-3. Envía el formulario de contacto → revisa la solicitud en el admin.
+3. Abre el frontend público (5173) → debe aparecer en el catálogo y su detalle.
+4. Envía el formulario de contacto → revisa la solicitud en el admin.
 
 ## Comandos útiles
 
 ```bash
-pnpm typecheck     # TS en todo el monorepo
-pnpm build         # build de apps + typecheck de paquetes/workers
-pnpm format        # Prettier
-pnpm --filter @infra/d1 tables:local   # listar tablas locales
+npm run typecheck     # TS en todo el monorepo
+npm run check:workers # bundle dry-run de ambos Workers
+npm run build         # build de apps + typecheck de paquetes/workers
+npm run format        # Prettier
+npm run db:tables:local   # listar tablas locales
 ```
 
 ## Despliegue

@@ -6,7 +6,7 @@ Para llevar un proyecto basado en esta plantilla a producción.
 
 - [ ] `wrangler d1 create <slug>-db` y `database_id` copiado en los 3 `wrangler.toml`.
 - [ ] `wrangler r2 bucket create <slug>-media`.
-- [ ] Migraciones aplicadas en remoto: `pnpm db:migrate:remote`.
+- [ ] Migraciones aplicadas en remoto: `npm run db:migrate:remote`.
 - [ ] (Opcional) Seed/datos iniciales cargados.
 
 ## Cloudflare Access (portal admin)
@@ -27,19 +27,19 @@ Para llevar un proyecto basado en esta plantilla a producción.
 
 - [ ] `ALLOWED_ORIGINS` con los dominios reales (público y admin).
 - [ ] `MEDIA_BASE_URL` apuntando al dominio/CDN de R2 (si se usa CDN).
-- [ ] `pnpm --filter @workers/public-api run deploy`.
-- [ ] `pnpm --filter @workers/admin-api run deploy`.
+- [ ] `npm run deploy --workspace @workers/public-api`.
+- [ ] `npm run deploy --workspace @workers/admin-api`.
 
 ## Frontends (Cloudflare Pages)
 
-- [ ] Proyecto Pages para public-web (build: `pnpm --filter @apps/public-web build`, salida `apps/public-web/dist`).
+- [ ] Proyecto Pages para public-web (build: `npm run build --workspace @apps/public-web`, salida `apps/public-web/dist`).
 - [ ] Proyecto Pages para admin-web (salida `apps/admin-web/dist`).
 - [ ] Variables `VITE_*` configuradas en cada Pages (apuntando a los Workers).
 - [ ] admin-web protegido por la aplicación de Access.
 
 ## Verificación final
 
-- [ ] `pnpm typecheck` y `pnpm build` sin errores.
+- [ ] `npm run typecheck` y `npm run build` sin errores.
 - [ ] Flujo público: catálogo → detalle → envío de formulario (con Turnstile real).
 - [ ] Flujo admin: login por Access → CRUD publicaciones → imágenes → solicitudes.
 - [ ] CORS: el navegador no muestra errores entre frontends y Workers.

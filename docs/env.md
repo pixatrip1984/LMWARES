@@ -54,5 +54,5 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 
 ```bash
 cd workers/public-api
-pnpm dlx wrangler secret put TURNSTILE_SECRET_KEY
+npx wrangler@4.105.0 secret put TURNSTILE_SECRET_KEY
 ```

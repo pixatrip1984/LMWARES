@@ -17,10 +17,10 @@
     "lint": "echo \"(api-client) no lint configured\""
   },
   "dependencies": {
-    "@starter/domain": "workspace:*",
-    "@starter/validation": "workspace:*"
+    "@starter/domain": "0.0.0",
+    "@starter/validation": "0.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.2"
+    "typescript": "~5.9.3"
   }
 }

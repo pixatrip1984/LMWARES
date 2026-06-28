@@ -11,6 +11,6 @@
     "tables:local": "wrangler d1 execute starter-db --local --persist-to ../../.wrangler/state --command \"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\""
   },
   "devDependencies": {
-    "wrangler": "^4.20.0"
+    "wrangler": "4.105.0"
   }
 }

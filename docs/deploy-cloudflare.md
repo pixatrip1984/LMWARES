@@ -31,21 +31,15 @@ Reemplaza los marcadores:
 
 ## 1. Requisitos (Windows)
 
-```powershell
-# Node 20+ ya instalado. Instalar pnpm (sin admin):
-iwr https://get.pnpm.io/install.ps1 -useb | iex
-```
-**Gotcha Windows:** si después `pnpm` "no se reconoce", el instalador no dejó el
-PATH. Arréglalo (agrega la carpeta del binario al PATH de usuario y de la sesión):
-```powershell
-$p=(gci "$env:LOCALAPPDATA\pnpm" -Recurse -Filter pnpm.exe -ErrorAction SilentlyContinue | select -First 1).DirectoryName; if($p){$env:Path="$p;$env:Path"; [Environment]::SetEnvironmentVariable("Path","$p;"+[Environment]::GetEnvironmentVariable("Path","User"),"User"); pnpm -v}
-```
-Reinicia VS Code para que las terminales nuevas tomen el PATH.
+Usa `C:\dev\<proyecto>` como ruta de trabajo. Evita `Documents`, OneDrive o
+carpetas protegidas por Controlled Folder Access para no bloquear archivos
+temporales de npm/Wrangler.
 
 ```powershell
-pnpm install
-pnpm dlx wrangler login
-pnpm dlx wrangler whoami     # confirma cuenta
+npm install
+npm run setup:local
+npx wrangler@4.105.0 login
+npx wrangler@4.105.0 whoami     # confirma cuenta
 ```
 
 ---
@@ -53,30 +47,26 @@ pnpm dlx wrangler whoami     # confirma cuenta
 ## 2. Base de datos (D1) y archivos (R2)
 
 ```powershell
-pnpm dlx wrangler d1 create <PROYECTO>-db
+npx wrangler@4.105.0 d1 create <PROYECTO>-db
 #   → copia el database_id a los TRES wrangler.toml:
 #     infra/d1/wrangler.toml, workers/public-api/wrangler.toml, workers/admin-api/wrangler.toml
-#     (reemplaza REEMPLAZAR_CON_TU_DATABASE_ID). Mantén binding = "DB".
+#     (reemplaza 00000000-0000-0000-0000-000000000000). Mantén binding = "DB".
 
-pnpm dlx wrangler r2 bucket create <PROYECTO>-media
+npx wrangler@4.105.0 r2 bucket create <PROYECTO>-media
 
 # Crear tablas + datos demo en remoto (confirma con: y)
-pnpm --filter @infra/d1 migrate:remote
-pnpm --filter @infra/d1 seed:remote
+npm run migrate:remote --workspace @infra/d1
+npm run seed:remote --workspace @infra/d1
 ```
-> **Gotcha:** `pnpm-workspace.yaml` debe incluir `infra/*` (si no, `@infra/d1` no se
-> encuentra). Ya viene incluido en esta plantilla.
 
 ---
 
 ## 3. Worker público
 
 ```powershell
-pnpm --filter @workers/public-api run deploy
+npm run deploy --workspace @workers/public-api
 #   → anota la URL: https://<PROYECTO>-public-api.<SUB>.workers.dev
 ```
-> **Gotcha:** usa `run deploy` (no `pnpm ... deploy`): `deploy` es un comando propio
-> de pnpm y, sin `run`, no ejecuta tu script.
 
 Verifícalo: abre `…workers.dev/publications` → debe devolver JSON con el seed.
 
@@ -91,11 +81,11 @@ VITE_TURNSTILE_SITE_KEY=""    # se llena en el paso 5
 ```
 Permite el origen de Pages en el Worker: en `workers/public-api/wrangler.toml`,
 `ALLOWED_ORIGINS = "http://localhost:5173,https://<PAGES_PUB>.pages.dev"`, y
-re-despliega el Worker (`pnpm --filter @workers/public-api run deploy`).
+re-despliega el Worker (`npm run deploy --workspace @workers/public-api`).
 
 ```powershell
-pnpm --filter @apps/public-web build
-pnpm dlx wrangler pages deploy apps/public-web/dist --project-name <PAGES_PUB>
+npm run build --workspace @apps/public-web
+npx wrangler@4.105.0 pages deploy apps/public-web/dist --project-name <PAGES_PUB>
 #   1ª vez: acepta "Create a new project", production branch = main
 #   → URL de producción: https://<PAGES_PUB>.pages.dev   (NO la URL con hash)
 ```
@@ -112,15 +102,15 @@ pnpm dlx wrangler pages deploy apps/public-web/dist --project-name <PAGES_PUB>
 3. Carga el secreto en el Worker (el valor va en el PROMPT, **no** en la línea):
    ```powershell
    cd workers/public-api
-   pnpm dlx wrangler secret put TURNSTILE_SECRET_KEY
+   npx wrangler@4.105.0 secret put TURNSTILE_SECRET_KEY
    cd ../..
    ```
 4. Activa la verificación: en `workers/public-api/wrangler.toml` pon `TURNSTILE_DISABLED = "0"`.
 5. Re-despliega Worker y frontend:
    ```powershell
-   pnpm --filter @workers/public-api run deploy
-   pnpm --filter @apps/public-web build
-   pnpm dlx wrangler pages deploy apps/public-web/dist --project-name <PAGES_PUB>
+   npm run deploy --workspace @workers/public-api
+   npm run build --workspace @apps/public-web
+   npx wrangler@4.105.0 pages deploy apps/public-web/dist --project-name <PAGES_PUB>
    ```
 Prueba: en `https://<PAGES_PUB>.pages.dev/contacto` envía el formulario → "¡Gracias!".
 
@@ -133,8 +123,8 @@ Crea `apps/admin-web/.env` (API en el MISMO origen que la SPA):
 VITE_ADMIN_API_URL=""
 ```
 ```powershell
-pnpm --filter @apps/admin-web build
-pnpm dlx wrangler pages deploy apps/admin-web/dist --project-name <PAGES_ADMIN>
+npm run build --workspace @apps/admin-web
+npx wrangler@4.105.0 pages deploy apps/admin-web/dist --project-name <PAGES_ADMIN>
 ```
 En el dashboard: **Workers & Pages** → proyecto `<PAGES_ADMIN>` → **Custom domains**
 → agrega `admin.<DOMINIO>` (crea solo el DNS proxied en tu zona).
@@ -177,7 +167,7 @@ En `workers/admin-api/wrangler.toml`:
   > variable (`env.routes`) y **no aplica las rutas**. Debe ir arriba, antes de `[vars]`.
 
 ```powershell
-pnpm --filter @workers/admin-api run deploy
+npm run deploy --workspace @workers/admin-api
 ```
 En la salida debe aparecer una sección con las rutas:
 ```
@@ -190,7 +180,7 @@ vía `admin.<DOMINIO>` detrás de Access.)*
 Date permisos de escritura (rol owner):
 ```powershell
 cd infra/d1
-pnpm dlx wrangler d1 execute <PROYECTO>-db --remote --command "INSERT INTO admin_users (id, email, name, role, active, created_at) VALUES (lower(hex(randomblob(16))), '<EMAIL_ADMIN>', 'Admin', 'owner', 1, datetime('now')) ON CONFLICT(email) DO UPDATE SET role='owner', active=1"
+npx wrangler@4.105.0 d1 execute <PROYECTO>-db --remote --command "INSERT INTO admin_users (id, email, name, role, active, created_at) VALUES (lower(hex(randomblob(16))), '<EMAIL_ADMIN>', 'Admin', 'owner', 1, datetime('now')) ON CONFLICT(email) DO UPDATE SET role='owner', active=1"
 cd ../..
 ```
 
@@ -209,9 +199,9 @@ cd ../..
 
 | Síntoma                                             | Causa / Solución                                                            |
 | --------------------------------------------------- | -------------------------------------------------------------------------- |
-| `pnpm` "no se reconoce"                             | PATH; ver paso 1. Reinicia VS Code.                                        |
-| `ERR_PNPM_INVALID_DEPLOY_TARGET`                    | Usa `run deploy` (deploy es comando de pnpm).                              |
-| `No projects matched the filters "@infra/d1"`       | Falta `infra/*` en `pnpm-workspace.yaml`.                                  |
+| `ENOENT` creando `_tmp_*` o install colgado          | Mueve el repo a `C:\dev\<proyecto>` y vuelve a correr `npm run setup:local`. |
+| Puerto 5173/5174 ocupado                             | Detén el proceso que lo usa. Vite corre con `--strictPort` para fallar claro. |
+| CORS bloquea localhost/127.0.0.1                     | Revisa `ALLOWED_ORIGINS` en ambos `wrangler.toml`.                          |
 | Turnstile **110200**                                | El hostname del sitio no está en el widget (agrega `.pages.dev`).         |
 | `secret put` no pide valor / secreto en historial   | El valor va en el PROMPT, no en la línea del comando.                      |
 | `env.routes` aparece como variable                  | `routes` quedó dentro de `[vars]`; muévelo arriba.                         |

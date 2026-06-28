@@ -1,10 +1,10 @@
 name = "starter-public-api"
 main = "src/index.ts"
-compatibility_date = "2024-09-25"
+compatibility_date = "2026-06-28"
 
 # Config NO sensible. Los secretos van en .dev.vars (local) o `wrangler secret put`.
 [vars]
-ALLOWED_ORIGINS = "http://localhost:5173"
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:4174,http://127.0.0.1:4174"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "starter"
 # En local deja "1" para saltar Turnstile. En producción pon "0".
@@ -13,7 +13,7 @@ TURNSTILE_DISABLED = "1"
 [[d1_databases]]
 binding = "DB"
 database_name = "starter-db"
-database_id = "REEMPLAZAR_CON_TU_DATABASE_ID"
+database_id = "00000000-0000-0000-0000-000000000000"
 
 [[r2_buckets]]
 binding = "MEDIA"

@@ -17,10 +17,10 @@
     "lint": "echo \"(validation) no lint configured\""
   },
   "dependencies": {
-    "@starter/domain": "workspace:*",
-    "zod": "^3.23.8"
+    "@starter/domain": "0.0.0",
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "typescript": "^5.6.2"
+    "typescript": "~5.9.3"
   }
 }

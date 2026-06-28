@@ -1,6 +1,6 @@
 -- 0001_seed.sql — Datos de ejemplo para desarrollo local.
 -- Ejecutar DESPUÉS de aplicar las migraciones:
---   pnpm db:seed:local
+--   npm run db:seed:local
 -- IDs en formato UUID v4 para ser compatibles con la validación de la API.
 
 -- Usuario admin de ejemplo (cambia el email por el tuyo en Cloudflare Access).

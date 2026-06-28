@@ -19,7 +19,7 @@ negocio local) agregando configuración, campos extra, copy, diseño y reglas.
 | Archivos        | Cloudflare R2                               |
 | Auth admin      | Cloudflare Access (JWT)                     |
 | Anti-spam       | Cloudflare Turnstile (validado server-side) |
-| Monorepo        | pnpm workspaces + Turborepo                 |
+| Monorepo        | npm workspaces + Turborepo                  |
 
 ## Arquitectura
 
@@ -99,14 +99,29 @@ GET   /admin/audit
 
 ## Quickstart
 
-```bash
-corepack enable && pnpm install
-# crea recursos CF y copia el database_id (ver docs/setup.md)
-pnpm db:migrate:local && pnpm db:seed:local
-pnpm dev   # apps + workers en paralelo (Turborepo)
+```powershell
+cd C:\dev\cloudflare-starter
+npm run setup:local
+npm run dev:local
+
+# En otra terminal, con los servicios arriba:
+npm run validate:local
 ```
 
 Guía completa en [docs/setup.md](./docs/setup.md).
+
+Para crear un proyecto nuevo desde la plantilla:
+
+```powershell
+.\scripts\new-project.ps1 -Name mi-proyecto
+```
+
+## Versionado de la plantilla
+
+Las mejoras sustanciales del starter se publican en ramas inmutables con el
+formato `cloudflare-starter-vNN`: `cloudflare-starter-v00`,
+`cloudflare-starter-v01`, etc. Cada incremento debe representar una base útil
+para iniciar nuevos proyectos, no cambios menores de un sitio derivado.
 
 ## Cómo especializar para un proyecto nuevo
 

@@ -5,23 +5,23 @@ Esquema y datos de la plantilla. Los Workers consumen esta misma base vía su bi
 ## Flujo
 
 ```bash
-# 1. Crear la base (una vez) y copiar el database_id a wrangler.toml
-wrangler d1 create starter-db
+# 1. Crear la base remota (una vez) y copiar el database_id a wrangler.toml
+npx wrangler@4.105.0 d1 create starter-db
 
 # 2. Aplicar migraciones en local
-pnpm --filter @infra/d1 migrate:local
+npm run migrate:local --workspace @infra/d1
 
 # 3. (Opcional) Sembrar datos de ejemplo
-pnpm --filter @infra/d1 seed:local
+npm run seed:local --workspace @infra/d1
 
 # 4. Aplicar en remoto cuando estés listo
-pnpm --filter @infra/d1 migrate:remote
+npm run migrate:remote --workspace @infra/d1
 ```
 
 ## Crear una nueva migración
 
 ```bash
-pnpm --filter @infra/d1 migrate:create  # crea migrations/000X_descripcion.sql
+npm run migrate:create --workspace @infra/d1  # crea migrations/000X_descripcion.sql
 ```
 
 Edita el archivo generado, vuelve a correr `migrate:local` / `migrate:remote`.

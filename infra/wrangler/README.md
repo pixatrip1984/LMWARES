@@ -24,11 +24,11 @@ Para un proyecto nuevo, reemplaza el prefijo `starter-` por el slug del proyecto
 
 ```bash
 # Workers
-pnpm --filter @workers/public-api run deploy
-pnpm --filter @workers/admin-api run deploy
+npm run deploy --workspace @workers/public-api
+npm run deploy --workspace @workers/admin-api
 
 # Secretos (remoto)
-cd workers/public-api && wrangler secret put TURNSTILE_SECRET_KEY
+cd workers/public-api && npx wrangler@4.105.0 secret put TURNSTILE_SECRET_KEY
 ```
 
 ## Bindings compartidos

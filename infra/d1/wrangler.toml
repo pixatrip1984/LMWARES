@@ -1,12 +1,13 @@
 # Config exclusiva para gestionar la base D1 (migraciones/seeds) con Wrangler.
 # Los Workers tienen su propio wrangler.toml; comparten la MISMA base D1.
 name = "starter-d1"
-compatibility_date = "2024-09-25"
+compatibility_date = "2026-06-28"
 
-# Reemplaza database_id con el ID real tras crear la base:
+# Para desarrollo local usamos un UUID neutral. En remoto reemplaza database_id
+# con el ID real tras crear la base:
 #   wrangler d1 create starter-db
 [[d1_databases]]
 binding = "DB"
 database_name = "starter-db"
-database_id = "REEMPLAZAR_CON_TU_DATABASE_ID"
+database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
