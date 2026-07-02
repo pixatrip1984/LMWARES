@@ -43,3 +43,5 @@ Refleja las reglas arquitectónicas de la plantilla. Revísalo antes de cada rel
 - [ ] `ACCESS_DISABLED=0` y `TURNSTILE_DISABLED=0`.
 - [ ] Revisar roles de `admin_users` (mínimo privilegio).
 - [ ] Rotar/definir secretos de producción con `wrangler secret put`.
+- [ ] Ejecutar pruebas del [adversarial-playbook.md](./adversarial-playbook.md).
+- [ ] Si hay revision privada, usar datos de prueba hasta que el cliente apruebe operar datos reales.

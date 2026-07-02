@@ -103,6 +103,15 @@ npm run dev:local
 3. Abre el frontend público (5173) → debe aparecer en el catálogo y su detalle.
 4. Envía el formulario de contacto → revisa la solicitud en el admin.
 
+## 8. Flujo de proyecto cliente
+
+Para proyectos nuevos, usa esta guia local junto con:
+
+- [four-phase-methodology.md](./four-phase-methodology.md)
+- [client-review-checklist.md](./client-review-checklist.md)
+- [managed-cloudflare-hosting.md](./managed-cloudflare-hosting.md)
+- [adversarial-playbook.md](./adversarial-playbook.md)
+
 ## Comandos útiles
 
 ```bash

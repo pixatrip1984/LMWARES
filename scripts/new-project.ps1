@@ -5,7 +5,7 @@ param(
 
   [string]$TargetRoot = 'C:\dev',
   [string]$RepoUrl = 'https://github.com/pixatrip1984/cloudflare-starter.git',
-  [string]$Branch = 'main',
+  [string]$Branch = 'cloudflare-starter-v01',
   [switch]$NoSetup,
   [switch]$KeepGitOrigin
 )

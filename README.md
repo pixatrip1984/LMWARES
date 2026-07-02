@@ -19,7 +19,7 @@ negocio local) agregando configuración, campos extra, copy, diseño y reglas.
 | Archivos        | Cloudflare R2                               |
 | Auth admin      | Cloudflare Access (JWT)                     |
 | Anti-spam       | Cloudflare Turnstile (validado server-side) |
-| Monorepo        | npm workspaces + Turborepo                  |
+| Monorepo        | npm workspaces                              |
 
 ## Arquitectura
 
@@ -115,6 +115,31 @@ Para crear un proyecto nuevo desde la plantilla:
 ```powershell
 .\scripts\new-project.ps1 -Name mi-proyecto
 ```
+
+## Flujo de 4 fases
+
+La plantilla esta optimizada para proyectos cliente en cuatro fases:
+
+1. Enganche visual.
+2. Operacion local real.
+3. Revision privada y cierre comercial.
+4. Staging administrado en Cloudflare bajo subdominios, por ejemplo
+   `lmwares.com`.
+
+Ver [docs/four-phase-methodology.md](./docs/four-phase-methodology.md).
+
+## Staging administrado
+
+Para preparar un cliente bajo subdominios administrados:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/new-managed-client-profile.ps1 -ClientSlug mi-cliente -ClientName "Mi Cliente" -BaseDomain lmwares.com
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/managed-profile-audit.ps1 -Profile deploy/profiles/mi-cliente.local.json
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/render-managed-cloudflare-config.ps1 -Profile deploy/profiles/mi-cliente.local.json -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/managed-staging-doctor.ps1 -Profile deploy/profiles/mi-cliente.local.json
+```
+
+Ver [docs/managed-cloudflare-hosting.md](./docs/managed-cloudflare-hosting.md).
 
 ## Versionado de la plantilla
 

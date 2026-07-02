@@ -56,3 +56,8 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 cd workers/public-api
 npx wrangler@4.105.0 secret put TURNSTILE_SECRET_KEY
 ```
+
+Para staging administrado, genera artefactos desde un perfil local y carga los
+secretos contra el `wrangler.toml` generado en `.deploy/<slug>/`. El valor del
+secreto se pega cuando Wrangler lo pide; no debe escribirse en la linea del
+comando ni guardarse en el perfil.
