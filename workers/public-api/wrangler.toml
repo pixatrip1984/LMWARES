@@ -4,7 +4,7 @@ compatibility_date = "2026-06-28"
 
 # Config NO sensible. Los secretos van en .dev.vars (local) o `wrangler secret put`.
 [vars]
-ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173,http://localhost:4174,http://127.0.0.1:4174"
+ALLOWED_ORIGINS = "http://localhost:5273,http://127.0.0.1:5273,http://localhost:5274,http://127.0.0.1:5274,http://localhost:4273,http://127.0.0.1:4273,http://localhost:4274,http://127.0.0.1:4274"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "starter"
 # En local deja "1" para saltar Turnstile. En producción pon "0".

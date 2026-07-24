@@ -1,7 +1,9 @@
 import { Route, Routes } from 'react-router-dom';
 import { SiteLayout } from './components/SiteLayout';
+import { AuthPage } from './pages/AuthPage';
 import { ContactPage } from './pages/ContactPage';
 import { ContractPage } from './pages/ContractPage';
+import { PackageBuilderPage } from './pages/PackageBuilderPage';
 
 export function App() {
   return (
@@ -9,6 +11,8 @@ export function App() {
       <Route element={<SiteLayout />}>
         <Route index element={<ContractPage />} />
         <Route path="/contratar" element={<ContractPage />} />
+        <Route path="/acceso" element={<AuthPage />} />
+        <Route path="/configurar" element={<PackageBuilderPage />} />
         <Route path="/contacto" element={<ContactPage />} />
         <Route path="*" element={<ContractPage />} />
       </Route>

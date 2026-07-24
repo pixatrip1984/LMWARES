@@ -24,6 +24,18 @@ deploy/profiles/*.local.json
 # Logs
 *.log
 npm-debug.log*
+.inspect/
+
+# Local LMwares scan cache
+.lmwares/cache/
+.lmwares/runs/
+.lmwares/runner-policy.local.json
+.lmwares/agent-policy.local.json
+.lmwares/agent-runs/
+.lmwares/worktrees/
+.lmwares/designs/
+apps/admin-web/public/data/dev-projects.json
+apps/public-web/public/data/dev-projects.json
 
 # Editor / OS
 .DS_Store

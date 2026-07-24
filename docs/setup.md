@@ -74,10 +74,10 @@ npm run db:seed:local      # datos de ejemplo (opcional)
 En terminales separadas (o `npm run dev` para todo en paralelo con Turborepo):
 
 ```bash
-npm run dev --workspace @workers/public-api   # http://localhost:8787
-npm run dev --workspace @workers/admin-api    # http://localhost:8788
-npm run dev --workspace @apps/public-web      # http://localhost:5173
-npm run dev --workspace @apps/admin-web       # http://localhost:5174
+npm run dev --workspace @workers/public-api   # http://127.0.0.1:8887
+npm run dev --workspace @workers/admin-api    # http://127.0.0.1:8888
+npm run dev --workspace @apps/public-web      # http://localhost:5273
+npm run dev --workspace @apps/admin-web       # http://localhost:5274
 ```
 
 O usa el wrapper con preflight de puertos:
@@ -98,7 +98,7 @@ npm run dev:local
    npm run validate:local
    ```
 
-2. Abre el portal admin (5174) → crea una publicación → súbele una imagen →
+2. Abre el portal admin (5274) → crea una publicación → súbele una imagen →
    cámbiala a `published`.
 3. Abre el frontend público (5173) → debe aparecer en el catálogo y su detalle.
 4. Envía el formulario de contacto → revisa la solicitud en el admin.

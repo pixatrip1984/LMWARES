@@ -31,17 +31,17 @@ function Assert-PortFree([int]$Port) {
 
 if (-not $SkipPortCheck) {
   Write-Host "Checking local dev ports..."
-  foreach ($port in @(8787, 8788, 5173, 5174)) {
+  foreach ($port in @(8887, 8888, 5273, 5274)) {
     Assert-PortFree $port
   }
 }
 
 Write-Host ''
 Write-Host 'Starting local stack:' -ForegroundColor Cyan
-Write-Host '  Public API : http://localhost:8787'
-Write-Host '  Admin API  : http://localhost:8788'
-Write-Host '  Public web : http://127.0.0.1:5173'
-Write-Host '  Admin web  : http://127.0.0.1:5174'
+Write-Host '  Public API : http://127.0.0.1:8887'
+Write-Host '  Admin API  : http://127.0.0.1:8888'
+Write-Host '  Public web : http://127.0.0.1:5273'
+Write-Host '  Admin web  : http://127.0.0.1:5274'
 Write-Host ''
 Write-Host 'Press Ctrl+C to stop all services.'
 Write-Host ''

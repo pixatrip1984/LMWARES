@@ -8,6 +8,7 @@ import { verifyAccessJwt } from '../lib/access';
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
 const WRITE_ROLES: AdminRole[] = ['owner', 'admin', 'editor'];
+const APPROVAL_ROLES: AdminRole[] = ['owner', 'admin'];
 
 /**
  * Middleware de identidad: valida el JWT de Cloudflare Access y sincroniza el
@@ -24,8 +25,7 @@ export function accessMiddleware(): MiddlewareHandler<{
       const devEmail = c.req.header('X-Dev-Email') ?? 'admin@example.com';
       identity = { email: devEmail, name: 'Dev Admin' };
     } else {
-      const token =
-        c.req.header('Cf-Access-Jwt-Assertion') ?? getCookie(c, 'CF_Authorization');
+      const token = c.req.header('Cf-Access-Jwt-Assertion') ?? getCookie(c, 'CF_Authorization');
       if (!token) throw AppError.unauthorized('Falta el token de Cloudflare Access.');
       const claims = await verifyAccessJwt(token, c.env.ACCESS_TEAM_DOMAIN, c.env.ACCESS_AUD);
       if (!claims.email) throw AppError.unauthorized('El token no contiene email.');
@@ -53,6 +53,15 @@ export async function requireWrite(c: Ctx, next: Next) {
   const admin = c.get('admin');
   if (!WRITE_ROLES.includes(admin.role)) {
     throw AppError.forbidden('Tu rol no permite esta acción.');
+  }
+  await next();
+}
+
+/** Exige una identidad capaz de decidir gates humanos. Los editores solo aportan evidencia. */
+export async function requireApproval(c: Ctx, next: Next) {
+  const admin = c.get('admin');
+  if (!APPROVAL_ROLES.includes(admin.role)) {
+    throw AppError.forbidden('Tu rol no permite aprobar gates del proyecto.');
   }
   await next();
 }

@@ -8,6 +8,6 @@ import type { Bindings } from '../env';
 export function mediaUrl(env: Bindings, key: string): string {
   const cdn = env.MEDIA_BASE_URL?.trim();
   if (cdn) return `${cdn.replace(/\/$/, '')}/${key}`;
-  const base = (env.PUBLIC_API_URL || 'http://localhost:8787').replace(/\/$/, '');
+  const base = (env.PUBLIC_API_URL || 'http://127.0.0.1:8887').replace(/\/$/, '');
   return `${base}/media/${key}`;
 }

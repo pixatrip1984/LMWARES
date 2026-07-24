@@ -10,6 +10,7 @@ import {
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FaqGraphic,
   FaqQuestionArtwork,
@@ -61,6 +62,7 @@ function getInitialTabIndex() {
 }
 
 export function ContractPage() {
+  const navigate = useNavigate();
   const initialIndex = useMemo(getInitialTabIndex, []);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [scenePosition, setScenePosition] = useState(initialIndex + 3);
@@ -256,10 +258,10 @@ export function ContractPage() {
 
       <a
         className="lmw-cta"
-        href="#planes"
+        href="/acceso"
         onClick={(event) => {
           event.preventDefault();
-          goToIndex(4, 1);
+          navigate('/acceso');
         }}
       >
         Evaluar proyecto <span>↗</span>

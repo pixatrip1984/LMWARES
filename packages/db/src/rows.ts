@@ -99,3 +99,76 @@ export interface FileAssetRow {
   created_by: string | null;
   created_at: string;
 }
+
+export interface LmwaresProjectRow {
+  id: string;
+  name: string;
+  business: string;
+  category: string;
+  status_label: string;
+  phase: string;
+  progress: number;
+  priority: string;
+  health: string;
+  repo_path: string;
+  branch: string;
+  preview_url: string;
+  last_refresh: string;
+  developer: string;
+  due: string;
+  day: number;
+  days_left: number;
+  next_action: string;
+  seed_prompt: string;
+  tags: string;
+  preview: string;
+  phases: string;
+  registry_source: string;
+  manifest_path: string | null;
+  scan_metadata: string;
+  first_seen_at: string;
+  last_scanned_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LmwaresProjectSnapshotRow {
+  id: string;
+  project_id: string;
+  kind: string;
+  label: string;
+  summary: string | null;
+  source_revision: string | null;
+  preview_url: string | null;
+  artifact_path: string | null;
+  metadata: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface LmwaresValidationResultRow {
+  id: string;
+  project_id: string;
+  snapshot_id: string | null;
+  kind: string;
+  status: string;
+  label: string;
+  summary: string | null;
+  source_revision: string | null;
+  artifact_path: string | null;
+  metadata: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface LmwaresApprovalRow {
+  id: string;
+  project_id: string;
+  snapshot_id: string | null;
+  gate: string;
+  decision: string;
+  comment: string | null;
+  metadata: string;
+  decided_by: string;
+  created_at: string;
+}

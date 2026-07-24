@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "devRoot": "C:\\dev",
+  "projects": {
+    "example-client": {
+      "enabled": true,
+      "repo": "C:\\dev\\example-client",
+      "trust": "trusted-local",
+      "validators": ["typecheck", "workers-typecheck", "build", "tests", "workers-dry-run"]
+    }
+  }
+}

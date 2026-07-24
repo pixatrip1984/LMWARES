@@ -3,7 +3,11 @@ import { Container } from '@starter/ui';
 
 export function SiteLayout() {
   const { pathname } = useLocation();
-  const fullscreenApp = pathname === '/' || pathname === '/contratar';
+  const fullscreenApp =
+    pathname === '/' ||
+    pathname === '/contratar' ||
+    pathname === '/acceso' ||
+    pathname === '/configurar';
 
   return (
     <div className="flex min-h-screen flex-col">

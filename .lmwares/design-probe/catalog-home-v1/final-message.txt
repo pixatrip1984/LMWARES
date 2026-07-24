@@ -1,0 +1,5 @@
+[target.png](C:/dev/oracle/.lmwares/design-probe/catalog-home-v1/target.png)
+
+PNG 1672×941, generado con `imagegen` integrado. No se modificó código fuente.
+
+Prompt final: mockup desktop 16:9 de alta fidelidad para Shyno Laser, con hero comercial, Atelier Vestible, Objetos Grabables, selector por perfil y Cotizador Visual; identidad negra, blanca, gris cálida y roja, fotografía realista y navegación original.

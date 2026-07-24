@@ -6,15 +6,16 @@ export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
  * Estados genéricos de una solicitud (pipeline base reutilizable).
  * Cada proyecto puede mapear estos a su propia terminología vía config.
  */
-export const REQUEST_STATUSES = [
-  'new',
-  'in_review',
-  'approved',
-  'rejected',
-  'closed',
-] as const;
+export const REQUEST_STATUSES = ['new', 'in_review', 'approved', 'rejected', 'closed'] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
 /** Tipo de entidad sobre la que se registra historial/auditoría. */
-export const ENTITY_TYPES = ['publication', 'request'] as const;
+export const ENTITY_TYPES = [
+  'publication',
+  'request',
+  'lmwares_project',
+  'lmwares_snapshot',
+  'lmwares_validation',
+  'lmwares_approval',
+] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];

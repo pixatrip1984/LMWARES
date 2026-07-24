@@ -11,3 +11,4 @@ export * from './models/publication';
 export * from './models/request';
 export * from './models/admin-user';
 export * from './models/audit';
+export * from './models/lmwares-project';

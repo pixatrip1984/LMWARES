@@ -3,6 +3,10 @@ import type {
   Paginated,
   Publication,
   PublicationImage,
+  LmwaresApproval,
+  LmwaresProject,
+  LmwaresProjectSnapshot,
+  LmwaresValidationResult,
   Request,
   RequestNote,
   RequestStatus,
@@ -13,6 +17,10 @@ import type {
   CreateRequestNoteInput,
   UpdatePublicationInput,
   UpdatePublicationStatusInput,
+  CreateLmwaresSnapshotInput,
+  CreateLmwaresApprovalInput,
+  CreateLmwaresValidationInput,
+  SyncLmwaresProjectsInput,
 } from '@starter/validation';
 import { createHttpClient } from './http';
 
@@ -26,6 +34,13 @@ export interface AdminMe {
   role: string;
 }
 
+export interface LmwaresProjectRegistryResponse {
+  projects: LmwaresProject[];
+  source: 'd1-registry';
+  syncedAt: string | null;
+  upserted?: number;
+}
+
 /**
  * Cliente del Admin API Worker. Usa credenciales (cookie de Cloudflare Access)
  * en cada petición. Nunca incluye secretos: la identidad la maneja Access.
@@ -36,6 +51,48 @@ export function createAdminClient(baseUrl: string) {
   return {
     me() {
       return http.get<AdminMe>('/admin/me');
+    },
+
+    // ── LMWARES / Oracle ────────────────────────────────────
+    listLmwaresProjects() {
+      return http.get<LmwaresProjectRegistryResponse>('/admin/projects');
+    },
+    getLmwaresProject(id: string) {
+      return http.get<LmwaresProject>(`/admin/projects/${encodeURIComponent(id)}`);
+    },
+    syncLmwaresProjects(input: SyncLmwaresProjectsInput) {
+      return http.post<LmwaresProjectRegistryResponse>('/admin/projects/sync', input);
+    },
+    listLmwaresProjectSnapshots(id: string) {
+      return http.get<LmwaresProjectSnapshot[]>(
+        `/admin/projects/${encodeURIComponent(id)}/snapshots`,
+      );
+    },
+    createLmwaresProjectSnapshot(id: string, input: CreateLmwaresSnapshotInput) {
+      return http.post<LmwaresProjectSnapshot>(
+        `/admin/projects/${encodeURIComponent(id)}/snapshots`,
+        input,
+      );
+    },
+    listLmwaresProjectValidations(id: string) {
+      return http.get<LmwaresValidationResult[]>(
+        `/admin/projects/${encodeURIComponent(id)}/validations`,
+      );
+    },
+    createLmwaresProjectValidation(id: string, input: CreateLmwaresValidationInput) {
+      return http.post<LmwaresValidationResult>(
+        `/admin/projects/${encodeURIComponent(id)}/validations`,
+        input,
+      );
+    },
+    listLmwaresProjectApprovals(id: string) {
+      return http.get<LmwaresApproval[]>(`/admin/projects/${encodeURIComponent(id)}/approvals`);
+    },
+    createLmwaresProjectApproval(id: string, input: CreateLmwaresApprovalInput) {
+      return http.post<LmwaresApproval>(
+        `/admin/projects/${encodeURIComponent(id)}/approvals`,
+        input,
+      );
     },
 
     // ── Publicaciones ────────────────────────────────────────

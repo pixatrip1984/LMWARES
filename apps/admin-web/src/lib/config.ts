@@ -1,3 +1,3 @@
 export const config = {
-  apiUrl: import.meta.env.VITE_ADMIN_API_URL ?? 'http://localhost:8788',
+  apiUrl: import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8888',
 };

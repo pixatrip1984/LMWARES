@@ -80,7 +80,7 @@ VITE_PUBLIC_API_URL="https://<PROYECTO>-public-api.<SUB>.workers.dev"
 VITE_TURNSTILE_SITE_KEY=""    # se llena en el paso 5
 ```
 Permite el origen de Pages en el Worker: en `workers/public-api/wrangler.toml`,
-`ALLOWED_ORIGINS = "http://localhost:5173,https://<PAGES_PUB>.pages.dev"`, y
+`ALLOWED_ORIGINS = "http://localhost:5273,https://<PAGES_PUB>.pages.dev"`, y
 re-despliega el Worker (`npm run deploy --workspace @workers/public-api`).
 
 ```powershell
@@ -200,7 +200,7 @@ cd ../..
 | Síntoma                                             | Causa / Solución                                                            |
 | --------------------------------------------------- | -------------------------------------------------------------------------- |
 | `ENOENT` creando `_tmp_*` o install colgado          | Mueve el repo a `C:\dev\<proyecto>` y vuelve a correr `npm run setup:local`. |
-| Puerto 5173/5174 ocupado                             | Detén el proceso que lo usa. Vite corre con `--strictPort` para fallar claro. |
+| Puerto LMWARES 5273/5274 ocupado                     | Detén el proceso que lo usa. Vite corre con `--strictPort` para fallar claro. |
 | CORS bloquea localhost/127.0.0.1                     | Revisa `ALLOWED_ORIGINS` en ambos `wrangler.toml`.                          |
 | Turnstile **110200**                                | El hostname del sitio no está en el widget (agrega `.pages.dev`).         |
 | `secret put` no pide valor / secreto en historial   | El valor va en el PROMPT, no en la línea del comando.                      |

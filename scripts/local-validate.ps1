@@ -1,9 +1,9 @@
 [CmdletBinding()]
 param(
-  [string]$PublicApiUrl = 'http://localhost:8787',
-  [string]$AdminApiUrl = 'http://localhost:8788',
-  [string]$PublicOrigin = 'http://127.0.0.1:5173',
-  [string]$AdminOrigin = 'http://127.0.0.1:5174',
+  [string]$PublicApiUrl = 'http://127.0.0.1:8887',
+  [string]$AdminApiUrl = 'http://127.0.0.1:8888',
+  [string]$PublicOrigin = 'http://127.0.0.1:5273',
+  [string]$AdminOrigin = 'http://127.0.0.1:5274',
   [string]$DevEmail = 'admin@example.com'
 )
 

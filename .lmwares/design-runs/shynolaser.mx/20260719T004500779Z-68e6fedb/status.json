@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "jobId": "20260719T004500779Z-68e6fedb",
+  "projectId": "shynolaser.mx",
+  "screenId": "admin-publications",
+  "frameId": "primary",
+  "title": "Catálogo administrativo",
+  "status": "succeeded",
+  "currentActivity": null,
+  "createdAt": "2026-07-19T00:45:00.779Z",
+  "startedAt": "2026-07-19T00:45:00.850Z",
+  "completedAt": "2026-07-19T00:48:23.242Z",
+  "durationMs": 202448,
+  "threadId": "019f77d5-6959-7e93-b429-69e075aac1ab",
+  "target": {
+    "screenId": "admin-publications",
+    "frameId": "primary",
+    "version": 1,
+    "file": "admin-publications/v001.png",
+    "width": 1672,
+    "height": 941,
+    "contentType": "image/png",
+    "source": "imagegen",
+    "createdAt": "2026-07-19T00:48:23.234Z",
+    "promptSha256": "fb30fa2fe7e46cb15842a55d538b4954b9ff6513437cc7ba8f9573008e096088",
+    "threadId": "019f77d5-6959-7e93-b429-69e075aac1ab",
+    "imagePath": "C:\\dev\\oracle\\.lmwares\\designs\\shynolaser.mx\\targets\\admin-publications\\v001.png"
+  },
+  "summary": "Objetivo visual v1 generado.",
+  "warnings": [],
+  "stderrTail": "2026-07-19T00:45:02.135997Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:46:11.598739Z ERROR codex_core::tools::router: error=`num_last_images_to_include` must be between 1 and 5\n2026-07-19T00:46:11.743369Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:46:48.448122Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:46:53.673198Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:47:06.358741Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:47:18.489775Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:47:31.545702Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:47:47.997571Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n2026-07-19T00:48:13.659968Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 88 column 5\n",
+  "promptSha256": "fb30fa2fe7e46cb15842a55d538b4954b9ff6513437cc7ba8f9573008e096088"
+}

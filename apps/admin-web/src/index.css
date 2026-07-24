@@ -8,3 +8,76 @@
 body {
   @apply bg-surface-muted text-gray-900 antialiased;
 }
+
+.oracle-workspace .text-xs {
+  font-size: 9px;
+  line-height: 13px;
+}
+
+.oracle-workspace .text-sm {
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.oracle-workspace .text-base {
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.oracle-workspace .text-lg {
+  font-size: 14px;
+  line-height: 19px;
+}
+
+.oracle-workspace .text-xl {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.oracle-workspace .text-2xl {
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.oracle-workspace .text-3xl {
+  font-size: 21px;
+  line-height: 26px;
+}
+
+.oracle-task-strip {
+  scrollbar-color: #535976 transparent;
+  scrollbar-width: thin;
+}
+
+.oracle-task-strip::-webkit-scrollbar {
+  height: 5px;
+}
+
+.oracle-task-strip::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #535976;
+}
+
+.oracle-visual-canvas {
+  background-color: #101326;
+  background-image: radial-gradient(circle, rgba(117, 125, 161, 0.22) 0.7px, transparent 0.8px);
+  background-position: 0 0;
+  background-size: 13px 13px;
+  scrollbar-color: #4c5472 #11152a;
+  scrollbar-width: thin;
+}
+
+.oracle-visual-canvas::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.oracle-visual-canvas::-webkit-scrollbar-track {
+  background: #11152a;
+}
+
+.oracle-visual-canvas::-webkit-scrollbar-thumb {
+  border: 1px solid #11152a;
+  border-radius: 999px;
+  background: #4c5472;
+}

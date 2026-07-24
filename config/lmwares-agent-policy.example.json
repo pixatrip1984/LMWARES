@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "devRoot": "C:\\dev",
+  "worktreesRoot": "C:\\dev\\oracle\\.lmwares\\worktrees",
+  "projects": {
+    "cliente.mx": {
+      "enabled": true,
+      "repo": "C:\\dev\\cliente.mx",
+      "trust": "trusted-local",
+      "baseRef": "origin/dev",
+      "expectedRemote": "https://github.com/organizacion/cliente.git",
+      "expectedPaths": [
+        "apps/admin-web/package.json",
+        "apps/public-web/package.json",
+        "workers/admin-api/wrangler.toml",
+        "workers/public-api/wrangler.toml",
+        "turbo.json"
+      ],
+      "maxParallel": 4,
+      "operations": ["discover", "implement"]
+    }
+  }
+}

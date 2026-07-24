@@ -30,6 +30,15 @@
     "dev:admin-api": "npm run dev --workspace @workers/admin-api",
     "dev:public-web": "npm run dev --workspace @apps/public-web",
     "dev:admin-web": "npm run dev --workspace @apps/admin-web",
+    "lmwares:scan": "node scripts/scan-dev-projects.mjs",
+    "lmwares:runner:doctor": "node scripts/lmwares-runner/cli.mjs doctor",
+    "lmwares:runner:run": "node scripts/lmwares-runner/cli.mjs run",
+    "lmwares:runner:test": "node --test scripts/lmwares-runner/*.test.mjs",
+    "lmwares:agents:doctor": "node scripts/lmwares-agent-runner/cli.mjs doctor",
+    "lmwares:agents:status": "node scripts/lmwares-agent-runner/cli.mjs status",
+    "lmwares:agents:discover": "node scripts/lmwares-agent-runner/cli.mjs discover",
+    "lmwares:agents:launch": "node scripts/lmwares-agent-runner/cli.mjs launch",
+    "lmwares:agents:test": "node --test scripts/lmwares-agent-runner/*.test.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
@@ -41,6 +50,8 @@
   },
   "devDependencies": {
     "prettier": "3.7.4",
+    "puppeteer-core": "24.31.0",
+    "sharp": "0.34.5",
     "turbo": "2.10.0",
     "typescript": "~5.9.3"
   }

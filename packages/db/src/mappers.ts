@@ -5,6 +5,19 @@ import type {
   AuditEvent,
   EntityType,
   FileAsset,
+  LmwaresApproval,
+  LmwaresApprovalDecision,
+  LmwaresApprovalGate,
+  LmwaresProject,
+  LmwaresProjectPhase,
+  LmwaresProjectPreview,
+  LmwaresProjectSnapshot,
+  LmwaresProjectHealth,
+  LmwaresProjectPriority,
+  LmwaresSnapshotKind,
+  LmwaresValidationKind,
+  LmwaresValidationResult,
+  LmwaresValidationStatus,
   Publication,
   PublicationImage,
   PublicationStatus,
@@ -14,10 +27,15 @@ import type {
   StatusHistory,
 } from '@starter/domain';
 import { boolFromDb, parseMetadata } from './helpers';
+import { parseJson } from './helpers';
 import type {
   AdminUserRow,
   AuditEventRow,
   FileAssetRow,
+  LmwaresApprovalRow,
+  LmwaresProjectRow,
+  LmwaresProjectSnapshotRow,
+  LmwaresValidationResultRow,
   PublicationImageJoinRow,
   PublicationImageRow,
   PublicationRow,
@@ -135,6 +153,92 @@ export function mapFileAsset(r: FileAssetRow): FileAsset {
     originalName: r.original_name,
     checksum: r.checksum,
     createdBy: r.created_by,
+    createdAt: r.created_at,
+  };
+}
+
+export function mapLmwaresProject(r: LmwaresProjectRow): LmwaresProject {
+  return {
+    id: r.id,
+    name: r.name,
+    business: r.business,
+    category: r.category,
+    statusLabel: r.status_label,
+    phase: r.phase,
+    progress: r.progress,
+    priority: r.priority as LmwaresProjectPriority,
+    health: r.health as LmwaresProjectHealth,
+    repo: r.repo_path,
+    branch: r.branch,
+    previewUrl: r.preview_url,
+    lastRefresh: r.last_refresh,
+    developer: r.developer,
+    due: r.due,
+    day: r.day,
+    daysLeft: r.days_left,
+    nextAction: r.next_action,
+    seedPrompt: r.seed_prompt,
+    tags: parseJson<string[]>(r.tags, []),
+    preview: parseJson<LmwaresProjectPreview>(r.preview, {
+      title: r.name,
+      subtitle: '',
+      layout: 'service',
+      palette: '#536158',
+    }),
+    phases: parseJson<LmwaresProjectPhase[]>(r.phases, []),
+    registrySource: r.registry_source,
+    manifestPath: r.manifest_path,
+    scanMetadata: parseMetadata(r.scan_metadata),
+    firstSeenAt: r.first_seen_at,
+    lastScannedAt: r.last_scanned_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function mapLmwaresProjectSnapshot(r: LmwaresProjectSnapshotRow): LmwaresProjectSnapshot {
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    kind: r.kind as LmwaresSnapshotKind,
+    label: r.label,
+    summary: r.summary,
+    sourceRevision: r.source_revision,
+    previewUrl: r.preview_url,
+    artifactPath: r.artifact_path,
+    metadata: parseMetadata(r.metadata),
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+  };
+}
+
+export function mapLmwaresValidationResult(r: LmwaresValidationResultRow): LmwaresValidationResult {
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    snapshotId: r.snapshot_id,
+    kind: r.kind as LmwaresValidationKind,
+    status: r.status as LmwaresValidationStatus,
+    label: r.label,
+    summary: r.summary,
+    sourceRevision: r.source_revision,
+    artifactPath: r.artifact_path,
+    metadata: parseMetadata(r.metadata),
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+  };
+}
+
+export function mapLmwaresApproval(r: LmwaresApprovalRow): LmwaresApproval {
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    snapshotId: r.snapshot_id,
+    gate: r.gate as LmwaresApprovalGate,
+    decision: r.decision as LmwaresApprovalDecision,
+    comment: r.comment,
+    metadata: parseMetadata(r.metadata),
+    decidedBy: r.decided_by,
     createdAt: r.created_at,
   };
 }

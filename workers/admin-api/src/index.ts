@@ -8,6 +8,7 @@ import { accessMiddleware } from './middleware/auth';
 import { publications } from './routes/publications';
 import { requests } from './routes/requests';
 import { audit } from './routes/audit';
+import { lmwaresProjects } from './routes/lmwares-projects';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -46,5 +47,6 @@ app.get('/admin/me', (c) => {
 app.route('/admin/publications', publications);
 app.route('/admin/requests', requests);
 app.route('/admin/audit', audit);
+app.route('/admin/projects', lmwaresProjects);
 
 export default app;
