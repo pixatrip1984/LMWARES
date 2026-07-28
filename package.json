@@ -39,6 +39,7 @@
     "lmwares:agents:discover": "node scripts/lmwares-agent-runner/cli.mjs discover",
     "lmwares:agents:launch": "node scripts/lmwares-agent-runner/cli.mjs launch",
     "lmwares:agents:test": "node --test scripts/lmwares-agent-runner/*.test.mjs",
+    "lmwares:free:run": "node scripts/lmwares-free-site-runner/cli.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

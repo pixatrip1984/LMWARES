@@ -127,17 +127,37 @@
   min-width: 260px;
 }
 
-.lmw-preview-footer div {
+.lmw-preview-footer__meta {
+  align-items: center;
   color: rgba(205, 223, 248, 0.58);
-  display: grid;
+  display: flex;
   font-family: Inter, Arial, sans-serif;
+  gap: 18px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.lmw-preview-footer__meta > div {
+  display: grid;
+  flex: 0 0 auto;
   font-size: 11px;
   gap: 3px;
-  justify-items: center;
+  justify-items: end;
   text-transform: uppercase;
 }
 
-.lmw-preview-footer strong {
+.lmw-preview-footer__meta p {
+  border-left: 1px solid rgba(255, 86, 39, 0.5);
+  color: rgba(214, 229, 250, 0.68);
+  font-size: 10px;
+  line-height: 1.45;
+  margin: 0;
+  max-width: 620px;
+  padding-left: 16px;
+  text-align: left;
+}
+
+.lmw-preview-footer__meta strong {
   color: #ffffff;
   font-size: 13px;
 }
@@ -1008,6 +1028,25 @@
 
   .lmw-preview-mode {
     width: 100%;
+  }
+
+  .lmw-preview-footer__meta {
+    align-items: start;
+    display: grid;
+    gap: 8px;
+    justify-content: stretch;
+  }
+
+  .lmw-preview-footer__meta > div {
+    justify-items: start;
+  }
+
+  .lmw-preview-footer__meta p {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 86, 39, 0.5);
+    max-width: none;
+    padding-left: 0;
+    padding-top: 8px;
   }
 
   .lmw-live-hero,

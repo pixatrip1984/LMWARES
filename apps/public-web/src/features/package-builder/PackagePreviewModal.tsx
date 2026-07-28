@@ -651,9 +651,15 @@ export function PackagePreviewModal({
 
         <footer className="lmw-preview-footer">
           <button onClick={onClose} type="button">Editar seleccion</button>
-          <div>
-            <span>{mode === 'public' ? 'Micrositio vertical' : 'Portal administrador'}</span>
-            <strong>{draft.plan.toUpperCase()}</strong>
+          <div className="lmw-preview-footer__meta">
+            <div>
+              <span>{mode === 'public' ? 'Micrositio vertical' : 'Portal administrador'}</span>
+              <strong>{draft.plan.toUpperCase()}</strong>
+            </div>
+            <p>
+              Vista demostrativa para identificar los módulos seleccionados. El diseño y la
+              organización final pueden cambiar según tus necesidades y requerimientos.
+            </p>
           </div>
           <button onClick={onContinue} type="button">Continuar con este paquete</button>
         </footer>

@@ -120,8 +120,35 @@ export const DEFAULT_DRAFT: PackageDraft = {
   updatedAt: new Date(0).toISOString(),
 };
 
-export const FREE_IMAGE_LIMIT = 10;
+export const FREE_IMAGE_LIMIT = 5;
 export const FREE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+export const PACKAGE_PRICING = {
+  implementation: {
+    free: 0,
+    starterOneComplement: 7900,
+    starterTwoComplements: 10900,
+    proBase: 14900,
+    proWithCartOrOptimization: 19900,
+    proFull: 24900,
+  },
+  monthly: {
+    maintenanceFrom: 900,
+    operationalMaintenanceFrom: 2900,
+    securityAddOnFrom: 1900,
+    astramusesStaticFrom: 100,
+  },
+} as const;
+
+export type PackagePriceEstimate = {
+  implementation: number;
+  implementationLabel: string;
+  maintenanceFrom: number;
+  operationalMaintenanceFrom: number;
+  securityAddOnFrom: number;
+  astramusesMonthly: number;
+  monthlyOptionalFrom: number;
+};
 
 const DRAFT_KEY = 'lmwares.package-draft.v1';
 
@@ -142,12 +169,80 @@ export function getSelectedComplements(modules: PackageModuleId[]) {
 }
 
 export function getPackageLabel(plan: PlanId, modules: PackageModuleId[]) {
-  if (plan === 'free') return 'Página informativa · 10 imágenes';
+  if (plan === 'free') return 'Página informativa · 5 imágenes';
   if (plan === 'pro') return 'Capacidad completa habilitada';
 
   const complementCount = getSelectedComplements(modules).length;
   if (complementCount === 0) return 'Hasta 2 complementos incluidos';
   return `${complementCount} de 2 complementos ${complementCount === 1 ? 'seleccionado' : 'seleccionados'}`;
+}
+
+export function formatMxPrice(amount: number) {
+  return new Intl.NumberFormat('es-MX', {
+    currency: 'MXN',
+    maximumFractionDigits: 0,
+    style: 'currency',
+  }).format(amount);
+}
+
+export function estimatePackagePrice(draft: Pick<PackageDraft, 'plan' | 'modules' | 'marketing'>): PackagePriceEstimate {
+  const complements = getSelectedComplements(draft.modules);
+  const hasCart = draft.modules.includes('cart');
+  const hasOptimization = draft.modules.includes('data');
+
+  if (draft.plan === 'free') {
+    return {
+      implementation: PACKAGE_PRICING.implementation.free,
+      implementationLabel: 'Free automatizado',
+      maintenanceFrom: 0,
+      operationalMaintenanceFrom: 0,
+      securityAddOnFrom: 0,
+      astramusesMonthly: 0,
+      monthlyOptionalFrom: 0,
+    };
+  }
+
+  if (draft.plan === 'starter') {
+    const implementation = complements.length >= 2
+      ? PACKAGE_PRICING.implementation.starterTwoComplements
+      : PACKAGE_PRICING.implementation.starterOneComplement;
+
+    return {
+      implementation,
+      implementationLabel: complements.length >= 2
+        ? 'Starter · 2 complementos'
+        : complements.length === 1
+          ? 'Starter · 1 complemento'
+          : 'Starter · base mínima',
+      maintenanceFrom: PACKAGE_PRICING.monthly.maintenanceFrom,
+      operationalMaintenanceFrom: PACKAGE_PRICING.monthly.operationalMaintenanceFrom,
+      securityAddOnFrom: PACKAGE_PRICING.monthly.securityAddOnFrom,
+      astramusesMonthly: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
+      monthlyOptionalFrom: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
+    };
+  }
+
+  const implementation = hasCart && hasOptimization
+    ? PACKAGE_PRICING.implementation.proFull
+    : hasCart || hasOptimization
+      ? PACKAGE_PRICING.implementation.proWithCartOrOptimization
+      : PACKAGE_PRICING.implementation.proBase;
+
+  return {
+    implementation,
+    implementationLabel: hasCart && hasOptimization
+      ? 'Pro · comercio + optimización'
+      : hasCart
+        ? 'Pro · comercio'
+        : hasOptimization
+          ? 'Pro · optimización'
+          : 'Pro base',
+    maintenanceFrom: PACKAGE_PRICING.monthly.maintenanceFrom,
+    operationalMaintenanceFrom: PACKAGE_PRICING.monthly.operationalMaintenanceFrom,
+    securityAddOnFrom: PACKAGE_PRICING.monthly.securityAddOnFrom,
+    astramusesMonthly: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
+    monthlyOptionalFrom: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
+  };
 }
 
 export function togglePackageModule(

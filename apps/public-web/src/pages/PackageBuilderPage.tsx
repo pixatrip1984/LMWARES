@@ -2,13 +2,17 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { clearDemoSession, getDemoSession, getProviderName } from '../features/package-builder/demoAuth';
 import { PackagePreviewModal } from '../features/package-builder/PackagePreviewModal';
+import { api } from '../lib/api';
 import {
   DEFAULT_DRAFT,
   FOUNDATION_MODULES,
   FREE_IMAGE_LIMIT,
   FREE_IMAGE_MAX_BYTES,
   PACKAGE_MODULES,
+  PACKAGE_PRICING,
+  estimatePackagePrice,
   formatFileSize,
+  formatMxPrice,
   getPackageLabel,
   getPlanSeed,
   loadPackageDraft,
@@ -23,6 +27,39 @@ import {
 import './packageBuilder.css';
 
 type BuilderView = 'package' | 'summary';
+
+type FreeContactDraft = {
+  id: string;
+  platform: 'instagram' | 'facebook' | 'x' | 'whatsapp' | 'phone' | 'email' | 'address' | 'website' | 'telegram' | 'tiktok' | 'other';
+  value: string;
+};
+
+type FreeImageFile = {
+  id: string;
+  file: File;
+};
+
+type FreeSubmitState = {
+  status: 'idle' | 'checking' | 'uploading' | 'queued' | 'failed';
+  intakeId?: string;
+  slug?: string;
+  publicUrl?: string | null;
+  message?: string;
+};
+
+const CONTACT_PLATFORM_OPTIONS: Array<{ value: FreeContactDraft['platform']; label: string }> = [
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'x', label: 'X' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'phone', label: 'Teléfono' },
+  { value: 'email', label: 'Email' },
+  { value: 'address', label: 'Dirección' },
+  { value: 'website', label: 'Sitio web' },
+  { value: 'telegram', label: 'Telegram' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'other', label: 'Otro' },
+];
 
 const PLAN_COPY: Record<PlanId, { name: string; eyebrow: string; description: string }> = {
   free: {
@@ -66,6 +103,30 @@ export function PackageBuilderPage() {
   const [fileError, setFileError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [freeFiles, setFreeFiles] = useState<FreeImageFile[]>([]);
+  const [freeSubmit, setFreeSubmit] = useState<FreeSubmitState>({ status: 'idle' });
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [freeForm, setFreeForm] = useState(() => ({
+    slug: '',
+    siteName: '',
+    contactName: session?.name === 'Cuenta demo' ? '' : (session?.name ?? ''),
+    contactEmail: session?.email ?? '',
+    businessDescription: '',
+    audience: '',
+    sector: '',
+    style: 'profesional moderno',
+    primaryAction: 'contactar',
+    services: '',
+    hours: '',
+    serviceArea: '',
+    trustLine: '',
+    colorPreference: '',
+    termsAccepted: false,
+  }));
+  const [freeContacts, setFreeContacts] = useState<FreeContactDraft[]>([
+    { id: 'contact-1', platform: 'whatsapp', value: '' },
+  ]);
 
   const selectedModules = useMemo(
     () => PACKAGE_MODULES.filter(({ id }) => draft.modules.includes(id)),
@@ -76,6 +137,7 @@ export function PackageBuilderPage() {
   const starterComplements = visibleModules.filter(({ tier }) => tier === 'starter');
   const proCapabilities = visibleModules.filter(({ tier }) => tier === 'pro');
   const selectedComplements = selectedModules.filter(({ id }) => !FOUNDATION_MODULES.includes(id));
+  const priceEstimate = useMemo(() => estimatePackagePrice(draft), [draft]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -105,6 +167,51 @@ export function PackageBuilderPage() {
   const updateDraft = (changes: Partial<PackageDraft>) => {
     setDraft((current) => ({ ...current, ...changes, updatedAt: new Date().toISOString() }));
     setSubmitted(false);
+  };
+
+  const updateFreeForm = (changes: Partial<typeof freeForm>) => {
+    setFreeForm((current) => ({ ...current, ...changes }));
+    setSubmitted(false);
+    setFreeSubmit({ status: 'idle' });
+    if ('slug' in changes) setSlugStatus('idle');
+  };
+
+  const updateFreeContact = (id: string, changes: Partial<FreeContactDraft>) => {
+    setFreeContacts((current) =>
+      current.map((contact) => (contact.id === id ? { ...contact, ...changes } : contact)),
+    );
+    setSubmitted(false);
+    setFreeSubmit({ status: 'idle' });
+  };
+
+  const addFreeContact = () => {
+    setFreeContacts((current) => [
+      ...current,
+      { id: `contact-${Date.now()}-${current.length}`, platform: 'instagram', value: '' },
+    ]);
+  };
+
+  const removeFreeContact = (id: string) => {
+    setFreeContacts((current) =>
+      current.length === 1 ? current : current.filter((contact) => contact.id !== id),
+    );
+  };
+
+  const checkFreeSlug = async () => {
+    const slug = normalizeFreeSlug(freeForm.slug);
+    updateFreeForm({ slug });
+    if (!slug) {
+      setSlugStatus('invalid');
+      return;
+    }
+
+    try {
+      setSlugStatus('checking');
+      const result = await api.checkFreeSlug(slug);
+      setSlugStatus(result.available ? 'available' : 'taken');
+    } catch {
+      setSlugStatus('invalid');
+    }
   };
 
   const selectPlan = (plan: PlanId) => {
@@ -180,29 +287,58 @@ export function PackageBuilderPage() {
     }
 
     const known = new Set(draft.images.map((image) => `${image.name}:${image.size}`));
-    const additions: DraftImage[] = files
+    const additions: Array<{ draft: DraftImage; file: File }> = files
       .filter((file) => !known.has(`${file.name}:${file.size}`))
-      .map((file, index) => ({
-        id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-      }));
+      .map((file, index) => {
+        const id = `${file.name}-${file.size}-${file.lastModified}-${index}-${crypto.randomUUID()}`;
+        return {
+          draft: {
+            id,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+          },
+          file,
+        };
+      });
 
     if (draft.images.length + additions.length > FREE_IMAGE_LIMIT) {
       setFileError(`El plan Free permite hasta ${FREE_IMAGE_LIMIT} imágenes.`);
       return;
     }
 
-    updateDraft({ images: [...draft.images, ...additions] });
+    setFreeFiles((current) => [...current, ...additions.map(({ draft: image, file }) => ({ id: image.id, file }))]);
+    updateDraft({ images: [...draft.images, ...additions.map(({ draft: image }) => image)] });
   };
 
   const removeImage = (imageId: string) => {
+    setFreeFiles((current) => current.filter(({ id }) => id !== imageId));
     updateDraft({ images: draft.images.filter(({ id }) => id !== imageId) });
   };
 
   const resetDraft = () => {
     updateDraft({ ...DEFAULT_DRAFT, updatedAt: new Date().toISOString() });
+    setFreeFiles([]);
+    setFreeForm({
+      slug: '',
+      siteName: '',
+      contactName: session?.name === 'Cuenta demo' ? '' : (session?.name ?? ''),
+      contactEmail: session?.email ?? '',
+      businessDescription: '',
+      audience: '',
+      sector: '',
+      style: 'profesional moderno',
+      primaryAction: 'contactar',
+      services: '',
+      hours: '',
+      serviceArea: '',
+      trustLine: '',
+      colorPreference: '',
+      termsAccepted: false,
+    });
+    setFreeContacts([{ id: 'contact-1', platform: 'whatsapp', value: '' }]);
+    setFreeSubmit({ status: 'idle' });
+    setSlugStatus('idle');
     setView('package');
     setFileError('');
     flashNotice('Restauramos el ejemplo Starter.');
@@ -213,9 +349,103 @@ export function PackageBuilderPage() {
     navigate('/acceso');
   };
 
-  const submitDraft = () => {
-    setSubmitted(true);
-    flashNotice('Evaluación simulada guardada. Aún no se envió a un servidor.');
+  const submitDraft = async () => {
+    if (draft.plan !== 'free') {
+      setSubmitted(true);
+      flashNotice('Evaluación simulada guardada. Aún no se envió a un servidor.');
+      return;
+    }
+
+    const contacts = freeContacts
+      .map((contact) => ({ ...contact, value: contact.value.trim() }))
+      .filter((contact) => contact.value.length > 0);
+
+    if (!freeForm.slug || !freeForm.siteName || !freeForm.contactName || !freeForm.contactEmail) {
+      setFileError('Completa nombre, email, sitio y subdominio antes de enviar.');
+      return;
+    }
+    if (freeForm.businessDescription.trim().length < 20) {
+      setFileError('Describe el negocio con un poco más de detalle.');
+      return;
+    }
+    if (freeForm.audience.trim().length < 6) {
+      setFileError('Indica la audiencia o sector clave.');
+      return;
+    }
+    const services = parseFreeLines(freeForm.services);
+    if (services.length < 2) {
+      setFileError('Agrega al menos dos servicios, productos o capacidades principales.');
+      return;
+    }
+    if (freeForm.hours.trim().length < 4) {
+      setFileError('Indica el horario o disponibilidad que puede publicarse.');
+      return;
+    }
+    if (freeForm.serviceArea.trim().length < 4) {
+      setFileError('Indica la zona de atención o cobertura.');
+      return;
+    }
+    if (contacts.length === 0) {
+      setFileError('Agrega al menos un dato de contacto visible.');
+      return;
+    }
+    if (freeFiles.length < 1) {
+      setFileError('Adjunta al menos una imagen real antes de enviar.');
+      return;
+    }
+    if (!freeForm.termsAccepted) {
+      setFileError('Acepta la publicación de la información enviada.');
+      return;
+    }
+
+    setFileError('');
+    setSubmitting(true);
+    setFreeSubmit({ status: 'checking', message: 'Creando solicitud Free...' });
+
+    try {
+      const created = await api.createFreeIntake({
+        slug: normalizeFreeSlug(freeForm.slug),
+        siteName: freeForm.siteName.trim(),
+        contactName: freeForm.contactName.trim(),
+        contactEmail: freeForm.contactEmail.trim(),
+        businessDescription: freeForm.businessDescription.trim(),
+        audience: freeForm.audience.trim(),
+        sector: freeForm.sector.trim() || undefined,
+        style: freeForm.style.trim(),
+        primaryAction: freeForm.primaryAction.trim(),
+        freePage: {
+          services,
+          hours: freeForm.hours.trim(),
+          serviceArea: freeForm.serviceArea.trim(),
+          trustLine: freeForm.trustLine.trim() || undefined,
+          colorPreference: freeForm.colorPreference.trim() || undefined,
+        },
+        contacts: contacts.map(({ id: _id, ...contact }) => ({ ...contact, publicVisible: true })),
+        termsAccepted: true,
+      });
+
+      setFreeSubmit({ status: 'uploading', intakeId: created.id, slug: created.slug, message: 'Subiendo imágenes...' });
+      for (const { file } of freeFiles) {
+        await api.uploadFreeIntakeImage(created.id, file);
+      }
+
+      const submittedFree = await api.submitFreeIntake(created.id);
+      setSubmitted(true);
+      setFreeSubmit({
+        status: 'queued',
+        intakeId: submittedFree.id,
+        slug: submittedFree.slug,
+        publicUrl: submittedFree.publicUrl,
+        message: `Solicitud enviada. Quedó en cola para ${submittedFree.slug}.lmwares.com.`,
+      });
+      flashNotice(`Solicitud Free enviada: ${submittedFree.slug}.lmwares.com`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud Free.';
+      setFreeSubmit({ status: 'failed', message });
+      setFileError(message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const renderModuleCard = (module: PackageModule) => {
@@ -332,26 +562,215 @@ export function PackageBuilderPage() {
                   <div>
                     <small>Incluido en Free</small>
                     <h3>Página informativa</h3>
-                    <p>Una página única, clara y publicada temporalmente en un subdominio de LMWares.</p>
+                  <p>Una página única, clara y publicada temporalmente en un subdominio de LMWares.</p>
                   </div>
                   <ul>
                     <li><b>01</b><span>Una sola página</span></li>
-                    <li><b>02</b><span>Hasta 10 imágenes</span></li>
+                    <li><b>02</b><span>Hasta 5 imágenes</span></li>
                     <li><b>03</b><span>Máximo 5 MB cada una</span></li>
                   </ul>
                 </article>
+
+                <section className="lmw-free-form">
+                  <div className="lmw-free-form__header">
+                    <p className="lmw-builder-eyebrow">Solicitud Free</p>
+                    <h2>Datos para construir tu página.</h2>
+                    <span>Con esto armaremos una instrucción estructurada para generar una página informativa.</span>
+                  </div>
+
+                  <div className="lmw-free-form__grid">
+                    <label>
+                      <span>Nombre público</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ siteName: event.target.value })}
+                        placeholder="Tu marca aquí"
+                        type="text"
+                        value={freeForm.siteName}
+                      />
+                    </label>
+                    <label>
+                      <span>Subdominio deseado</span>
+                      <div className="lmw-free-slug">
+                        <input
+                          onBlur={checkFreeSlug}
+                          onChange={(event) => updateFreeForm({ slug: event.target.value })}
+                          placeholder="mi-negocio"
+                          type="text"
+                          value={freeForm.slug}
+                        />
+                        <button disabled={slugStatus === 'checking'} onClick={checkFreeSlug} type="button">
+                          {slugStatus === 'checking' ? '...' : 'Verificar'}
+                        </button>
+                      </div>
+                      <small className={`lmw-free-slug-status is-${slugStatus}`}>
+                        {slugStatus === 'available'
+                          ? `${normalizeFreeSlug(freeForm.slug)}.lmwares.com disponible`
+                          : slugStatus === 'taken'
+                            ? 'Ese subdominio está ocupado o reservado.'
+                            : slugStatus === 'invalid'
+                              ? 'Usa letras, números y guiones.'
+                              : 'Se publicará como subdominio de LMWares.'}
+                      </small>
+                    </label>
+                    <label>
+                      <span>Nombre de contacto</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ contactName: event.target.value })}
+                        placeholder="Nombre de quien solicita"
+                        type="text"
+                        value={freeForm.contactName}
+                      />
+                    </label>
+                    <label>
+                      <span>Email de contacto</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ contactEmail: event.target.value })}
+                        placeholder="correo@negocio.com"
+                        type="email"
+                        value={freeForm.contactEmail}
+                      />
+                    </label>
+                    <label className="is-wide">
+                      <span>¿De qué trata?</span>
+                      <textarea
+                        onChange={(event) => updateFreeForm({ businessDescription: event.target.value })}
+                        placeholder="Describe el negocio, servicio, producto, proyecto o actividad que quieres presentar."
+                        value={freeForm.businessDescription}
+                      />
+                    </label>
+                    <label>
+                      <span>Audiencia o sector</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ audience: event.target.value })}
+                        placeholder="Ej. clientes locales, pacientes, inversionistas"
+                        type="text"
+                        value={freeForm.audience}
+                      />
+                    </label>
+                    <label>
+                      <span>Estilo visual</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ style: event.target.value })}
+                        placeholder="Minimalista, elegante, tecnológico..."
+                        type="text"
+                        value={freeForm.style}
+                      />
+                    </label>
+                    <label>
+                      <span>Sector opcional</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ sector: event.target.value })}
+                        placeholder="Salud, inmobiliario, arte..."
+                        type="text"
+                        value={freeForm.sector}
+                      />
+                    </label>
+                    <label>
+                      <span>Acción principal</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ primaryAction: event.target.value })}
+                        placeholder="Contactar, reservar, llamar..."
+                        type="text"
+                        value={freeForm.primaryAction}
+                      />
+                    </label>
+                    <label className="is-wide">
+                      <span>Servicios, productos o capacidades principales</span>
+                      <textarea
+                        onChange={(event) => updateFreeForm({ services: event.target.value })}
+                        placeholder="Escribe uno por línea. Ej. Herramientas manuales, plomería, electricidad, materiales para obra ligera."
+                        value={freeForm.services}
+                      />
+                      <small>Se mostrarán sólo estos puntos. No inventaremos servicios que no hayas escrito aquí.</small>
+                    </label>
+                    <label>
+                      <span>Horario o disponibilidad</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ hours: event.target.value })}
+                        placeholder="Ej. Lun-sáb 8:00–18:30 o atención bajo cita"
+                        type="text"
+                        value={freeForm.hours}
+                      />
+                    </label>
+                    <label>
+                      <span>Zona de atención</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ serviceArea: event.target.value })}
+                        placeholder="Ej. Colonia, ciudad, zona o modalidad remota"
+                        type="text"
+                        value={freeForm.serviceArea}
+                      />
+                    </label>
+                    <label className="is-wide">
+                      <span>Frase de confianza opcional</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ trustLine: event.target.value })}
+                        placeholder="Ej. Atención local, entregas en zona y asesoría práctica."
+                        type="text"
+                        value={freeForm.trustLine}
+                      />
+                    </label>
+                    <label className="is-wide">
+                      <span>Preferencia de colores opcional</span>
+                      <input
+                        onChange={(event) => updateFreeForm({ colorPreference: event.target.value })}
+                        placeholder="Ej. azul y blanco, tonos cálidos, sobrio clínico..."
+                        type="text"
+                        value={freeForm.colorPreference}
+                      />
+                      <small>Si lo dejas vacío, LMWares elegirá una paleta según sector, estilo e imágenes.</small>
+                    </label>
+                  </div>
+
+                  <div className="lmw-free-contacts">
+                    <div>
+                      <p className="lmw-builder-eyebrow">Contactos visibles</p>
+                      <button onClick={addFreeContact} type="button">Agregar fila</button>
+                    </div>
+                    {freeContacts.map((contact) => (
+                      <div className="lmw-free-contact-row" key={contact.id}>
+                        <select
+                          onChange={(event) =>
+                            updateFreeContact(contact.id, { platform: event.target.value as FreeContactDraft['platform'] })
+                          }
+                          value={contact.platform}
+                        >
+                          {CONTACT_PLATFORM_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <input
+                          onChange={(event) => updateFreeContact(contact.id, { value: event.target.value })}
+                          placeholder="@usuario, teléfono, dirección o URL"
+                          type="text"
+                          value={contact.value}
+                        />
+                        <button onClick={() => removeFreeContact(contact.id)} type="button">×</button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <label className="lmw-free-terms">
+                    <input
+                      checked={freeForm.termsAccepted}
+                      onChange={(event) => updateFreeForm({ termsAccepted: event.target.checked })}
+                      type="checkbox"
+                    />
+                    <span>Acepto que LMWares use esta información e imágenes para generar y publicar una página informativa Free.</span>
+                  </label>
+                </section>
 
                 <section className="lmw-free-assets">
                   <div>
                     <p className="lmw-builder-eyebrow">Contenido de tu página</p>
                     <h2>Carga las imágenes que quieres utilizar.</h2>
-                    <span>En esta fase local sólo guardamos el nombre y tamaño de cada archivo.</span>
+                    <span>Se subirán a cuarentena y luego se publicarán sólo derivados seguros.</span>
                   </div>
                   <button onClick={() => fileInputRef.current?.click()} type="button">
                     Añadir imágenes <b>{draft.images.length}/{FREE_IMAGE_LIMIT}</b>
                   </button>
                   <input
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     hidden
                     multiple
                     onChange={addImages}
@@ -359,6 +778,9 @@ export function PackageBuilderPage() {
                     type="file"
                   />
                   {fileError ? <p className="lmw-free-assets__error">{fileError}</p> : null}
+                  {freeSubmit.message ? (
+                    <p className={`lmw-free-assets__status is-${freeSubmit.status}`}>{freeSubmit.message}</p>
+                  ) : null}
                   {draft.images.length > 0 ? (
                     <ul>
                       {draft.images.map((image) => (
@@ -434,7 +856,7 @@ export function PackageBuilderPage() {
                 <>
                   <div><i>01</i><span><b>Página informativa</b><small>Única capacidad del plan</small></span></div>
                   <div><i>02</i><span><b>Subdominio LMWares</b><small>Durante esta etapa inicial</small></span></div>
-                  <div><i>03</i><span><b>10 imágenes</b><small>Máximo 5 MB por archivo</small></span></div>
+                  <div><i>03</i><span><b>5 imágenes</b><small>Máximo 5 MB por archivo</small></span></div>
                 </>
               ) : (
                 <>
@@ -450,6 +872,21 @@ export function PackageBuilderPage() {
               {getPackageLabel(draft.plan, draft.modules)}
             </strong>
 
+            <div className="lmw-price-card" aria-label="Estimación de precio">
+              <span>Implementación inicial</span>
+              <strong>{formatMxPrice(priceEstimate.implementation)}</strong>
+              <small>{priceEstimate.implementationLabel}</small>
+              {draft.plan !== 'free' ? (
+                <ul>
+                  <li>Mantenimiento opcional desde {formatMxPrice(priceEstimate.maintenanceFrom)}/mes</li>
+                  <li>Operación con agente desde {formatMxPrice(priceEstimate.operationalMaintenanceFrom)}/mes</li>
+                  <li>Seguridad avanzada desde {formatMxPrice(priceEstimate.securityAddOnFrom)}/mes</li>
+                </ul>
+              ) : (
+                <p>Sin pago inicial mientras el flujo permanezca automatizado y en cola.</p>
+              )}
+            </div>
+
             {draft.plan !== 'free' ? (
               <button
                 aria-pressed={draft.marketing}
@@ -458,7 +895,7 @@ export function PackageBuilderPage() {
                 type="button"
               >
                 <i>✦</i>
-                <span><b>Añadir marketing Astramuses</b><small>Servicio separado para Starter y Pro</small></span>
+                <span><b>Añadir marketing Astramuses</b><small>Desde {formatMxPrice(PACKAGE_PRICING.monthly.astramusesStaticFrom)}/mes · servicio separado</small></span>
                 <em><u /></em>
               </button>
             ) : null}
@@ -487,6 +924,24 @@ export function PackageBuilderPage() {
               <i>{draft.plan === 'free' ? '○' : draft.plan === 'starter' ? '★' : '♢'}</i>
             </div>
 
+            <section className="lmw-summary-pricing" aria-label="Estimación comercial">
+              <article>
+                <span>IMPLEMENTACIÓN INICIAL</span>
+                <strong>{formatMxPrice(priceEstimate.implementation)}</strong>
+                <p>{priceEstimate.implementationLabel}</p>
+              </article>
+              <article>
+                <span>MANTENIMIENTO OPCIONAL</span>
+                <strong>{draft.plan === 'free' ? 'No aplica' : `${formatMxPrice(priceEstimate.maintenanceFrom)}/mes`}</strong>
+                <p>{draft.plan === 'free' ? 'El plan Free entra a cola automatizada.' : `Operación con agente desde ${formatMxPrice(priceEstimate.operationalMaintenanceFrom)}/mes.`}</p>
+              </article>
+              <article className={draft.marketing ? 'is-astra' : ''}>
+                <span>ASTRAMUSES</span>
+                <strong>{draft.marketing ? `${formatMxPrice(priceEstimate.astramusesMonthly)}/mes` : 'No incluido'}</strong>
+                <p>{draft.marketing ? 'Contenido estático inicial. Video y automatización se cotizan aparte.' : 'Puede añadirse antes de pagar.'}</p>
+              </article>
+            </section>
+
             <div className="lmw-summary-grid">
               <article>
                 <span>ALCANCE</span>
@@ -514,8 +969,10 @@ export function PackageBuilderPage() {
 
             <div className="lmw-summary-actions">
               <button onClick={() => setView('package')} type="button">← Volver a configurar</button>
-              <button className="lmw-builder-primary" onClick={submitDraft} type="button">
-                {submitted ? 'Evaluación guardada' : 'Guardar evaluación'} <span>{submitted ? '✓' : '→'}</span>
+              <button className="lmw-builder-primary" disabled={submitting} onClick={submitDraft} type="button">
+                {submitted
+                  ? draft.plan === 'free' ? 'Solicitud enviada' : 'Evaluación guardada'
+                  : submitting ? 'Enviando...' : draft.plan === 'free' ? 'Enviar solicitud Free' : 'Guardar evaluación'} <span>{submitted ? '✓' : '→'}</span>
               </button>
             </div>
           </section>
@@ -527,7 +984,7 @@ export function PackageBuilderPage() {
               <li><span>02</span><div><b>Fijamos el alcance</b><p>Contenido, límites, dominio, tiempos y acompañamiento.</p></div></li>
               <li><span>03</span><div><b>Preparamos la propuesta</b><p>Separando implementación, licencia, alojamiento y mantenimiento.</p></div></li>
             </ol>
-            <div><i />La simulación no envía datos ni crea recursos externos.</div>
+            <div><i />{draft.plan === 'free' ? 'Free sí envía una solicitud real a cola; la publicación automática se conectará al runner.' : 'Starter y Pro aún no envían datos ni crean recursos externos.'}</div>
           </aside>
         </main>
       )}
@@ -543,4 +1000,29 @@ export function PackageBuilderPage() {
       />
     </div>
   );
+}
+
+function normalizeFreeSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function parseFreeLines(value: string) {
+  const seen = new Set<string>();
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
 }

@@ -7,6 +7,8 @@ compatibility_date = "2026-06-28"
 ALLOWED_ORIGINS = "http://localhost:5273,http://127.0.0.1:5273,http://localhost:5274,http://127.0.0.1:5274,http://localhost:4273,http://127.0.0.1:4273,http://localhost:4274,http://127.0.0.1:4274"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "starter"
+FREE_RUNNER_TOKEN = "local-free-runner-token"
+FREE_SITE_BASE_DOMAIN = "lmwares.com"
 # En local deja "1" para saltar Turnstile. En producción pon "0".
 TURNSTILE_DISABLED = "1"
 

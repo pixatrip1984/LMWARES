@@ -9,6 +9,10 @@ export interface Bindings {
   /** Base URL del CDN de R2 (vacío = servir vía /media). */
   MEDIA_BASE_URL: string;
   PROJECT_SLUG: string;
+  /** Token de servicio para el runner privado Free. En producción debe ser secret. */
+  FREE_RUNNER_TOKEN: string;
+  /** Dominio base para publicar URLs tipo slug.lmwares.com. */
+  FREE_SITE_BASE_DOMAIN: string;
   /** "1" para saltar la verificación de Turnstile (solo local). */
   TURNSTILE_DISABLED: string;
   /** Secreto de Turnstile (server-side). Inyectado como secret. */

@@ -9,6 +9,11 @@ import { publications } from './routes/publications';
 import { requests } from './routes/requests';
 import { audit } from './routes/audit';
 import { lmwaresProjects } from './routes/lmwares-projects';
+import { siteBlogAdmin } from './routes/site-blog';
+import { adminSiteGalleries } from './routes/site-gallery';
+import { siteDocsAdmin } from './routes/site-docs';
+import { siteForms } from './routes/site-forms';
+import { siteEvents } from './routes/site-events';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -47,6 +52,11 @@ app.get('/admin/me', (c) => {
 app.route('/admin/publications', publications);
 app.route('/admin/requests', requests);
 app.route('/admin/audit', audit);
+app.route('/admin/projects/:projectId/modules/blog', siteBlogAdmin);
+app.route('/admin/projects/:projectId/modules/galleries', adminSiteGalleries);
+app.route('/admin/projects/:projectId/modules/docs', siteDocsAdmin);
+app.route('/admin/projects/:projectId/modules/forms', siteForms);
+app.route('/admin/projects/:projectId/modules/events', siteEvents);
 app.route('/admin/projects', lmwaresProjects);
 
 export default app;

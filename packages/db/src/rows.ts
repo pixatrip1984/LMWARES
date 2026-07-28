@@ -172,3 +172,82 @@ export interface LmwaresApprovalRow {
   decided_by: string;
   created_at: string;
 }
+
+export interface FreeIntakeRow {
+  id: string;
+  slug: string;
+  site_name: string;
+  status: string;
+  contact_name: string;
+  contact_email: string;
+  business_description: string;
+  audience: string;
+  sector: string | null;
+  style: string;
+  primary_action: string;
+  request_id: string | null;
+  terms_accepted_at: string | null;
+  published_url: string | null;
+  qr_asset_id: string | null;
+  generation_job_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  metadata: string;
+  submitted_at: string | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FreeContactMethodRow {
+  id: string;
+  intake_id: string;
+  platform: string;
+  value: string;
+  label: string | null;
+  public_visible: number;
+  position: number;
+  created_at: string;
+}
+
+export interface FreeIntakeAssetRow {
+  id: string;
+  intake_id: string;
+  file_asset_id: string;
+  role: string;
+  position: number;
+  safety_status: string;
+  checksum: string | null;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+}
+
+export interface FreeGenerationJobRow {
+  id: string;
+  intake_id: string;
+  type: string;
+  status: string;
+  attempt: number;
+  lease_until: string | null;
+  claimed_by: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  metadata: string;
+  queued_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublishedSiteRow {
+  slug: string;
+  intake_id: string;
+  version: number;
+  manifest_key: string;
+  index_key: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}

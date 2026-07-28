@@ -5,6 +5,14 @@ import type {
   AuditEvent,
   EntityType,
   FileAsset,
+  FreeContactMethod,
+  FreeGenerationJob,
+  FreeIntake,
+  FreeIntakeAsset,
+  FreeAssetSafetyStatus,
+  FreeContactPlatform,
+  FreeGenerationJobStatus,
+  FreeIntakeStatus,
   LmwaresApproval,
   LmwaresApprovalDecision,
   LmwaresApprovalGate,
@@ -32,6 +40,10 @@ import type {
   AdminUserRow,
   AuditEventRow,
   FileAssetRow,
+  FreeContactMethodRow,
+  FreeGenerationJobRow,
+  FreeIntakeAssetRow,
+  FreeIntakeRow,
   LmwaresApprovalRow,
   LmwaresProjectRow,
   LmwaresProjectSnapshotRow,
@@ -240,5 +252,81 @@ export function mapLmwaresApproval(r: LmwaresApprovalRow): LmwaresApproval {
     metadata: parseMetadata(r.metadata),
     decidedBy: r.decided_by,
     createdAt: r.created_at,
+  };
+}
+
+export function mapFreeIntake(r: FreeIntakeRow): FreeIntake {
+  return {
+    id: r.id,
+    slug: r.slug,
+    siteName: r.site_name,
+    status: r.status as FreeIntakeStatus,
+    contactName: r.contact_name,
+    contactEmail: r.contact_email,
+    businessDescription: r.business_description,
+    audience: r.audience,
+    sector: r.sector,
+    style: r.style,
+    primaryAction: r.primary_action,
+    requestId: r.request_id,
+    termsAcceptedAt: r.terms_accepted_at,
+    publishedUrl: r.published_url,
+    qrAssetId: r.qr_asset_id,
+    generationJobId: r.generation_job_id,
+    errorCode: r.error_code,
+    errorMessage: r.error_message,
+    metadata: parseMetadata(r.metadata),
+    submittedAt: r.submitted_at,
+    publishedAt: r.published_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function mapFreeContactMethod(r: FreeContactMethodRow): FreeContactMethod {
+  return {
+    id: r.id,
+    intakeId: r.intake_id,
+    platform: r.platform as FreeContactPlatform,
+    value: r.value,
+    label: r.label,
+    publicVisible: boolFromDb(r.public_visible),
+    position: r.position,
+    createdAt: r.created_at,
+  };
+}
+
+export function mapFreeIntakeAsset(r: FreeIntakeAssetRow): FreeIntakeAsset {
+  return {
+    id: r.id,
+    intakeId: r.intake_id,
+    fileAssetId: r.file_asset_id,
+    role: r.role,
+    position: r.position,
+    safetyStatus: r.safety_status as FreeAssetSafetyStatus,
+    checksum: r.checksum,
+    width: r.width,
+    height: r.height,
+    createdAt: r.created_at,
+  };
+}
+
+export function mapFreeGenerationJob(r: FreeGenerationJobRow): FreeGenerationJob {
+  return {
+    id: r.id,
+    intakeId: r.intake_id,
+    type: r.type,
+    status: r.status as FreeGenerationJobStatus,
+    attempt: r.attempt,
+    leaseUntil: r.lease_until,
+    claimedBy: r.claimed_by,
+    errorCode: r.error_code,
+    errorMessage: r.error_message,
+    metadata: parseMetadata(r.metadata),
+    queuedAt: r.queued_at,
+    startedAt: r.started_at,
+    completedAt: r.completed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
   };
 }

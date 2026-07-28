@@ -12,6 +12,12 @@ import {
   LmwaresApprovalsRepository,
   LmwaresValidationResultsRepository,
 } from './repositories/lmwares-evidence';
+import { LmwaresFreeIntakesRepository } from './repositories/lmwares-free-intakes';
+import { SiteBlogRepository } from './repositories/site-blog';
+import { SiteGalleryRepository } from './repositories/site-gallery';
+import { SiteDocsRepository } from './repositories/site-docs';
+import { SiteFormsRepository } from './repositories/site-forms';
+import { SiteEventsRepository } from './repositories/site-events';
 
 export * from './helpers';
 export * from './repositories/publications';
@@ -21,6 +27,12 @@ export * from './repositories/audit';
 export * from './repositories/admin-users';
 export * from './repositories/lmwares-projects';
 export * from './repositories/lmwares-evidence';
+export * from './repositories/lmwares-free-intakes';
+export * from './repositories/site-blog';
+export * from './repositories/site-gallery';
+export * from './repositories/site-docs';
+export * from './repositories/site-forms';
+export * from './repositories/site-events';
 
 /** Conjunto de repositorios construidos sobre una instancia de D1. */
 export interface Repositories {
@@ -34,6 +46,12 @@ export interface Repositories {
   lmwaresProjectSnapshots: LmwaresProjectSnapshotsRepository;
   lmwaresValidationResults: LmwaresValidationResultsRepository;
   lmwaresApprovals: LmwaresApprovalsRepository;
+  lmwaresFreeIntakes: LmwaresFreeIntakesRepository;
+  siteBlog: SiteBlogRepository;
+  siteGalleries: SiteGalleryRepository;
+  siteDocs: SiteDocsRepository;
+  siteForms: SiteFormsRepository;
+  siteEvents: SiteEventsRepository;
 }
 
 /**
@@ -52,5 +70,11 @@ export function createRepositories(db: D1Database): Repositories {
     lmwaresProjectSnapshots: new LmwaresProjectSnapshotsRepository(db),
     lmwaresValidationResults: new LmwaresValidationResultsRepository(db),
     lmwaresApprovals: new LmwaresApprovalsRepository(db),
+    lmwaresFreeIntakes: new LmwaresFreeIntakesRepository(db),
+    siteBlog: new SiteBlogRepository(db),
+    siteGalleries: new SiteGalleryRepository(db),
+    siteDocs: new SiteDocsRepository(db),
+    siteForms: new SiteFormsRepository(db),
+    siteEvents: new SiteEventsRepository(db),
   };
 }

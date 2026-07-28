@@ -7,6 +7,7 @@ import { PublicationsPage } from './pages/PublicationsPage';
 import { PublicationEditPage } from './pages/PublicationEditPage';
 import { RequestsPage } from './pages/RequestsPage';
 import { RequestDetailPage } from './pages/RequestDetailPage';
+import { SiteModulesPage } from './pages/SiteModulesPage';
 
 export function App() {
   return (
@@ -15,6 +16,10 @@ export function App() {
         <Route index element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/prepare" element={<PrepareWorkPage />} />
+        <Route
+          path="/projects/:projectId/modules/:moduleKey"
+          element={<SiteModulesPage />}
+        />
         <Route path="/operations" element={<DashboardPage />} />
         <Route path="/publications" element={<PublicationsPage />} />
         <Route path="/publications/:id" element={<PublicationEditPage />} />

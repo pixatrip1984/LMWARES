@@ -258,12 +258,20 @@ export function ProjectsPage() {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <HealthBadge health={selectedProject.health} />
-                  <Link
-                    to={`/projects/prepare?project=${encodeURIComponent(selectedProject.id)}&name=${encodeURIComponent(selectedProject.name)}`}
-                    className="rounded-md bg-[#17201b] px-3 py-2 text-xs font-black text-white transition hover:bg-[#28332c]"
-                  >
-                    Preparar trabajo
-                  </Link>
+                  <div className="flex gap-2">
+                    <Link
+                      to={`/projects/${encodeURIComponent(selectedProject.id)}/modules/blog`}
+                      className="rounded-md border border-[#24598c] bg-[#eaf4ff] px-3 py-2 text-xs font-black text-[#123f69] transition hover:bg-[#d8ebff]"
+                    >
+                      Abrir módulos
+                    </Link>
+                    <Link
+                      to={`/projects/prepare?project=${encodeURIComponent(selectedProject.id)}&name=${encodeURIComponent(selectedProject.name)}`}
+                      className="rounded-md bg-[#17201b] px-3 py-2 text-xs font-black text-white transition hover:bg-[#28332c]"
+                    >
+                      Preparar trabajo
+                    </Link>
+                  </div>
                 </div>
               </div>
 
