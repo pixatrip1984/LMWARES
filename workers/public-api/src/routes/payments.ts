@@ -28,7 +28,7 @@ const TEST_PRICING_VERSION = 'technical-mxn-5-v1';
 export const payments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 payments.post('/webhooks/mercado-pago', async (c) => {
-  const webhookSecret = mercadoPagoWebhookSecret(c.env);
+  const webhookSecrets = mercadoPagoWebhookSecrets(c.env);
   const topic = c.req.query('type') ?? c.req.query('topic') ?? '';
   if (topic !== 'payment') {
     return c.json({ received: true, ignored: true });
@@ -42,13 +42,18 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
   }
 
-  if (webhookSecret) {
-    const validSignature = await verifyMercadoPagoWebhookSignature({
-      xSignature: signature,
-      xRequestId: requestId,
-      dataId: signedDataId,
-      secret: webhookSecret,
-    });
+  if (webhookSecrets.length > 0) {
+    const signatureChecks = await Promise.all(
+      webhookSecrets.map((secret) =>
+        verifyMercadoPagoWebhookSignature({
+          xSignature: signature,
+          xRequestId: requestId,
+          dataId: signedDataId,
+          secret,
+        }),
+      ),
+    );
+    const validSignature = signatureChecks.some(Boolean);
     if (!validSignature) {
       throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
     }
@@ -64,7 +69,7 @@ payments.post('/webhooks/mercado-pago', async (c) => {
 
   const repos = createRepositories(c.env.DB);
   const eventId = await repos.lmwaresPayments.claimWebhookEvent({
-    providerRequestId: webhookSecret ? requestId : `test-payment:${paymentId}`,
+    providerRequestId: webhookSecrets.length > 0 ? requestId : `test-payment:${paymentId}`,
     topic,
     resourceId: paymentId,
   });
@@ -304,16 +309,21 @@ function assertTestPaymentConfiguration(env: Bindings): void {
   }
 }
 
-function mercadoPagoWebhookSecret(env: Bindings): string | null {
+function mercadoPagoWebhookSecrets(env: Bindings): string[] {
   if (!env.MERCADO_PAGO_ACCESS_TOKEN?.trim()) {
     throw new AppError('internal_error', 'Falta configurar el Access Token de Mercado Pago.');
   }
-  const secret = env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();
-  if (secret) return secret;
+  const productionSecret = env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();
+  const testSecret =
+    env.MERCADO_PAGO_TEST_MODE === '1'
+      ? env.MERCADO_PAGO_WEBHOOK_TEST_SECRET?.trim()
+      : undefined;
+  const secrets = [...new Set([productionSecret, testSecret].filter(Boolean) as string[])];
+  if (secrets.length > 0) return secrets;
   if (env.MERCADO_PAGO_TEST_MODE !== '1') {
     throw new AppError('internal_error', 'Falta configurar la firma secreta de Webhooks.');
   }
-  return null;
+  return [];
 }
 
 function publicProposal(proposal: PackageProposal) {
