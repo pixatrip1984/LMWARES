@@ -7,6 +7,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4273 --strictPort",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/lib/config.test.mjs",
     "lint": "echo \"(public-web) no lint configured\""
   },
   "dependencies": {
