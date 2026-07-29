@@ -42,6 +42,8 @@ export interface PackageProposal extends Timestamps {
   providerPreferenceId: string | null;
   providerPaymentId: string | null;
   checkoutUrl: string | null;
+  checkoutExpiresAt: IsoDateTime | null;
   lastProviderStatus: string | null;
+  paymentReviewRequired: boolean;
   paidAt: IsoDateTime | null;
 }

@@ -15,7 +15,8 @@ export function PaymentPage() {
 
   useEffect(() => {
     let active = true;
-    api.getPackageProposal(proposalId)
+    api
+      .getPackageProposal(proposalId)
       .then(({ proposal: loaded }) => {
         if (!active) return;
         setProposal(loaded);
@@ -38,16 +39,41 @@ export function PaymentPage() {
     );
   }, [proposal]);
 
-  const prepareCheckout = async () => {
+  const openCheckout = async () => {
+    const checkoutWindow = window.open('about:blank', '_blank');
+    if (checkoutWindow) checkoutWindow.opener = null;
     setState('preparing');
     setMessage('');
     try {
       const result = await api.createPackageCheckout(proposalId);
       setProposal(result.proposal);
+      if (!result.proposal.checkoutUrl) {
+        checkoutWindow?.close();
+        throw new Error('Mercado Pago no devolvió una URL de checkout.');
+      }
+      if (checkoutWindow) {
+        checkoutWindow.location.replace(result.proposal.checkoutUrl);
+      } else {
+        window.location.assign(result.proposal.checkoutUrl);
+      }
       setState('ready');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No fue posible preparar el checkout.');
-      setState('error');
+      checkoutWindow?.close();
+      const errorMessage =
+        error instanceof Error ? error.message : 'No fue posible preparar el checkout.';
+      try {
+        const latest = await api.getPackageProposal(proposalId);
+        setProposal(latest.proposal);
+        setMessage(
+          latest.proposal.status === 'paid'
+            ? 'El pago ya estaba confirmado; no abrimos otro checkout.'
+            : errorMessage,
+        );
+        setState('ready');
+      } catch {
+        setMessage(errorMessage);
+        setState('error');
+      }
     }
   };
 
@@ -58,11 +84,13 @@ export function PaymentPage() {
       const result = await api.reconcilePackagePayment(proposalId);
       setProposal(result.proposal);
       setMessage(
-        result.proposal.status === 'paid'
-          ? 'Pago aprobado y conciliado con la propuesta.'
-          : result.found
-            ? `Mercado Pago reporta: ${result.proposal.lastProviderStatus ?? 'pendiente'}.`
-            : 'Todavía no encontramos un pago para esta propuesta.',
+        result.proposal.paymentReviewRequired
+          ? 'Detectamos más de un pago aprobado. La propuesta quedó bloqueada para revisión.'
+          : result.proposal.status === 'paid'
+            ? 'Pago aprobado y conciliado con la propuesta.'
+            : result.found
+              ? `Mercado Pago reporta: ${result.proposal.lastProviderStatus ?? 'pendiente'}.`
+              : 'Todavía no encontramos un pago para esta propuesta.',
       );
       setState('ready');
     } catch (error) {
@@ -72,7 +100,11 @@ export function PaymentPage() {
   };
 
   if (state === 'loading') {
-    return <main className="lmw-payment-page"><p className="lmw-payment-loading">Cargando propuesta…</p></main>;
+    return (
+      <main className="lmw-payment-page">
+        <p className="lmw-payment-loading">Cargando propuesta…</p>
+      </main>
+    );
   }
 
   if (!proposal) {
@@ -82,13 +114,16 @@ export function PaymentPage() {
           <p className="lmw-payment-eyebrow">CHECKOUT PRO · PRUEBA</p>
           <h1>No pudimos abrir esta propuesta</h1>
           <p className="lmw-payment-message is-error">{message}</p>
-          <Link className="lmw-payment-secondary" to="/configurar">Volver al configurador</Link>
+          <Link className="lmw-payment-secondary" to="/configurar">
+            Volver al configurador
+          </Link>
         </section>
       </main>
     );
   }
 
   const paid = proposal.status === 'paid';
+  const paymentReviewRequired = proposal.paymentReviewRequired;
   const testAmount = `${proposal.currency} ${formatCents(proposal.amountCents, proposal.currency)}`;
   return (
     <main className="lmw-payment-page">
@@ -111,7 +146,11 @@ export function PaymentPage() {
           <section className="lmw-payment-card">
             <p className="lmw-payment-label">PROPUESTA CONGELADA</p>
             <h2>{proposal.plan === 'starter' ? 'Starter' : 'Pro'}</h2>
-            <ul>{moduleNames.map((name) => <li key={name}>{name}</li>)}</ul>
+            <ul>
+              {moduleNames.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
             <p className="lmw-payment-astra">
               Astramuses: {proposal.marketing ? 'incluido para evaluación separada' : 'no incluido'}
             </p>
@@ -126,21 +165,33 @@ export function PaymentPage() {
         </div>
 
         <section className="lmw-payment-actions">
-          {paid ? (
+          {paymentReviewRequired ? (
+            <>
+              <div className="lmw-payment-message is-error">
+                Detectamos un pago adicional. El checkout quedó bloqueado y el caso requiere
+                revisión.
+              </div>
+              <Link className="lmw-payment-primary" to="/configurar">
+                Volver a LMWares
+              </Link>
+            </>
+          ) : paid ? (
             <>
               <div className="lmw-payment-success">✓ Mercado Pago confirmó el pago.</div>
-              <Link className="lmw-payment-primary" to="/configurar">Volver a LMWares</Link>
+              <Link className="lmw-payment-primary" to="/configurar">
+                Volver a LMWares
+              </Link>
             </>
           ) : proposal.checkoutUrl ? (
             <>
-              <a
+              <button
                 className="lmw-payment-primary"
-                href={proposal.checkoutUrl}
-                rel="noopener noreferrer"
-                target="_blank"
+                disabled={state === 'preparing'}
+                onClick={openCheckout}
+                type="button"
               >
-                Abrir Mercado Pago →
-              </a>
+                {state === 'preparing' ? 'Verificando…' : 'Abrir Mercado Pago →'}
+              </button>
               <button
                 className="lmw-payment-secondary"
                 disabled={state === 'checking'}
@@ -154,13 +205,15 @@ export function PaymentPage() {
             <button
               className="lmw-payment-primary"
               disabled={state === 'preparing'}
-              onClick={prepareCheckout}
+              onClick={openCheckout}
               type="button"
             >
               {state === 'preparing' ? 'Preparando…' : `Preparar checkout de ${testAmount}`}
             </button>
           )}
-          <Link className="lmw-payment-back" to="/configurar">← Volver al paquete</Link>
+          <Link className="lmw-payment-back" to="/configurar">
+            ← Volver al paquete
+          </Link>
         </section>
 
         {message ? (

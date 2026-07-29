@@ -43,6 +43,14 @@ Webhooks: el receptor usa únicamente el identificador para consultar la API ofi
 comprueba la referencia externa, el importe y la moneda contra la propuesta interna
 antes de actualizarla.
 
+Mientras `MERCADO_PAGO_TEST_MODE=1`, un Webhook con encabezados de firma bien formados
+pero cuya HMAC sandbox no coincida se concilia consultando el pago directamente al
+proveedor y queda identificado como `payment_test_provider_verified`. Este fallback no
+existe cuando el modo de prueba está apagado: producción siempre exige HMAC válida.
+Cada checkout técnico vence a los 30 minutos y el primer pago aprobado conciliado queda
+como pago canónico; cualquier aprobado adicional se conserva por separado y bloquea la
+propuesta para revisión.
+
 ## Admin API Worker
 
 | Clave                  | Tipo        | Dónde         | Descripción                                                 |

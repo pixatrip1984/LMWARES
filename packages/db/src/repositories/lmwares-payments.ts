@@ -1,10 +1,13 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type {
-  Metadata,
-  PackageProposal,
-  PackageProposalStatus,
-  PaidPackageModuleId,
-  PaidPackagePlan,
+import {
+  AppError,
+  decidePaymentPolicy,
+  type Metadata,
+  type PackageProposal,
+  type PackageProposalStatus,
+  type PaymentAttemptDisposition,
+  type PaidPackageModuleId,
+  type PaidPackagePlan,
 } from '@starter/domain';
 import { boolFromDb, boolToDb, newId, nowIso, parseJson } from '../helpers';
 
@@ -23,10 +26,22 @@ interface PackageProposalRow {
   provider_preference_id: string | null;
   provider_payment_id: string | null;
   checkout_url: string | null;
+  checkout_expires_at: string | null;
   last_provider_status: string | null;
+  payment_review_required: number;
   paid_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface PaymentAttemptOwnerRow {
+  proposal_id: string;
+}
+
+export interface PaymentReconciliationResult {
+  proposal: PackageProposal;
+  disposition: PaymentAttemptDisposition;
+  duplicatePayment: boolean;
 }
 
 export class LmwaresPaymentsRepository {
@@ -94,6 +109,7 @@ export class LmwaresPaymentsRepository {
     id: string;
     preferenceId: string;
     checkoutUrl: string;
+    checkoutExpiresAt: string;
   }): Promise<PackageProposal> {
     await this.db
       .prepare(
@@ -101,11 +117,12 @@ export class LmwaresPaymentsRepository {
          SET status = 'payment_pending',
              provider_preference_id = ?,
              checkout_url = ?,
+             checkout_expires_at = ?,
              last_provider_status = 'preference_created',
              updated_at = ?
          WHERE id = ? AND status = 'checkout_creating'`,
       )
-      .bind(input.preferenceId, input.checkoutUrl, nowIso(), input.id)
+      .bind(input.preferenceId, input.checkoutUrl, input.checkoutExpiresAt, nowIso(), input.id)
       .run();
     return (await this.getById(input.id))!;
   }
@@ -121,26 +138,143 @@ export class LmwaresPaymentsRepository {
       .run();
   }
 
-  async savePayment(input: {
+  async markCheckoutExpired(input: {
     id: string;
-    paymentId: string;
-    providerStatus: string;
-    status: PackageProposalStatus;
-  }): Promise<PackageProposal> {
-    const now = nowIso();
+    preferenceId: string;
+    expiresAt: string;
+  }): Promise<void> {
     await this.db
       .prepare(
         `UPDATE lmw_package_proposals
-         SET status = ?,
-             provider_payment_id = ?,
-             last_provider_status = ?,
-             paid_at = CASE WHEN ? = 'paid' THEN COALESCE(paid_at, ?) ELSE paid_at END,
-             updated_at = ?
-         WHERE id = ?`,
+         SET checkout_expires_at = ?, updated_at = ?
+         WHERE id = ? AND provider_preference_id = ?`,
       )
-      .bind(input.status, input.paymentId, input.providerStatus, input.status, now, now, input.id)
+      .bind(input.expiresAt, nowIso(), input.id, input.preferenceId)
       .run();
-    return (await this.getById(input.id))!;
+  }
+
+  async reconcilePayment(input: {
+    id: string;
+    paymentId: string;
+    providerStatus: string;
+    amountCents: number;
+    currency: string;
+    providerCreatedAt: string | null;
+  }): Promise<PaymentReconciliationResult> {
+    const now = nowIso();
+    const proposalBefore = await this.getById(input.id);
+    if (!proposalBefore) throw AppError.notFound('Propuesta');
+
+    await this.db
+      .prepare(
+        `INSERT INTO lmw_payment_attempts
+          (id, proposal_id, provider, provider_payment_id, provider_preference_id,
+           provider_status, disposition, amount_cents, currency,
+           provider_created_at, first_seen_at, updated_at)
+         VALUES (?, ?, 'mercado_pago', ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+         ON CONFLICT(provider_payment_id) DO UPDATE SET
+           provider_status = excluded.provider_status,
+           provider_created_at = COALESCE(
+             lmw_payment_attempts.provider_created_at,
+             excluded.provider_created_at
+           ),
+           updated_at = excluded.updated_at
+         WHERE lmw_payment_attempts.proposal_id = excluded.proposal_id`,
+      )
+      .bind(
+        newId(),
+        input.id,
+        input.paymentId,
+        proposalBefore.providerPreferenceId,
+        input.providerStatus.slice(0, 80),
+        input.amountCents,
+        input.currency.slice(0, 12),
+        input.providerCreatedAt,
+        now,
+        now,
+      )
+      .run();
+
+    const attemptOwner = await this.db
+      .prepare(
+        `SELECT proposal_id FROM lmw_payment_attempts
+         WHERE provider_payment_id = ? LIMIT 1`,
+      )
+      .bind(input.paymentId)
+      .first<PaymentAttemptOwnerRow>();
+    if (!attemptOwner || attemptOwner.proposal_id !== input.id) {
+      throw new AppError('conflict', 'El identificador de pago ya pertenece a otra propuesta.');
+    }
+
+    if (input.providerStatus === 'approved') {
+      await this.db
+        .prepare(
+          `UPDATE lmw_package_proposals
+           SET status = 'paid',
+               provider_payment_id = ?,
+               last_provider_status = ?,
+               paid_at = COALESCE(paid_at, ?),
+               updated_at = ?
+           WHERE id = ?
+             AND (provider_payment_id IS NULL OR provider_payment_id = ?)`,
+        )
+        .bind(
+          input.paymentId,
+          input.providerStatus,
+          input.providerCreatedAt ?? now,
+          now,
+          input.id,
+          input.paymentId,
+        )
+        .run();
+    }
+
+    let proposal = (await this.getById(input.id))!;
+    const decision = decidePaymentPolicy({
+      providerStatus: input.providerStatus,
+      canonicalPaymentId: proposal.providerPaymentId,
+      incomingPaymentId: input.paymentId,
+    });
+
+    if (decision.reviewRequired) {
+      await this.db
+        .prepare(
+          `UPDATE lmw_package_proposals
+           SET payment_review_required = 1, updated_at = ?
+           WHERE id = ?`,
+        )
+        .bind(now, input.id)
+        .run();
+    } else if (input.providerStatus !== 'approved' && decision.affectsProposal) {
+      await this.db
+        .prepare(
+          `UPDATE lmw_package_proposals
+           SET status = ?, last_provider_status = ?, updated_at = ?
+           WHERE id = ?
+             AND (
+               provider_payment_id = ? OR
+               (provider_payment_id IS NULL AND status <> 'paid')
+             )`,
+        )
+        .bind(decision.proposalStatus, input.providerStatus, now, input.id, input.paymentId)
+        .run();
+    }
+
+    await this.db
+      .prepare(
+        `UPDATE lmw_payment_attempts
+         SET disposition = ?, provider_status = ?, updated_at = ?
+         WHERE provider_payment_id = ? AND proposal_id = ?`,
+      )
+      .bind(decision.disposition, input.providerStatus.slice(0, 80), now, input.paymentId, input.id)
+      .run();
+
+    proposal = (await this.getById(input.id))!;
+    return {
+      proposal,
+      disposition: decision.disposition,
+      duplicatePayment: decision.reviewRequired,
+    };
   }
 
   async claimWebhookEvent(input: {
@@ -229,7 +363,9 @@ function mapPackageProposal(row: PackageProposalRow): PackageProposal {
     providerPreferenceId: row.provider_preference_id,
     providerPaymentId: row.provider_payment_id,
     checkoutUrl: row.checkout_url,
+    checkoutExpiresAt: row.checkout_expires_at,
     lastProviderStatus: row.last_provider_status,
+    paymentReviewRequired: boolFromDb(row.payment_review_required),
     paidAt: row.paid_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

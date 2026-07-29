@@ -1,11 +1,13 @@
-import { AppError, type PackageProposal, type PackageProposalStatus } from '@starter/domain';
+import { AppError, type PackageProposal } from '@starter/domain';
 
 const MERCADO_PAGO_API = 'https://api.mercadopago.com';
 const MAX_PROVIDER_RESPONSE_BYTES = 256 * 1024;
+const CHECKOUT_TTL_MS = 30 * 60 * 1000;
 
 export interface MercadoPagoPreference {
   id: string;
   checkoutUrl: string;
+  expiresAt: string;
 }
 
 export interface MercadoPagoPayment {
@@ -25,10 +27,9 @@ export async function createMercadoPagoPreference(input: {
   publicApiUrl: string;
   publicWebUrl: string;
 }): Promise<MercadoPagoPreference> {
-  const notificationUrl = publicHttpsUrl(
-    input.publicApiUrl,
-    '/payments/webhooks/mercado-pago',
-  );
+  const validFrom = new Date();
+  const expiresAt = new Date(validFrom.getTime() + CHECKOUT_TTL_MS).toISOString();
+  const notificationUrl = publicHttpsUrl(input.publicApiUrl, '/payments/webhooks/mercado-pago');
   const paymentReturnUrl = publicHttpsUrl(
     input.publicWebUrl,
     `/pago/${encodeURIComponent(input.proposal.id)}`,
@@ -52,6 +53,9 @@ export async function createMercadoPagoPreference(input: {
     },
     statement_descriptor: 'LMWARES',
     binary_mode: true,
+    expires: true,
+    expiration_date_from: validFrom.toISOString(),
+    expiration_date_to: expiresAt,
     payment_methods: {
       excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }],
       installments: 1,
@@ -83,10 +87,39 @@ export async function createMercadoPagoPreference(input: {
 
   const id = stringField(payload, 'id');
   const checkoutUrl = input.testMode
-    ? optionalStringField(payload, 'sandbox_init_point') ?? stringField(payload, 'init_point')
+    ? (optionalStringField(payload, 'sandbox_init_point') ?? stringField(payload, 'init_point'))
     : stringField(payload, 'init_point');
   assertMercadoPagoCheckoutUrl(checkoutUrl);
-  return { id, checkoutUrl };
+  return { id, checkoutUrl, expiresAt };
+}
+
+export async function expireMercadoPagoPreference(input: {
+  accessToken: string;
+  preferenceId: string;
+  validFrom: string;
+}): Promise<string> {
+  const expiresAt = new Date(Date.now() + 1_000).toISOString();
+  const response = await fetch(
+    `${MERCADO_PAGO_API}/checkout/preferences/${encodeURIComponent(input.preferenceId)}`,
+    {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${input.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        expires: true,
+        expiration_date_from: input.validFrom,
+        expiration_date_to: expiresAt,
+      }),
+    },
+  );
+  const payload = await readProviderJson(response);
+  if (!response.ok) {
+    throw providerError('vencer la preferencia pagada', response.status, payload);
+  }
+  return expiresAt;
 }
 
 export async function getMercadoPagoPayment(input: {
@@ -132,15 +165,9 @@ export async function searchMercadoPagoPayments(input: {
   if (!isRecord(payload) || !Array.isArray(payload.results)) {
     throw new AppError('internal_error', 'Mercado Pago devolvió una respuesta de pagos inválida.');
   }
-  return payload.results.map(parsePayment).filter((payment): payment is MercadoPagoPayment => payment !== null);
-}
-
-export function proposalStatusForProviderStatus(status: string): PackageProposalStatus {
-  if (status === 'approved') return 'paid';
-  if (['rejected', 'cancelled', 'refunded', 'charged_back'].includes(status)) {
-    return 'payment_failed';
-  }
-  return 'payment_pending';
+  return payload.results
+    .map(parsePayment)
+    .filter((payment): payment is MercadoPagoPayment => payment !== null);
 }
 
 export async function verifyMercadoPagoWebhookSignature(input: {
@@ -149,21 +176,9 @@ export async function verifyMercadoPagoWebhookSignature(input: {
   dataId: string;
   secret: string;
 }): Promise<boolean> {
-  const signatureFields = new Map<string, string>();
-  for (const part of input.xSignature.split(',')) {
-    const [name, value] = part.split('=', 2).map((item) => item.trim());
-    if (name && value) signatureFields.set(name, value);
-  }
-  const timestamp = signatureFields.get('ts');
-  const signatureHex = signatureFields.get('v1');
-  if (
-    !timestamp ||
-    !/^\d{10,16}$/.test(timestamp) ||
-    !signatureHex ||
-    !/^[a-f0-9]{64}$/i.test(signatureHex)
-  ) {
-    return false;
-  }
+  const signatureFields = parseWebhookSignature(input.xSignature);
+  if (!signatureFields) return false;
+  const { timestamp, signatureHex } = signatureFields;
 
   const key = await crypto.subtle.importKey(
     'raw',
@@ -187,6 +202,32 @@ export async function verifyMercadoPagoWebhookSignature(input: {
     hexToBytes(signatureHex),
     new TextEncoder().encode(manifest),
   );
+}
+
+export function hasMercadoPagoWebhookSignatureFormat(value: string): boolean {
+  return parseWebhookSignature(value) !== null;
+}
+
+function parseWebhookSignature(value: string): {
+  timestamp: string;
+  signatureHex: string;
+} | null {
+  const signatureFields = new Map<string, string>();
+  for (const part of value.split(',')) {
+    const [name, fieldValue] = part.split('=', 2).map((item) => item.trim());
+    if (name && fieldValue) signatureFields.set(name, fieldValue);
+  }
+  const timestamp = signatureFields.get('ts');
+  const signatureHex = signatureFields.get('v1');
+  if (
+    !timestamp ||
+    !/^\d{10,16}$/.test(timestamp) ||
+    !signatureHex ||
+    !/^[a-f0-9]{64}$/i.test(signatureHex)
+  ) {
+    return null;
+  }
+  return { timestamp, signatureHex };
 }
 
 function parsePayment(value: unknown): MercadoPagoPayment | null {
@@ -274,7 +315,10 @@ function assertMercadoPagoCheckoutUrl(value: string): void {
     url.protocol === 'https:' &&
     (url.hostname === 'mercadopago.com.mx' || url.hostname.endsWith('.mercadopago.com.mx'));
   if (!trusted) {
-    throw new AppError('internal_error', 'Mercado Pago devolvió un dominio de checkout inesperado.');
+    throw new AppError(
+      'internal_error',
+      'Mercado Pago devolvió un dominio de checkout inesperado.',
+    );
   }
 }
 

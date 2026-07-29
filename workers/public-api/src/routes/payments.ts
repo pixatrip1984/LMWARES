@@ -1,26 +1,22 @@
 import { Hono } from 'hono';
 import {
   AppError,
+  checkoutBlocked,
   type PackageProposal,
   type PaidPackageModuleId,
 } from '@starter/domain';
 import { createRepositories } from '@starter/db';
-import {
-  createTestPackageProposalSchema,
-  parseInput,
-} from '@starter/validation';
+import { createTestPackageProposalSchema, parseInput } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import {
   createMercadoPagoPreference,
+  expireMercadoPagoPreference,
   getMercadoPagoPayment,
-  proposalStatusForProviderStatus,
+  hasMercadoPagoWebhookSignatureFormat,
   searchMercadoPagoPayments,
   verifyMercadoPagoWebhookSignature,
 } from '../lib/mercado-pago';
-import {
-  assertTrustedPublicOrigin,
-  requirePublicSession,
-} from '../middleware/public-auth';
+import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
 
 const TEST_AMOUNT_CENTS = 500;
 const TEST_PRICING_VERSION = 'technical-mxn-5-v1';
@@ -39,8 +35,7 @@ payments.post('/webhooks/mercado-pago', async (c) => {
   const signedDataId = c.req.query('data.id') ?? '';
   const legacyPaymentId = c.req.query('id') ?? '';
   const paymentId = signedDataId || legacyPaymentId;
-  const isLegacyIpn =
-    ipnTopic === 'payment' && Boolean(legacyPaymentId) && !signedDataId;
+  const isLegacyIpn = ipnTopic === 'payment' && Boolean(legacyPaymentId) && !signedDataId;
   const requestId = c.req.header('x-request-id') ?? '';
   const signature = c.req.header('x-signature') ?? '';
   if (!/^\d{1,32}$/.test(paymentId)) {
@@ -50,7 +45,12 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
   }
 
-  if (!isLegacyIpn && webhookSecrets.length > 0) {
+  let signatureValidated = false;
+  let providerVerifiedTestWebhook = false;
+  if (!isLegacyIpn) {
+    if (!hasMercadoPagoWebhookSignatureFormat(signature)) {
+      throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
+    }
     const signatureChecks = await Promise.all(
       webhookSecrets.map((secret) =>
         verifyMercadoPagoWebhookSignature({
@@ -61,38 +61,52 @@ payments.post('/webhooks/mercado-pago', async (c) => {
         }),
       ),
     );
-    const validSignature = signatureChecks.some(Boolean);
-    if (!validSignature) {
+    signatureValidated = signatureChecks.some(Boolean);
+    if (!signatureValidated && c.env.MERCADO_PAGO_TEST_MODE !== '1') {
       throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
     }
-  } else if (!isLegacyIpn) {
-    console.warn(
-      JSON.stringify({
-        message: 'mercado_pago_test_webhook_signature_not_verified',
-        paymentId,
-        requestId,
-      }),
-    );
+    if (!signatureValidated) {
+      providerVerifiedTestWebhook = true;
+      console.warn(
+        JSON.stringify({
+          message: 'mercado_pago_test_webhook_provider_verification_required',
+          paymentId,
+          requestId,
+        }),
+      );
+    }
   }
 
   // Mercado Pago IPN is a legacy transport. Its x-signature cannot be
   // validated with the Webhooks secret, so the notification only supplies an
   // identifier: the payment is always fetched from Mercado Pago and checked
   // against our proposal before any state is changed.
-  const ipnPayment = isLegacyIpn
-    ? await getMercadoPagoPayment({
-        accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
-        paymentId,
-      })
-    : null;
+  const providerVerifiedPayment =
+    isLegacyIpn || providerVerifiedTestWebhook
+      ? await getMercadoPagoPayment({
+          accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+          paymentId,
+        })
+      : null;
   const providerRequestId = isLegacyIpn
-    ? `ipn:payment:${paymentId}:${ipnPayment?.status ?? 'unknown'}`
-    : requestId;
+    ? `ipn:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
+    : providerVerifiedTestWebhook
+      ? `test-webhook:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
+      : requestId;
+  const transport = isLegacyIpn
+    ? 'ipn'
+    : providerVerifiedTestWebhook
+      ? 'webhook_test_provider_verified'
+      : 'webhook';
 
   const repos = createRepositories(c.env.DB);
   const eventId = await repos.lmwaresPayments.claimWebhookEvent({
     providerRequestId,
-    topic: isLegacyIpn ? 'payment_ipn' : topic,
+    topic: isLegacyIpn
+      ? 'payment_ipn'
+      : providerVerifiedTestWebhook
+        ? 'payment_test_provider_verified'
+        : topic,
     resourceId: paymentId,
   });
   if (!eventId) {
@@ -101,7 +115,7 @@ payments.post('/webhooks/mercado-pago', async (c) => {
 
   try {
     const payment =
-      ipnPayment ??
+      providerVerifiedPayment ??
       (await getMercadoPagoPayment({
         accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
         paymentId,
@@ -117,12 +131,15 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     }
 
     assertPaymentMatchesProposal(payment, proposal);
-    const updated = await repos.lmwaresPayments.savePayment({
+    const reconciliation = await repos.lmwaresPayments.reconcilePayment({
       id: proposal.id,
       paymentId: payment.id,
       providerStatus: payment.status,
-      status: proposalStatusForProviderStatus(payment.status),
+      amountCents: Math.round(payment.amount * 100),
+      currency: payment.currency,
+      providerCreatedAt: payment.dateCreated,
     });
+    const preferenceExpired = await tryExpirePaidPreference(c.env, reconciliation.proposal);
     await repos.lmwaresPayments.completeWebhookEvent({
       id: eventId,
       status: 'processed',
@@ -131,22 +148,31 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     await repos.audit.record({
       actorType: 'system',
       actorId: 'mercado_pago',
-      action: isLegacyIpn
-        ? 'lmwares.package_proposal.ipn_reconciled'
-        : 'lmwares.package_proposal.webhook_reconciled',
+      action: reconciliation.duplicatePayment
+        ? 'lmwares.package_proposal.duplicate_payment_detected'
+        : isLegacyIpn
+          ? 'lmwares.package_proposal.ipn_reconciled'
+          : 'lmwares.package_proposal.webhook_reconciled',
       entityType: 'lmwares_package_proposal',
       entityId: proposal.id,
       metadata: {
         providerPaymentId: payment.id,
         providerStatus: payment.status,
-        proposalStatus: updated.status,
+        proposalStatus: reconciliation.proposal.status,
+        disposition: reconciliation.disposition,
+        duplicatePayment: reconciliation.duplicatePayment,
         providerRequestId,
-        transport: isLegacyIpn ? 'ipn' : 'webhook',
+        transport,
+        signatureValidated,
+        preferenceExpired,
       },
       ip: c.req.header('CF-Connecting-IP') ?? null,
       userAgent: c.req.header('User-Agent') ?? null,
     });
-    return c.json({ received: true });
+    return c.json({
+      received: true,
+      duplicatePayment: reconciliation.duplicatePayment,
+    });
   } catch (error) {
     await repos.lmwaresPayments.failWebhookEvent(
       eventId,
@@ -201,18 +227,32 @@ payments.post('/proposals/:id/checkout', async (c) => {
   const repos = createRepositories(c.env.DB);
   let proposal = await ownedProposal(c.env, c.req.param('id'), session.user.id);
 
-  if (proposal.checkoutUrl && proposal.providerPreferenceId) {
-    return c.json({ proposal: publicProposal(proposal) });
+  if (checkoutBlocked(proposal)) {
+    throw new AppError('conflict', 'Esta propuesta ya no admite otro pago.');
   }
-  if (proposal.status === 'paid') {
-    throw new AppError('conflict', 'Esta prueba ya fue pagada.');
+  if (proposal.checkoutUrl && proposal.providerPreferenceId) {
+    if (checkoutExpired(proposal)) {
+      throw new AppError(
+        'conflict',
+        'Este checkout venció. Vuelve al configurador para generar una propuesta nueva.',
+      );
+    }
+    return c.json({ proposal: publicProposal(proposal) });
   }
 
   const claimed = await repos.lmwaresPayments.claimCheckout(proposal.id);
   if (!claimed) {
     proposal = (await repos.lmwaresPayments.getById(proposal.id))!;
-    if (proposal.checkoutUrl) return c.json({ proposal: publicProposal(proposal) });
-    throw new AppError('conflict', 'El checkout se está preparando. Intenta nuevamente en unos segundos.');
+    if (checkoutBlocked(proposal)) {
+      throw new AppError('conflict', 'Esta propuesta ya no admite otro pago.');
+    }
+    if (proposal.checkoutUrl && !checkoutExpired(proposal)) {
+      return c.json({ proposal: publicProposal(proposal) });
+    }
+    throw new AppError(
+      'conflict',
+      'El checkout se está preparando. Intenta nuevamente en unos segundos.',
+    );
   }
 
   try {
@@ -228,6 +268,7 @@ payments.post('/proposals/:id/checkout', async (c) => {
       id: proposal.id,
       preferenceId: preference.id,
       checkoutUrl: preference.checkoutUrl,
+      checkoutExpiresAt: preference.expiresAt,
     });
   } catch (error) {
     await repos.lmwaresPayments.markCheckoutFailed(proposal.id);
@@ -254,25 +295,77 @@ payments.post('/proposals/:id/reconcile', async (c) => {
     accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
     externalReference: proposal.id,
   });
-  const payment =
-    paymentsFound.find((candidate) => candidate.status === 'approved') ?? paymentsFound[0] ?? null;
-
-  if (!payment) {
+  if (paymentsFound.length === 0) {
     return c.json({ found: false, proposal: publicProposal(proposal) });
   }
-  assertPaymentMatchesProposal(payment, proposal);
-  proposal = await repos.lmwaresPayments.savePayment({
-    id: proposal.id,
-    paymentId: payment.id,
-    providerStatus: payment.status,
-    status: proposalStatusForProviderStatus(payment.status),
-  });
+
+  const orderedPayments = [...paymentsFound].sort(
+    (left, right) => paymentTimestamp(left.dateCreated) - paymentTimestamp(right.dateCreated),
+  );
+  let duplicatePayments = 0;
+  for (const payment of orderedPayments) {
+    assertPaymentMatchesProposal(payment, proposal);
+    const reconciliation = await repos.lmwaresPayments.reconcilePayment({
+      id: proposal.id,
+      paymentId: payment.id,
+      providerStatus: payment.status,
+      amountCents: Math.round(payment.amount * 100),
+      currency: payment.currency,
+      providerCreatedAt: payment.dateCreated,
+    });
+    proposal = reconciliation.proposal;
+    if (reconciliation.duplicatePayment) duplicatePayments += 1;
+  }
+  const preferenceExpired = await tryExpirePaidPreference(c.env, proposal);
   await audit(c, session.user.id, 'lmwares.package_proposal.reconciled', proposal, {
-    providerPaymentId: payment.id,
-    providerStatus: payment.status,
+    providerPaymentId: proposal.providerPaymentId,
+    providerStatus: proposal.lastProviderStatus,
+    paymentsFound: orderedPayments.length,
+    duplicatePayments,
+    preferenceExpired,
   });
   return c.json({ found: true, proposal: publicProposal(proposal) });
 });
+
+function checkoutExpired(proposal: PackageProposal): boolean {
+  if (!proposal.checkoutExpiresAt) return false;
+  const expiresAt = Date.parse(proposal.checkoutExpiresAt);
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
+function paymentTimestamp(value: string | null): number {
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
+}
+
+async function tryExpirePaidPreference(env: Bindings, proposal: PackageProposal): Promise<boolean> {
+  if (proposal.status !== 'paid' || !proposal.providerPreferenceId) return false;
+  if (checkoutExpired(proposal)) return true;
+  try {
+    const expiresAt = await expireMercadoPagoPreference({
+      accessToken: env.MERCADO_PAGO_ACCESS_TOKEN,
+      preferenceId: proposal.providerPreferenceId,
+      validFrom: proposal.createdAt,
+    });
+    await createRepositories(env.DB).lmwaresPayments.markCheckoutExpired({
+      id: proposal.id,
+      preferenceId: proposal.providerPreferenceId,
+      expiresAt,
+    });
+    return true;
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        message: 'mercado_pago_preference_expiration_failed',
+        proposalId: proposal.id,
+        providerPreferenceId: proposal.providerPreferenceId,
+        errorCode: error instanceof AppError ? error.code : 'internal_error',
+      }),
+    );
+    return false;
+  }
+}
 
 function normalizeAndValidateModules(
   plan: 'starter' | 'pro',
@@ -280,7 +373,10 @@ function normalizeAndValidateModules(
 ): PaidPackageModuleId[] {
   const modules = [...new Set(input)];
   if (!modules.includes('landing') || !modules.includes('panel')) {
-    throw new AppError('validation_error', 'Landing y Panel son obligatorios en los paquetes pagados.');
+    throw new AppError(
+      'validation_error',
+      'Landing y Panel son obligatorios en los paquetes pagados.',
+    );
   }
   if (plan === 'starter') {
     if (modules.includes('cart') || modules.includes('data')) {
@@ -317,7 +413,10 @@ function assertPaymentMatchesProposal(
         amountMatches: amountCents === proposal.amountCents,
       }),
     );
-    throw new AppError('internal_error', 'El pago encontrado no coincide con la propuesta congelada.');
+    throw new AppError(
+      'internal_error',
+      'El pago encontrado no coincide con la propuesta congelada.',
+    );
   }
 }
 
@@ -332,7 +431,10 @@ function assertTestPaymentConfiguration(env: Bindings): void {
     throw new AppError('forbidden', 'El checkout técnico de MXN $5 no está habilitado.');
   }
   if (!env.MERCADO_PAGO_ACCESS_TOKEN?.trim()) {
-    throw new AppError('internal_error', 'Falta configurar el Access Token de prueba de Mercado Pago.');
+    throw new AppError(
+      'internal_error',
+      'Falta configurar el Access Token de prueba de Mercado Pago.',
+    );
   }
 }
 
@@ -342,9 +444,7 @@ function mercadoPagoWebhookSecrets(env: Bindings): string[] {
   }
   const productionSecret = env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();
   const testSecret =
-    env.MERCADO_PAGO_TEST_MODE === '1'
-      ? env.MERCADO_PAGO_WEBHOOK_TEST_SECRET?.trim()
-      : undefined;
+    env.MERCADO_PAGO_TEST_MODE === '1' ? env.MERCADO_PAGO_WEBHOOK_TEST_SECRET?.trim() : undefined;
   const secrets = [...new Set([productionSecret, testSecret].filter(Boolean) as string[])];
   if (secrets.length > 0) return secrets;
   if (env.MERCADO_PAGO_TEST_MODE !== '1') {
@@ -364,7 +464,9 @@ function publicProposal(proposal: PackageProposal) {
     currency: proposal.currency,
     pricingVersion: proposal.pricingVersion,
     checkoutUrl: proposal.checkoutUrl,
+    checkoutExpiresAt: proposal.checkoutExpiresAt,
     lastProviderStatus: proposal.lastProviderStatus,
+    paymentReviewRequired: proposal.paymentReviewRequired,
     paidAt: proposal.paidAt,
     createdAt: proposal.createdAt,
     updatedAt: proposal.updatedAt,

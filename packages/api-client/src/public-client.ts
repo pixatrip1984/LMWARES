@@ -1,5 +1,9 @@
 import type { Paginated, PublicAuthSession, Publication } from '@starter/domain';
-import type { CreateFreeIntakeInput, CreateRequestInput, SubmitFreeIntakeInput } from '@starter/validation';
+import type {
+  CreateFreeIntakeInput,
+  CreateRequestInput,
+  SubmitFreeIntakeInput,
+} from '@starter/validation';
 import type { CreateTestPackageProposalInput } from '@starter/validation';
 import { createHttpClient } from './http';
 
@@ -68,7 +72,9 @@ export interface PublicPackageProposal {
   currency: 'MXN';
   pricingVersion: string;
   checkoutUrl: string | null;
+  checkoutExpiresAt: string | null;
   lastProviderStatus: string | null;
+  paymentReviewRequired: boolean;
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -126,7 +132,10 @@ export function createPublicClient(baseUrl: string) {
     },
 
     submitFreeIntake(intakeId: string, input: SubmitFreeIntakeInput = {}) {
-      return http.post<SubmitFreeIntakeResult>(`/free/${encodeURIComponent(intakeId)}/submit`, input);
+      return http.post<SubmitFreeIntakeResult>(
+        `/free/${encodeURIComponent(intakeId)}/submit`,
+        input,
+      );
     },
 
     getFreeIntakeStatus(intakeId: string) {
