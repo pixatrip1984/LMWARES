@@ -29,20 +29,28 @@ export const payments = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 payments.post('/webhooks/mercado-pago', async (c) => {
   const webhookSecrets = mercadoPagoWebhookSecrets(c.env);
-  const topic = c.req.query('type') ?? c.req.query('topic') ?? '';
+  const webhookTopic = c.req.query('type') ?? '';
+  const ipnTopic = c.req.query('topic') ?? '';
+  const topic = webhookTopic || ipnTopic;
   if (topic !== 'payment') {
     return c.json({ received: true, ignored: true });
   }
 
   const signedDataId = c.req.query('data.id') ?? '';
-  const paymentId = signedDataId || c.req.query('id') || '';
+  const legacyPaymentId = c.req.query('id') ?? '';
+  const paymentId = signedDataId || legacyPaymentId;
+  const isLegacyIpn =
+    ipnTopic === 'payment' && Boolean(legacyPaymentId) && !signedDataId;
   const requestId = c.req.header('x-request-id') ?? '';
   const signature = c.req.header('x-signature') ?? '';
-  if (!/^\d{1,32}$/.test(paymentId) || !requestId || requestId.length > 200 || !signature) {
+  if (!/^\d{1,32}$/.test(paymentId)) {
+    throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
+  }
+  if (!isLegacyIpn && (!requestId || requestId.length > 200 || !signature)) {
     throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
   }
 
-  if (webhookSecrets.length > 0) {
+  if (!isLegacyIpn && webhookSecrets.length > 0) {
     const signatureChecks = await Promise.all(
       webhookSecrets.map((secret) =>
         verifyMercadoPagoWebhookSignature({
@@ -57,7 +65,7 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     if (!validSignature) {
       throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
     }
-  } else {
+  } else if (!isLegacyIpn) {
     console.warn(
       JSON.stringify({
         message: 'mercado_pago_test_webhook_signature_not_verified',
@@ -67,10 +75,24 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     );
   }
 
+  // Mercado Pago IPN is a legacy transport. Its x-signature cannot be
+  // validated with the Webhooks secret, so the notification only supplies an
+  // identifier: the payment is always fetched from Mercado Pago and checked
+  // against our proposal before any state is changed.
+  const ipnPayment = isLegacyIpn
+    ? await getMercadoPagoPayment({
+        accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+        paymentId,
+      })
+    : null;
+  const providerRequestId = isLegacyIpn
+    ? `ipn:payment:${paymentId}:${ipnPayment?.status ?? 'unknown'}`
+    : requestId;
+
   const repos = createRepositories(c.env.DB);
   const eventId = await repos.lmwaresPayments.claimWebhookEvent({
-    providerRequestId: webhookSecrets.length > 0 ? requestId : `test-payment:${paymentId}`,
-    topic,
+    providerRequestId,
+    topic: isLegacyIpn ? 'payment_ipn' : topic,
     resourceId: paymentId,
   });
   if (!eventId) {
@@ -78,10 +100,12 @@ payments.post('/webhooks/mercado-pago', async (c) => {
   }
 
   try {
-    const payment = await getMercadoPagoPayment({
-      accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
-      paymentId,
-    });
+    const payment =
+      ipnPayment ??
+      (await getMercadoPagoPayment({
+        accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+        paymentId,
+      }));
     const proposal = await repos.lmwaresPayments.getById(payment.externalReference);
     if (!proposal) {
       await repos.lmwaresPayments.completeWebhookEvent({
@@ -107,14 +131,17 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     await repos.audit.record({
       actorType: 'system',
       actorId: 'mercado_pago',
-      action: 'lmwares.package_proposal.webhook_reconciled',
+      action: isLegacyIpn
+        ? 'lmwares.package_proposal.ipn_reconciled'
+        : 'lmwares.package_proposal.webhook_reconciled',
       entityType: 'lmwares_package_proposal',
       entityId: proposal.id,
       metadata: {
         providerPaymentId: payment.id,
         providerStatus: payment.status,
         proposalStatus: updated.status,
-        providerRequestId: requestId,
+        providerRequestId,
+        transport: isLegacyIpn ? 'ipn' : 'webhook',
       },
       ip: c.req.header('CF-Connecting-IP') ?? null,
       userAgent: c.req.header('User-Agent') ?? null,

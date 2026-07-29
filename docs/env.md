@@ -27,7 +27,7 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `MERCADO_PAGO_ACCESS_TOKEN` | **secreto** | `.dev.vars` / `wrangler secret` | Credencial server-side del ambiente de Mercado Pago. |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC del modo productivo; es la única aceptada cuando `MERCADO_PAGO_TEST_MODE=0`. |
 | `MERCADO_PAGO_WEBHOOK_TEST_SECRET` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Firma HMAC del modo prueba; sólo se acepta mientras `MERCADO_PAGO_TEST_MODE=1`. |
-| `MERCADO_PAGO_TEST_MODE` | var temporal | `.dev.vars` / ambiente remoto de prueba | `1` habilita únicamente el checkout técnico y permite conciliar el webhook consultando al proveedor mientras se obtiene la firma sandbox. Debe ser `0` para cobros reales. |
+| `MERCADO_PAGO_TEST_MODE` | var temporal | `.dev.vars` / ambiente remoto de prueba | `1` habilita únicamente el checkout técnico de Mercado Pago. Debe ser `0` para cobros reales. |
 | `PUBLIC_WEB_URL`      | var             | wrangler.toml                 | Origen canónico del frontend.                        |
 | `PUBLIC_API_URL`      | var             | wrangler.toml                 | Origen canónico del Public API y callback OAuth.     |
 | `FREE_SITE_BASE_DOMAIN` | var           | wrangler.toml                 | Dominio wildcard de las páginas Free.                |
@@ -35,6 +35,13 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `EMAIL`               | binding email   | wrangler.toml                 | Cloudflare Email Service.                            |
 | `DB`                  | binding D1      | wrangler.toml                 | Base de datos.                                       |
 | `MEDIA`               | binding R2      | wrangler.toml                 | Bucket de archivos.                                  |
+
+Mercado Pago puede entregar pagos mediante dos transportes distintos. Los Webhooks
+modernos (`type=payment&data.id=...`) exigen validar su firma HMAC. Las notificaciones
+IPN heredadas (`topic=payment&id=...`) no pueden validarse con la clave secreta de
+Webhooks: el receptor usa únicamente el identificador para consultar la API oficial y
+comprueba la referencia externa, el importe y la moneda contra la propuesta interna
+antes de actualizarla.
 
 ## Admin API Worker
 
