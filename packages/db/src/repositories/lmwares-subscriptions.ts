@@ -115,10 +115,18 @@ export class LmwaresSubscriptionsRepository {
       const retried = await this.db
         .prepare(
           `UPDATE lmw_subscriptions
-           SET status = 'creating', updated_at = ?
+           SET status = 'creating', amount_cents = ?, currency = ?,
+               frequency = 1, frequency_type = 'months', pricing_version = ?,
+               updated_at = ?
            WHERE id = ? AND status = 'creation_failed' AND provider_preapproval_id IS NULL`,
         )
-        .bind(now, existing.id)
+        .bind(
+          input.amountCents,
+          input.currency,
+          input.pricingVersion,
+          now,
+          existing.id,
+        )
         .run();
       if ((retried.meta.changes ?? 0) === 1) {
         existing = (await this.getById(existing.id))!;

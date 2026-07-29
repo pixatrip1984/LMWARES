@@ -11,8 +11,8 @@ import {
 } from '../lib/mercado-pago';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
 
-const TEST_SUBSCRIPTION_AMOUNT_CENTS = 500;
-const TEST_SUBSCRIPTION_PRICING_VERSION = 'technical-monthly-mxn-5-v1';
+const TEST_SUBSCRIPTION_AMOUNT_CENTS = 1000;
+const TEST_SUBSCRIPTION_PRICING_VERSION = 'technical-monthly-mxn-10-v1';
 
 export const subscriptions = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -212,7 +212,7 @@ async function ownedSubscription(
 
 function assertTestSubscriptionConfiguration(env: Bindings): void {
   if (env.MERCADO_PAGO_TEST_MODE !== '1') {
-    throw new AppError('forbidden', 'La suscripción técnica de MXN $5 no está habilitada.');
+    throw new AppError('forbidden', 'La suscripción técnica de MXN $10 no está habilitada.');
   }
   if (!env.MERCADO_PAGO_ACCESS_TOKEN?.trim()) {
     throw new AppError(

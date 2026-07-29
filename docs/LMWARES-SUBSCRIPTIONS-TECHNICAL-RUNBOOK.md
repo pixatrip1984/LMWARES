@@ -9,7 +9,7 @@ creada en Mercado Pago con estado `pending`.
 ## Alcance de la prueba
 
 - Cobro único previo: Checkout Pro técnico de MXN $5.
-- Suscripción: MXN $5 cada mes.
+- Suscripción: MXN $10 cada mes, mínimo aceptado por Mercado Pago en esta prueba.
 - Moneda: MXN.
 - Ambiente: credenciales de prueba con `MERCADO_PAGO_TEST_MODE=1`.
 - Requisito: propuesta `paid` y `payment_review_required=0`.

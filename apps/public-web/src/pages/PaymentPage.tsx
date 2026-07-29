@@ -300,7 +300,7 @@ export function PaymentPage() {
           <section className="lmw-subscription-card">
             <div className="lmw-subscription-copy">
               <p className="lmw-payment-label">SIGUIENTE COMPUERTA · SUSCRIPCIÓN</p>
-              <h2>Valida MXN $5 al mes</h2>
+              <h2>Valida MXN $10 al mes</h2>
               <p>
                 Es una prueba técnica independiente del pago único. El precio y la fecha de inicio
                 comerciales se definirán en la propuesta real.
