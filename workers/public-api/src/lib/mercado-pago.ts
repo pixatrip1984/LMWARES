@@ -557,6 +557,12 @@ function providerError(action: string, status: number, payload: unknown): AppErr
       'Mercado Pago rechazó el monto porque no alcanza el mínimo permitido para la suscripción.',
     );
   }
+  if (status === 400 && /payer and collector must be real or test users/i.test(safeProviderMessage)) {
+    return new AppError(
+      'validation_error',
+      'Mercado Pago rechazó una mezcla entre identidades reales y de prueba.',
+    );
+  }
   return new AppError(
     'internal_error',
     `No fue posible ${action} en Mercado Pago. Revisa las credenciales de prueba.`,

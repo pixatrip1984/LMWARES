@@ -13,6 +13,7 @@ import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/p
 
 const TEST_SUBSCRIPTION_AMOUNT_CENTS = 1000;
 const TEST_SUBSCRIPTION_PRICING_VERSION = 'technical-monthly-mxn-10-v1';
+const TEST_SUBSCRIPTION_PAYER_EMAIL = 'test@testuser.com';
 
 export const subscriptions = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -75,7 +76,10 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
         accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
         subscriptionId: subscription.externalReference,
         plan: proposal.plan,
-        payerEmail: session.user.email,
+        payerEmail:
+          c.env.MERCADO_PAGO_TEST_MODE === '1'
+            ? TEST_SUBSCRIPTION_PAYER_EMAIL
+            : session.user.email,
         amountCents: subscription.amountCents,
         currency: subscription.currency,
         publicWebUrl: c.env.PUBLIC_WEB_URL,
