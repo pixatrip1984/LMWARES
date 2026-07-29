@@ -7,7 +7,8 @@ export function SiteLayout() {
     pathname === '/' ||
     pathname === '/contratar' ||
     pathname === '/acceso' ||
-    pathname === '/configurar';
+    pathname === '/configurar' ||
+    pathname.startsWith('/pago/');
 
   return (
     <div className="flex min-h-screen flex-col">

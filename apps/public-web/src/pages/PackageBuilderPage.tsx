@@ -433,8 +433,22 @@ export function PackageBuilderPage() {
 
   const submitDraft = async () => {
     if (draft.plan !== 'free') {
-      setSubmitted(true);
-      flashNotice('Evaluación simulada guardada. Aún no se envió a un servidor.');
+      setFileError('');
+      setSubmitting(true);
+      try {
+        const result = await api.createTestPackageProposal({
+          plan: draft.plan,
+          modules: draft.modules,
+          marketing: draft.marketing,
+        });
+        setSubmitted(true);
+        navigate(`/pago/${result.proposal.id}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo crear la propuesta.';
+        setFileError(message);
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
 
@@ -1064,8 +1078,8 @@ export function PackageBuilderPage() {
               <button onClick={() => setView('package')} type="button">← Volver a configurar</button>
               <button className="lmw-builder-primary" disabled={submitting} onClick={submitDraft} type="button">
                 {submitted
-                  ? draft.plan === 'free' ? 'Solicitud enviada' : 'Evaluación guardada'
-                  : submitting ? 'Enviando...' : draft.plan === 'free' ? 'Enviar solicitud Free' : 'Guardar evaluación'} <span>{submitted ? '✓' : '→'}</span>
+                  ? draft.plan === 'free' ? 'Solicitud enviada' : 'Propuesta creada'
+                  : submitting ? 'Enviando...' : draft.plan === 'free' ? 'Enviar solicitud Free' : 'Continuar al pago de prueba'} <span>{submitted ? '✓' : '→'}</span>
               </button>
             </div>
           </section>
@@ -1077,7 +1091,7 @@ export function PackageBuilderPage() {
               <li><span>02</span><div><b>Fijamos el alcance</b><p>Contenido, límites, dominio, tiempos y acompañamiento.</p></div></li>
               <li><span>03</span><div><b>Preparamos la propuesta</b><p>Separando implementación, licencia, alojamiento y mantenimiento.</p></div></li>
             </ol>
-            <div><i />{draft.plan === 'free' ? 'Free sí envía una solicitud real a cola; la publicación automática se conectará al runner.' : 'Starter y Pro aún no envían datos ni crean recursos externos.'}</div>
+            <div><i />{draft.plan === 'free' ? 'Free envía una solicitud real a la cola automatizada.' : 'La prueba congela la propuesta en servidor y usa el monto mínimo compatible con tarjetas.'}</div>
           </aside>
         </main>
       )}

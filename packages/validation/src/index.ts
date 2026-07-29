@@ -3,6 +3,7 @@ export * from './publication';
 export * from './request';
 export * from './lmwares-project';
 export * from './free-intake';
+export * from './package-payment';
 export * from './site-blog';
 export * from './site-gallery';
 export * from './site-docs';

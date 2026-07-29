@@ -4,6 +4,7 @@ import { AuthPage } from './pages/AuthPage';
 import { ContactPage } from './pages/ContactPage';
 import { ContractPage } from './pages/ContractPage';
 import { PackageBuilderPage } from './pages/PackageBuilderPage';
+import { PaymentPage } from './pages/PaymentPage';
 
 export function App() {
   return (
@@ -13,6 +14,7 @@ export function App() {
         <Route path="/contratar" element={<ContractPage />} />
         <Route path="/acceso" element={<AuthPage />} />
         <Route path="/configurar" element={<PackageBuilderPage />} />
+        <Route path="/pago/:proposalId" element={<PaymentPage />} />
         <Route path="/contacto" element={<ContactPage />} />
         <Route path="*" element={<ContractPage />} />
       </Route>

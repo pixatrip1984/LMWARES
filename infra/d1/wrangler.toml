@@ -3,11 +3,10 @@
 name = "starter-d1"
 compatibility_date = "2026-06-28"
 
-# Para desarrollo local usamos un UUID neutral. En remoto reemplaza database_id
-# con el ID real tras crear la base:
-#   wrangler d1 create starter-db
+# La simulación local sigue usando almacenamiento local; para operaciones
+# `--remote` este UUID identifica la base real de LMWares.
 [[d1_databases]]
 binding = "DB"
 database_name = "starter-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "682732b7-8517-416d-ac7c-6789e491fe43"
 migrations_dir = "migrations"

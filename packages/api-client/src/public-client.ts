@@ -1,5 +1,6 @@
 import type { Paginated, PublicAuthSession, Publication } from '@starter/domain';
 import type { CreateFreeIntakeInput, CreateRequestInput, SubmitFreeIntakeInput } from '@starter/validation';
+import type { CreateTestPackageProposalInput } from '@starter/validation';
 import { createHttpClient } from './http';
 
 /** Publicación de detalle con sus imágenes resueltas (URLs públicas). */
@@ -49,6 +50,28 @@ export interface FreeIntakeStatusResult {
   job: { status: string; errorCode: string | null; errorMessage: string | null } | null;
   publicUrl: string | null;
   assetCount: number;
+}
+
+export interface PublicPackageProposal {
+  id: string;
+  plan: 'starter' | 'pro';
+  modules: string[];
+  marketing: boolean;
+  status:
+    | 'approved_test'
+    | 'checkout_creating'
+    | 'checkout_failed'
+    | 'payment_pending'
+    | 'payment_failed'
+    | 'paid';
+  amountCents: number;
+  currency: 'MXN';
+  pricingVersion: string;
+  checkoutUrl: string | null;
+  lastProviderStatus: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Cliente del Public API Worker. Solo expone datos/acciones públicas. */
@@ -108,6 +131,28 @@ export function createPublicClient(baseUrl: string) {
 
     getFreeIntakeStatus(intakeId: string) {
       return http.get<FreeIntakeStatusResult>(`/free/${encodeURIComponent(intakeId)}/status`);
+    },
+
+    createTestPackageProposal(input: CreateTestPackageProposalInput) {
+      return http.post<{ proposal: PublicPackageProposal }>('/payments/proposals', input);
+    },
+
+    getPackageProposal(proposalId: string) {
+      return http.get<{ proposal: PublicPackageProposal }>(
+        `/payments/proposals/${encodeURIComponent(proposalId)}`,
+      );
+    },
+
+    createPackageCheckout(proposalId: string) {
+      return http.post<{ proposal: PublicPackageProposal }>(
+        `/payments/proposals/${encodeURIComponent(proposalId)}/checkout`,
+      );
+    },
+
+    reconcilePackagePayment(proposalId: string) {
+      return http.post<{ found: boolean; proposal: PublicPackageProposal }>(
+        `/payments/proposals/${encodeURIComponent(proposalId)}/reconcile`,
+      );
     },
   };
 }

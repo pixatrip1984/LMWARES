@@ -15,6 +15,7 @@ import { siteDocsPublic } from './routes/site-docs';
 import { siteForms } from './routes/site-forms';
 import { siteEvents } from './routes/site-events';
 import { authRoutes } from './routes/auth';
+import { payments } from './routes/payments';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -47,6 +48,7 @@ app.notFound((c) =>
 app.get('/health', (c) => c.json({ ok: true, service: 'public-api' }));
 
 app.route('/auth', authRoutes);
+app.route('/payments', payments);
 app.route('/publications', publications);
 app.route('/requests', requests);
 app.route('/free', freeIntakes);

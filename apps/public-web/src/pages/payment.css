@@ -1,0 +1,238 @@
+.lmw-payment-page {
+  align-items: center;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(34, 120, 255, 0.2), transparent 34rem),
+    #020611;
+  color: #f5f8ff;
+  display: flex;
+  min-height: 100vh;
+  padding: clamp(24px, 5vw, 72px);
+}
+.lmw-payment-shell {
+  margin: 0 auto;
+  max-width: 980px;
+  width: 100%;
+}
+
+.lmw-payment-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 28px;
+  justify-content: space-between;
+  margin-bottom: 30px;
+}
+
+.lmw-payment-header h1 {
+  font-size: clamp(2.2rem, 5vw, 4.4rem);
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  margin: 8px 0 16px;
+  max-width: 720px;
+}
+
+.lmw-payment-header > div > p:last-child {
+  color: #9cadc8;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 650px;
+}
+
+.lmw-payment-eyebrow,
+.lmw-payment-label {
+  color: #71b6ff;
+  font: 700 0.76rem/1.2 "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+
+.lmw-payment-status {
+  background: rgba(34, 120, 255, 0.14);
+  border: 1px solid rgba(113, 182, 255, 0.36);
+  border-radius: 999px;
+  color: #9ed0ff;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 9px 13px;
+}
+
+.lmw-payment-status.is-paid {
+  background: rgba(58, 220, 143, 0.12);
+  border-color: rgba(58, 220, 143, 0.4);
+  color: #70efb1;
+}
+
+.lmw-payment-status.is-payment_failed,
+.lmw-payment-status.is-checkout_failed {
+  background: rgba(255, 52, 35, 0.12);
+  border-color: rgba(255, 52, 35, 0.35);
+  color: #ff8d83;
+}
+
+.lmw-payment-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+}
+
+.lmw-payment-card {
+  background: rgba(5, 16, 38, 0.82);
+  border: 1px solid rgba(117, 168, 255, 0.25);
+  border-radius: 20px;
+  padding: clamp(22px, 4vw, 38px);
+}
+
+.lmw-payment-card h2 {
+  font-size: 2rem;
+  margin: 10px 0 18px;
+}
+
+.lmw-payment-card ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lmw-payment-card li {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  color: #dbe7f7;
+  font-size: 0.84rem;
+  padding: 7px 10px;
+}
+
+.lmw-payment-astra {
+  color: #9cadc8;
+  font-size: 0.84rem;
+  margin: 22px 0 0;
+}
+
+.lmw-payment-card.is-total {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.lmw-payment-card.is-total strong {
+  color: #efff42;
+  font-size: clamp(3rem, 8vw, 5.4rem);
+  letter-spacing: -0.07em;
+  line-height: 1;
+  margin: 16px 0 8px;
+}
+
+.lmw-payment-card.is-total span {
+  color: #dbe7f7;
+}
+
+.lmw-payment-card.is-total small {
+  color: #6f82a0;
+  margin-top: 22px;
+  overflow-wrap: anywhere;
+}
+
+.lmw-payment-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.lmw-payment-primary,
+.lmw-payment-secondary {
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 850;
+  justify-content: center;
+  padding: 14px 18px;
+  text-decoration: none;
+}
+
+.lmw-payment-primary {
+  background: #2278ff;
+  border: 1px solid #4b93ff;
+  color: #fff;
+}
+
+.lmw-payment-secondary {
+  background: transparent;
+  border: 1px solid rgba(117, 168, 255, 0.38);
+  color: #b9d8ff;
+}
+
+.lmw-payment-primary:disabled,
+.lmw-payment-secondary:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.lmw-payment-back {
+  color: #8293ae;
+  font-size: 0.84rem;
+  margin-left: auto;
+  text-decoration: none;
+}
+
+.lmw-payment-success {
+  color: #70efb1;
+  font-weight: 800;
+}
+
+.lmw-payment-message {
+  background: rgba(34, 120, 255, 0.1);
+  border-left: 3px solid #2278ff;
+  color: #b9d8ff;
+  margin: 18px 0 0;
+  padding: 12px 14px;
+}
+
+.lmw-payment-message.is-error {
+  background: rgba(255, 52, 35, 0.08);
+  border-color: #ff3423;
+  color: #ffaaa3;
+}
+
+.lmw-payment-note {
+  border-top: 1px solid rgba(117, 168, 255, 0.18);
+  color: #6f82a0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  margin-top: 28px;
+  padding-top: 18px;
+}
+
+.lmw-payment-loading {
+  color: #9cadc8;
+  margin: auto;
+}
+
+@media (max-width: 720px) {
+  .lmw-payment-header {
+    display: block;
+  }
+
+  .lmw-payment-status {
+    display: inline-block;
+    margin-top: 20px;
+  }
+
+  .lmw-payment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lmw-payment-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lmw-payment-back {
+    margin: 10px 0 0;
+    text-align: center;
+  }
+}

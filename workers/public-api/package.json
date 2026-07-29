@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "wrangler dev --port 8887 --persist-to ../../.wrangler/state",
     "deploy": "wrangler deploy",
+    "deploy:production": "wrangler deploy --env production",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "check:production": "wrangler deploy --env production --dry-run",
     "cf-typegen": "wrangler types",
     "lint": "echo \"(public-api) no lint configured\""
   },

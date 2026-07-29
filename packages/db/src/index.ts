@@ -15,6 +15,7 @@ import {
 import { LmwaresFreeIntakesRepository } from './repositories/lmwares-free-intakes';
 import { LmwaresAuthRepository } from './repositories/lmwares-auth';
 import { LmwaresNotificationsRepository } from './repositories/lmwares-notifications';
+import { LmwaresPaymentsRepository } from './repositories/lmwares-payments';
 import { SiteBlogRepository } from './repositories/site-blog';
 import { SiteGalleryRepository } from './repositories/site-gallery';
 import { SiteDocsRepository } from './repositories/site-docs';
@@ -32,6 +33,7 @@ export * from './repositories/lmwares-evidence';
 export * from './repositories/lmwares-free-intakes';
 export * from './repositories/lmwares-auth';
 export * from './repositories/lmwares-notifications';
+export * from './repositories/lmwares-payments';
 export * from './repositories/site-blog';
 export * from './repositories/site-gallery';
 export * from './repositories/site-docs';
@@ -53,6 +55,7 @@ export interface Repositories {
   lmwaresFreeIntakes: LmwaresFreeIntakesRepository;
   lmwaresAuth: LmwaresAuthRepository;
   lmwaresNotifications: LmwaresNotificationsRepository;
+  lmwaresPayments: LmwaresPaymentsRepository;
   siteBlog: SiteBlogRepository;
   siteGalleries: SiteGalleryRepository;
   siteDocs: SiteDocsRepository;
@@ -79,6 +82,7 @@ export function createRepositories(db: D1Database): Repositories {
     lmwaresFreeIntakes: new LmwaresFreeIntakesRepository(db),
     lmwaresAuth: new LmwaresAuthRepository(db),
     lmwaresNotifications: new LmwaresNotificationsRepository(db),
+    lmwaresPayments: new LmwaresPaymentsRepository(db),
     siteBlog: new SiteBlogRepository(db),
     siteGalleries: new SiteGalleryRepository(db),
     siteDocs: new SiteDocsRepository(db),

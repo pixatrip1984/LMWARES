@@ -20,5 +20,6 @@ export const ENTITY_TYPES = [
   'lmwares_free_intake',
   'lmwares_free_job',
   'lmwares_free_asset',
+  'lmwares_package_proposal',
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];

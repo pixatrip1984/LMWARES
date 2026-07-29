@@ -7,3 +7,9 @@ FREE_RUNNER_TOKEN="reemplaza-con-un-token-local-largo"
 # Redirect local exacto: http://127.0.0.1:8887/auth/google/callback
 GOOGLE_OAUTH_CLIENT_ID=""
 GOOGLE_OAUTH_CLIENT_SECRET=""
+# Credencial de PRUEBA de Mercado Pago. Nunca uses aquí una credencial productiva.
+MERCADO_PAGO_ACCESS_TOKEN=""
+# Tus integraciones > lmwares > Webhooks > Firma secreta.
+MERCADO_PAGO_WEBHOOK_SECRET=""
+# Candado explícito del checkout técnico con credenciales de prueba.
+MERCADO_PAGO_TEST_MODE="1"
