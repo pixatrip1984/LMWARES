@@ -3,6 +3,7 @@ import {
   AppError,
   checkoutBlocked,
   type PackageProposal,
+  type PackageSubscription,
   type PaidPackageModuleId,
 } from '@starter/domain';
 import { createRepositories } from '@starter/db';
@@ -11,9 +12,13 @@ import type { Bindings, Variables } from '../env';
 import {
   createMercadoPagoPreference,
   expireMercadoPagoPreference,
+  getMercadoPagoAuthorizedPayment,
   getMercadoPagoPayment,
+  getMercadoPagoPreapproval,
   hasMercadoPagoWebhookSignatureFormat,
   searchMercadoPagoPayments,
+  type MercadoPagoAuthorizedPayment,
+  type MercadoPagoPreapproval,
   verifyMercadoPagoWebhookSignature,
 } from '../lib/mercado-pago';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
@@ -28,6 +33,12 @@ payments.post('/webhooks/mercado-pago', async (c) => {
   const webhookTopic = c.req.query('type') ?? '';
   const ipnTopic = c.req.query('topic') ?? '';
   const topic = webhookTopic || ipnTopic;
+  if (topic === 'subscription_preapproval') {
+    return handleSubscriptionPreapprovalWebhook(c, webhookSecrets);
+  }
+  if (topic === 'subscription_authorized_payment') {
+    return handleSubscriptionAuthorizedPaymentWebhook(c, webhookSecrets);
+  }
   if (topic !== 'payment') {
     return c.json({ received: true, ignored: true });
   }
@@ -122,6 +133,35 @@ payments.post('/webhooks/mercado-pago', async (c) => {
       }));
     const proposal = await repos.lmwaresPayments.getById(payment.externalReference);
     if (!proposal) {
+      const subscription = await repos.lmwaresSubscriptions.getByExternalReference(
+        payment.externalReference,
+      );
+      if (subscription) {
+        assertPaymentMatchesSubscription(payment, subscription);
+        await repos.lmwaresPayments.completeWebhookEvent({
+          id: eventId,
+          status: 'processed',
+          proposalId: null,
+          subscriptionId: subscription.id,
+        });
+        await repos.audit.record({
+          actorType: 'system',
+          actorId: 'mercado_pago',
+          action: 'lmwares.subscription.payment_observed',
+          entityType: 'lmwares_subscription',
+          entityId: subscription.id,
+          metadata: {
+            providerPaymentId: payment.id,
+            providerStatus: payment.status,
+            providerRequestId,
+            transport,
+            signatureValidated,
+          },
+          ip: c.req.header('CF-Connecting-IP') ?? null,
+          userAgent: c.req.header('User-Agent') ?? null,
+        });
+        return c.json({ received: true, subscriptionPayment: true });
+      }
       await repos.lmwaresPayments.completeWebhookEvent({
         id: eventId,
         status: 'ignored',
@@ -181,6 +221,206 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     throw error;
   }
 });
+
+async function handleSubscriptionPreapprovalWebhook(
+  c: Parameters<typeof requirePublicSession>[0],
+  webhookSecrets: string[],
+) {
+  const resourceId = c.req.query('data.id') ?? '';
+  if (!/^[a-zA-Z0-9_-]{1,160}$/.test(resourceId)) {
+    throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
+  }
+  const signature = await validateSignedWebhook(c, webhookSecrets, resourceId);
+  const provider = await getMercadoPagoPreapproval({
+    accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+    preapprovalId: resourceId,
+  });
+  const repos = createRepositories(c.env.DB);
+  const providerRequestId = signature.validated
+    ? signature.requestId
+    : `test-webhook:subscription_preapproval:${resourceId}:${provider.status}`;
+  const eventId = await repos.lmwaresPayments.claimWebhookEvent({
+    providerRequestId,
+    topic: signature.validated
+      ? 'subscription_preapproval'
+      : 'subscription_preapproval_test_provider_verified',
+    resourceId,
+  });
+  if (!eventId) return c.json({ received: true, duplicate: true });
+
+  try {
+    const subscription =
+      (await repos.lmwaresSubscriptions.getByProviderPreapprovalId(provider.id)) ??
+      (await repos.lmwaresSubscriptions.getByExternalReference(provider.externalReference));
+    if (!subscription) {
+      await repos.lmwaresPayments.completeWebhookEvent({
+        id: eventId,
+        status: 'ignored',
+        proposalId: null,
+      });
+      return c.json({ received: true, ignored: true });
+    }
+    assertPreapprovalMatchesSubscription(provider, subscription);
+    const reconciled = await repos.lmwaresSubscriptions.savePreapproval({
+      id: subscription.id,
+      providerPreapprovalId: provider.id,
+      authorizationUrl: provider.authorizationUrl,
+      providerStatus: provider.status,
+      nextPaymentDate: provider.nextPaymentDate,
+    });
+    await repos.lmwaresPayments.completeWebhookEvent({
+      id: eventId,
+      status: 'processed',
+      proposalId: null,
+      subscriptionId: subscription.id,
+    });
+    await repos.audit.record({
+      actorType: 'system',
+      actorId: 'mercado_pago',
+      action: 'lmwares.subscription.preapproval_reconciled',
+      entityType: 'lmwares_subscription',
+      entityId: subscription.id,
+      metadata: {
+        providerPreapprovalId: provider.id,
+        providerStatus: provider.status,
+        subscriptionStatus: reconciled.status,
+        nextPaymentDate: provider.nextPaymentDate,
+        providerRequestId,
+        signatureValidated: signature.validated,
+      },
+      ip: c.req.header('CF-Connecting-IP') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+    });
+    return c.json({ received: true });
+  } catch (error) {
+    await repos.lmwaresPayments.failWebhookEvent(
+      eventId,
+      error instanceof AppError ? error.code : 'internal_error',
+    );
+    throw error;
+  }
+}
+
+async function handleSubscriptionAuthorizedPaymentWebhook(
+  c: Parameters<typeof requirePublicSession>[0],
+  webhookSecrets: string[],
+) {
+  const resourceId = c.req.query('data.id') ?? '';
+  if (!/^\d{1,32}$/.test(resourceId)) {
+    throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
+  }
+  const signature = await validateSignedWebhook(c, webhookSecrets, resourceId);
+  const provider = await getMercadoPagoAuthorizedPayment({
+    accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+    authorizedPaymentId: resourceId,
+  });
+  const repos = createRepositories(c.env.DB);
+  const providerRequestId = signature.validated
+    ? signature.requestId
+    : `test-webhook:subscription_authorized_payment:${resourceId}:${provider.status}:${provider.paymentStatus ?? 'none'}`;
+  const eventId = await repos.lmwaresPayments.claimWebhookEvent({
+    providerRequestId,
+    topic: signature.validated
+      ? 'subscription_authorized_payment'
+      : 'subscription_authorized_payment_test_provider_verified',
+    resourceId,
+  });
+  if (!eventId) return c.json({ received: true, duplicate: true });
+
+  try {
+    const subscription =
+      (await repos.lmwaresSubscriptions.getByProviderPreapprovalId(provider.preapprovalId)) ??
+      (await repos.lmwaresSubscriptions.getByExternalReference(provider.externalReference));
+    if (!subscription) {
+      await repos.lmwaresPayments.completeWebhookEvent({
+        id: eventId,
+        status: 'ignored',
+        proposalId: null,
+      });
+      return c.json({ received: true, ignored: true });
+    }
+    assertAuthorizedPaymentMatchesSubscription(provider, subscription);
+    const reconciled = await repos.lmwaresSubscriptions.reconcileAuthorizedPayment({
+      subscriptionId: subscription.id,
+      providerAuthorizedPaymentId: provider.id,
+      providerPaymentId: provider.paymentId,
+      providerStatus: provider.status,
+      paymentStatus: provider.paymentStatus,
+      summarized: provider.summarized,
+      amountCents: Math.round(provider.amount * 100),
+      currency: provider.currency,
+      debitDate: provider.debitDate,
+      retryAttempt: provider.retryAttempt,
+    });
+    await repos.lmwaresPayments.completeWebhookEvent({
+      id: eventId,
+      status: 'processed',
+      proposalId: null,
+      subscriptionId: subscription.id,
+    });
+    await repos.audit.record({
+      actorType: 'system',
+      actorId: 'mercado_pago',
+      action: 'lmwares.subscription.authorized_payment_reconciled',
+      entityType: 'lmwares_subscription',
+      entityId: subscription.id,
+      metadata: {
+        providerAuthorizedPaymentId: provider.id,
+        providerPaymentId: provider.paymentId,
+        providerStatus: provider.status,
+        paymentStatus: provider.paymentStatus,
+        subscriptionStatus: reconciled.status,
+        providerRequestId,
+        signatureValidated: signature.validated,
+      },
+      ip: c.req.header('CF-Connecting-IP') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+    });
+    return c.json({ received: true });
+  } catch (error) {
+    await repos.lmwaresPayments.failWebhookEvent(
+      eventId,
+      error instanceof AppError ? error.code : 'internal_error',
+    );
+    throw error;
+  }
+}
+
+async function validateSignedWebhook(
+  c: Parameters<typeof requirePublicSession>[0],
+  webhookSecrets: string[],
+  dataId: string,
+): Promise<{ requestId: string; validated: boolean }> {
+  const requestId = c.req.header('x-request-id') ?? '';
+  const signature = c.req.header('x-signature') ?? '';
+  if (!requestId || requestId.length > 200 || !hasMercadoPagoWebhookSignatureFormat(signature)) {
+    throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
+  }
+  const checks = await Promise.all(
+    webhookSecrets.map((secret) =>
+      verifyMercadoPagoWebhookSignature({
+        xSignature: signature,
+        xRequestId: requestId,
+        dataId,
+        secret,
+      }),
+    ),
+  );
+  const validated = checks.some(Boolean);
+  if (!validated && c.env.MERCADO_PAGO_TEST_MODE !== '1') {
+    throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
+  }
+  if (!validated) {
+    console.warn(
+      JSON.stringify({
+        message: 'mercado_pago_test_webhook_provider_verification_required',
+        dataId,
+        requestId,
+      }),
+    );
+  }
+  return { requestId, validated };
+}
 
 payments.post('/proposals', async (c) => {
   assertTrustedPublicOrigin(c);
@@ -416,6 +656,61 @@ function assertPaymentMatchesProposal(
     throw new AppError(
       'internal_error',
       'El pago encontrado no coincide con la propuesta congelada.',
+    );
+  }
+}
+
+function assertPaymentMatchesSubscription(
+  payment: {
+    externalReference: string;
+    currency: string;
+    amount: number;
+  },
+  subscription: PackageSubscription,
+): void {
+  if (
+    payment.externalReference !== subscription.externalReference ||
+    payment.currency !== subscription.currency ||
+    Math.round(payment.amount * 100) !== subscription.amountCents
+  ) {
+    throw new AppError(
+      'internal_error',
+      'El pago recurrente no coincide con la suscripción congelada.',
+    );
+  }
+}
+
+function assertPreapprovalMatchesSubscription(
+  provider: MercadoPagoPreapproval,
+  subscription: PackageSubscription,
+): void {
+  if (
+    provider.externalReference !== subscription.externalReference ||
+    provider.currency !== subscription.currency ||
+    Math.round(provider.amount * 100) !== subscription.amountCents ||
+    provider.frequency !== subscription.frequency ||
+    provider.frequencyType !== subscription.frequencyType
+  ) {
+    throw new AppError(
+      'internal_error',
+      'La suscripción notificada no coincide con la configuración congelada.',
+    );
+  }
+}
+
+function assertAuthorizedPaymentMatchesSubscription(
+  provider: MercadoPagoAuthorizedPayment,
+  subscription: PackageSubscription,
+): void {
+  if (
+    provider.preapprovalId !== subscription.providerPreapprovalId ||
+    provider.externalReference !== subscription.externalReference ||
+    provider.currency !== subscription.currency ||
+    Math.round(provider.amount * 100) !== subscription.amountCents
+  ) {
+    throw new AppError(
+      'internal_error',
+      'El cargo programado no coincide con la suscripción congelada.',
     );
   }
 }

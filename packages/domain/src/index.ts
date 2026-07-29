@@ -16,6 +16,8 @@ export * from './models/free-intake';
 export * from './models/public-user';
 export * from './models/package-payment';
 export * from './models/payment-policy';
+export * from './models/package-subscription';
+export * from './models/subscription-policy';
 export * from './models/site-blog';
 export * from './models/site-gallery';
 export * from './models/site-docs';

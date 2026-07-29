@@ -19,6 +19,32 @@ export interface MercadoPagoPayment {
   dateCreated: string | null;
 }
 
+export interface MercadoPagoPreapproval {
+  id: string;
+  externalReference: string;
+  status: string;
+  authorizationUrl: string;
+  amount: number;
+  currency: string;
+  frequency: number;
+  frequencyType: string;
+  nextPaymentDate: string | null;
+}
+
+export interface MercadoPagoAuthorizedPayment {
+  id: string;
+  preapprovalId: string;
+  externalReference: string;
+  status: string;
+  summarized: string | null;
+  amount: number;
+  currency: string;
+  debitDate: string | null;
+  retryAttempt: number;
+  paymentId: string | null;
+  paymentStatus: string | null;
+}
+
 export async function createMercadoPagoPreference(input: {
   accessToken: string;
   proposal: PackageProposal;
@@ -91,6 +117,164 @@ export async function createMercadoPagoPreference(input: {
     : stringField(payload, 'init_point');
   assertMercadoPagoCheckoutUrl(checkoutUrl);
   return { id, checkoutUrl, expiresAt };
+}
+
+export async function createMercadoPagoPreapproval(input: {
+  accessToken: string;
+  subscriptionId: string;
+  plan: 'starter' | 'pro';
+  payerEmail: string;
+  amountCents: number;
+  currency: 'MXN';
+  publicWebUrl: string;
+  proposalId: string;
+}): Promise<MercadoPagoPreapproval> {
+  const backUrl = publicHttpsUrl(
+    input.publicWebUrl,
+    `/pago/${encodeURIComponent(input.proposalId)}`,
+  );
+  if (!backUrl) {
+    throw new AppError(
+      'internal_error',
+      'La URL pública de LMWares no permite autorizar suscripciones.',
+    );
+  }
+
+  const response = await fetch(`${MERCADO_PAGO_API}/preapproval`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${input.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      reason: `Prueba técnica LMWares · ${capitalize(input.plan)} mensual`,
+      external_reference: input.subscriptionId,
+      payer_email: input.payerEmail,
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: 'months',
+        transaction_amount: input.amountCents / 100,
+        currency_id: input.currency,
+      },
+      back_url: backUrl,
+      status: 'pending',
+    }),
+  });
+  const payload = await readProviderJson(response);
+  if (!response.ok) throw providerError('crear la suscripción', response.status, payload);
+  const preapproval = parsePreapproval(payload);
+  if (!preapproval) {
+    throw new AppError('internal_error', 'Mercado Pago devolvió una suscripción inválida.');
+  }
+  assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
+  return preapproval;
+}
+
+export async function getMercadoPagoPreapproval(input: {
+  accessToken: string;
+  preapprovalId: string;
+}): Promise<MercadoPagoPreapproval> {
+  const response = await fetch(
+    `${MERCADO_PAGO_API}/preapproval/${encodeURIComponent(input.preapprovalId)}`,
+    {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${input.accessToken}`,
+      },
+    },
+  );
+  const payload = await readProviderJson(response);
+  if (!response.ok) throw providerError('consultar la suscripción', response.status, payload);
+  const preapproval = parsePreapproval(payload);
+  if (!preapproval) {
+    throw new AppError('internal_error', 'Mercado Pago devolvió una suscripción inválida.');
+  }
+  assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
+  return preapproval;
+}
+
+export async function findMercadoPagoPreapproval(input: {
+  accessToken: string;
+  externalReference: string;
+}): Promise<MercadoPagoPreapproval | null> {
+  const query = new URLSearchParams({ q: input.externalReference, limit: '20' });
+  const response = await fetch(`${MERCADO_PAGO_API}/preapproval/search?${query}`, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${input.accessToken}`,
+    },
+  });
+  const payload = await readProviderJson(response);
+  if (!response.ok) throw providerError('buscar la suscripción', response.status, payload);
+  if (!isRecord(payload) || !Array.isArray(payload.results)) {
+    throw new AppError(
+      'internal_error',
+      'Mercado Pago devolvió una búsqueda de suscripciones inválida.',
+    );
+  }
+  const matches = payload.results
+    .map(parsePreapproval)
+    .filter(
+      (item): item is MercadoPagoPreapproval =>
+        item !== null && item.externalReference === input.externalReference,
+    );
+  if (matches.length > 1) {
+    throw new AppError(
+      'conflict',
+      'Mercado Pago devolvió más de una suscripción para la misma referencia.',
+    );
+  }
+  if (matches[0]) assertMercadoPagoCheckoutUrl(matches[0].authorizationUrl);
+  return matches[0] ?? null;
+}
+
+export async function getMercadoPagoAuthorizedPayment(input: {
+  accessToken: string;
+  authorizedPaymentId: string;
+}): Promise<MercadoPagoAuthorizedPayment> {
+  const response = await fetch(
+    `${MERCADO_PAGO_API}/authorized_payments/${encodeURIComponent(input.authorizedPaymentId)}`,
+    {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${input.accessToken}`,
+      },
+    },
+  );
+  const payload = await readProviderJson(response);
+  if (!response.ok) throw providerError('consultar el cargo programado', response.status, payload);
+  const authorizedPayment = parseAuthorizedPayment(payload);
+  if (!authorizedPayment) {
+    throw new AppError('internal_error', 'Mercado Pago devolvió un cargo programado inválido.');
+  }
+  return authorizedPayment;
+}
+
+export async function cancelMercadoPagoPreapproval(input: {
+  accessToken: string;
+  preapprovalId: string;
+}): Promise<MercadoPagoPreapproval> {
+  const response = await fetch(
+    `${MERCADO_PAGO_API}/preapproval/${encodeURIComponent(input.preapprovalId)}`,
+    {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${input.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'canceled' }),
+    },
+  );
+  const payload = await readProviderJson(response);
+  if (!response.ok) throw providerError('cancelar la suscripción', response.status, payload);
+  const preapproval = parsePreapproval(payload);
+  if (!preapproval) {
+    throw new AppError('internal_error', 'Mercado Pago devolvió una suscripción inválida.');
+  }
+  assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
+  return preapproval;
 }
 
 export async function expireMercadoPagoPreference(input: {
@@ -249,6 +433,75 @@ function parsePayment(value: unknown): MercadoPagoPayment | null {
   };
 }
 
+function parsePreapproval(value: unknown): MercadoPagoPreapproval | null {
+  if (!isRecord(value) || !isRecord(value.auto_recurring)) return null;
+  const externalReference = stringOrNumber(value.external_reference);
+  const amount = numberField(value.auto_recurring.transaction_amount);
+  const frequency = numberField(value.auto_recurring.frequency);
+  const id = stringOrNumber(value.id);
+  const status = typeof value.status === 'string' ? value.status : null;
+  const authorizationUrl =
+    typeof value.init_point === 'string' ? value.init_point : null;
+  const currency =
+    typeof value.auto_recurring.currency_id === 'string'
+      ? value.auto_recurring.currency_id
+      : null;
+  const frequencyType =
+    typeof value.auto_recurring.frequency_type === 'string'
+      ? value.auto_recurring.frequency_type
+      : null;
+  if (
+    !id ||
+    !externalReference ||
+    !status ||
+    !authorizationUrl ||
+    amount === null ||
+    !currency ||
+    frequency === null ||
+    !frequencyType
+  ) {
+    return null;
+  }
+  return {
+    id,
+    externalReference,
+    status,
+    authorizationUrl,
+    amount,
+    currency,
+    frequency,
+    frequencyType,
+    nextPaymentDate: typeof value.next_payment_date === 'string' ? value.next_payment_date : null,
+  };
+}
+
+function parseAuthorizedPayment(value: unknown): MercadoPagoAuthorizedPayment | null {
+  if (!isRecord(value)) return null;
+  const id = stringOrNumber(value.id);
+  const preapprovalId = stringOrNumber(value.preapproval_id);
+  const externalReference = stringOrNumber(value.external_reference);
+  const status = typeof value.status === 'string' ? value.status : null;
+  const amount = numberField(value.transaction_amount);
+  const currency = typeof value.currency_id === 'string' ? value.currency_id : null;
+  if (!id || !preapprovalId || !externalReference || !status || amount === null || !currency) {
+    return null;
+  }
+  const payment = isRecord(value.payment) ? value.payment : null;
+  return {
+    id,
+    preapprovalId,
+    externalReference,
+    status,
+    summarized: typeof value.summarized === 'string' ? value.summarized : null,
+    amount,
+    currency,
+    debitDate: typeof value.debit_date === 'string' ? value.debit_date : null,
+    retryAttempt: Math.max(0, numberField(value.retry_attempt) ?? 0),
+    paymentId: payment ? stringOrNumber(payment.id) : null,
+    paymentStatus: payment && typeof payment.status === 'string' ? payment.status : null,
+  };
+}
+
 async function readProviderJson(response: Response): Promise<unknown> {
   const declaredLength = Number(response.headers.get('content-length') ?? 0);
   if (declaredLength > MAX_PROVIDER_RESPONSE_BYTES) {
@@ -332,6 +585,19 @@ function stringField(value: unknown, field: string): string {
 
 function optionalStringField(value: unknown, field: string): string | null {
   return isRecord(value) && typeof value[field] === 'string' ? value[field] : null;
+}
+
+function stringOrNumber(value: unknown): string | null {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : null;
+}
+
+function numberField(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

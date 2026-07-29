@@ -80,6 +80,34 @@ export interface PublicPackageProposal {
   updatedAt: string;
 }
 
+export interface PublicPackageSubscription {
+  id: string;
+  proposalId: string;
+  status:
+    | 'creating'
+    | 'creation_failed'
+    | 'pending_authorization'
+    | 'active'
+    | 'payment_attention'
+    | 'paused'
+    | 'canceled'
+    | 'disputed';
+  amountCents: number;
+  currency: 'MXN';
+  frequency: number;
+  frequencyType: 'months';
+  pricingVersion: string;
+  authorizationUrl: string | null;
+  providerStatus: string | null;
+  nextPaymentDate: string | null;
+  lastAuthorizedPaymentId: string | null;
+  lastAuthorizedPaymentStatus: string | null;
+  authorizedAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Cliente del Public API Worker. Solo expone datos/acciones públicas. */
 export function createPublicClient(baseUrl: string) {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
@@ -161,6 +189,30 @@ export function createPublicClient(baseUrl: string) {
     reconcilePackagePayment(proposalId: string) {
       return http.post<{ found: boolean; proposal: PublicPackageProposal }>(
         `/payments/proposals/${encodeURIComponent(proposalId)}/reconcile`,
+      );
+    },
+
+    getPackageSubscription(proposalId: string) {
+      return http.get<{ subscription: PublicPackageSubscription | null }>(
+        `/subscriptions/proposals/${encodeURIComponent(proposalId)}`,
+      );
+    },
+
+    createPackageSubscription(proposalId: string) {
+      return http.post<{ subscription: PublicPackageSubscription }>(
+        `/subscriptions/proposals/${encodeURIComponent(proposalId)}`,
+      );
+    },
+
+    reconcilePackageSubscription(subscriptionId: string) {
+      return http.post<{ found: boolean; subscription: PublicPackageSubscription }>(
+        `/subscriptions/${encodeURIComponent(subscriptionId)}/reconcile`,
+      );
+    },
+
+    cancelPackageSubscription(subscriptionId: string) {
+      return http.post<{ subscription: PublicPackageSubscription }>(
+        `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
       );
     },
   };

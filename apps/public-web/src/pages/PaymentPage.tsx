@@ -1,25 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { PublicPackageProposal } from '@starter/api-client';
+import type { PublicPackageProposal, PublicPackageSubscription } from '@starter/api-client';
 import { api } from '../lib/api';
 import { PACKAGE_MODULES } from '../features/package-builder/packageBuilderModel';
 import './payment.css';
 
-type LoadState = 'loading' | 'ready' | 'preparing' | 'checking' | 'error';
+type LoadState =
+  | 'loading'
+  | 'ready'
+  | 'preparing'
+  | 'checking'
+  | 'subscribing'
+  | 'checking_subscription'
+  | 'canceling_subscription'
+  | 'error';
 
 export function PaymentPage() {
   const { proposalId = '' } = useParams();
   const [proposal, setProposal] = useState<PublicPackageProposal | null>(null);
+  const [subscription, setSubscription] = useState<PublicPackageSubscription | null>(null);
   const [state, setState] = useState<LoadState>('loading');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     let active = true;
-    api
-      .getPackageProposal(proposalId)
-      .then(({ proposal: loaded }) => {
+    Promise.all([api.getPackageProposal(proposalId), api.getPackageSubscription(proposalId)])
+      .then(([{ proposal: loaded }, { subscription: loadedSubscription }]) => {
         if (!active) return;
         setProposal(loaded);
+        setSubscription(loadedSubscription);
         setState('ready');
       })
       .catch((error) => {
@@ -95,6 +104,77 @@ export function PaymentPage() {
       setState('ready');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No fue posible verificar el pago.');
+      setState('error');
+    }
+  };
+
+  const authorizeSubscription = async () => {
+    const authorizationWindow = window.open('about:blank', '_blank');
+    if (authorizationWindow) authorizationWindow.opener = null;
+    setState('subscribing');
+    setMessage('');
+    try {
+      const result =
+        subscription && subscription.status !== 'creation_failed'
+          ? { subscription }
+          : await api.createPackageSubscription(proposalId);
+      setSubscription(result.subscription);
+      if (!result.subscription.authorizationUrl) {
+        authorizationWindow?.close();
+        throw new Error('Mercado Pago no devolvió la URL de autorización recurrente.');
+      }
+      if (authorizationWindow) {
+        authorizationWindow.location.replace(result.subscription.authorizationUrl);
+      } else {
+        window.location.assign(result.subscription.authorizationUrl);
+      }
+      setState('ready');
+    } catch (error) {
+      authorizationWindow?.close();
+      setMessage(
+        error instanceof Error ? error.message : 'No fue posible preparar la suscripción.',
+      );
+      setState('error');
+    }
+  };
+
+  const reconcileSubscription = async () => {
+    if (!subscription) return;
+    setState('checking_subscription');
+    setMessage('');
+    try {
+      const result = await api.reconcilePackageSubscription(subscription.id);
+      setSubscription(result.subscription);
+      setMessage(
+        result.subscription.status === 'active'
+          ? 'Suscripción autorizada. Mercado Pago ya programó los cobros mensuales.'
+          : result.found
+            ? `Mercado Pago reporta la suscripción como ${result.subscription.providerStatus ?? 'pendiente'}.`
+            : 'Todavía no encontramos la suscripción en Mercado Pago.',
+      );
+      setState('ready');
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'No fue posible verificar la suscripción.',
+      );
+      setState('error');
+    }
+  };
+
+  const cancelSubscription = async () => {
+    if (!subscription) return;
+    if (!window.confirm('¿Cancelar esta suscripción técnica en Mercado Pago?')) return;
+    setState('canceling_subscription');
+    setMessage('');
+    try {
+      const result = await api.cancelPackageSubscription(subscription.id);
+      setSubscription(result.subscription);
+      setMessage('La suscripción técnica quedó cancelada en Mercado Pago.');
+      setState('ready');
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'No fue posible cancelar la suscripción.',
+      );
       setState('error');
     }
   };
@@ -216,6 +296,76 @@ export function PaymentPage() {
           </Link>
         </section>
 
+        {paid && !paymentReviewRequired ? (
+          <section className="lmw-subscription-card">
+            <div className="lmw-subscription-copy">
+              <p className="lmw-payment-label">SIGUIENTE COMPUERTA · SUSCRIPCIÓN</p>
+              <h2>Valida MXN $5 al mes</h2>
+              <p>
+                Es una prueba técnica independiente del pago único. El precio y la fecha de inicio
+                comerciales se definirán en la propuesta real.
+              </p>
+              {subscription ? (
+                <dl className="lmw-subscription-details">
+                  <div>
+                    <dt>Estado</dt>
+                    <dd>{subscriptionStatusLabel(subscription.status)}</dd>
+                  </div>
+                  <div>
+                    <dt>Próximo cobro</dt>
+                    <dd>{formatDate(subscription.nextPaymentDate)}</dd>
+                  </div>
+                  <div>
+                    <dt>Último cargo</dt>
+                    <dd>{subscription.lastAuthorizedPaymentStatus ?? 'Sin cargos registrados'}</dd>
+                  </div>
+                </dl>
+              ) : null}
+            </div>
+            <div className="lmw-subscription-actions">
+              {!subscription ||
+              subscription.status === 'creation_failed' ||
+              subscription.status === 'pending_authorization' ? (
+                <button
+                  className="lmw-payment-primary"
+                  disabled={state === 'subscribing'}
+                  onClick={authorizeSubscription}
+                  type="button"
+                >
+                  {state === 'subscribing'
+                    ? 'Preparando…'
+                    : subscription
+                      ? 'Abrir autorización en Mercado Pago →'
+                      : 'Preparar suscripción mensual'}
+                </button>
+              ) : null}
+              {subscription && subscription.status !== 'canceled' ? (
+                <button
+                  className="lmw-payment-secondary"
+                  disabled={state === 'checking_subscription'}
+                  onClick={reconcileSubscription}
+                  type="button"
+                >
+                  {state === 'checking_subscription'
+                    ? 'Verificando…'
+                    : 'Ya autoricé · verificar estado'}
+                </button>
+              ) : null}
+              {subscription &&
+              ['active', 'paused', 'payment_attention'].includes(subscription.status) ? (
+                <button
+                  className="lmw-payment-danger"
+                  disabled={state === 'canceling_subscription'}
+                  onClick={cancelSubscription}
+                  type="button"
+                >
+                  {state === 'canceling_subscription' ? 'Cancelando…' : 'Cancelar prueba'}
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
         {message ? (
           <p className={`lmw-payment-message ${state === 'error' ? 'is-error' : ''}`}>{message}</p>
         ) : null}
@@ -247,4 +397,29 @@ function formatCents(amountCents: number, currency: string) {
     style: 'currency',
     minimumFractionDigits: 2,
   }).format(amountCents / 100);
+}
+
+function subscriptionStatusLabel(status: PublicPackageSubscription['status']) {
+  const labels: Record<PublicPackageSubscription['status'], string> = {
+    creating: 'Preparando',
+    creation_failed: 'No creada',
+    pending_authorization: 'Esperando autorización',
+    active: 'Activa',
+    payment_attention: 'Requiere atención',
+    paused: 'Pausada',
+    canceled: 'Cancelada',
+    disputed: 'En disputa',
+  };
+  return labels[status];
+}
+
+function formatDate(value: string | null) {
+  if (!value) return 'Mercado Pago aún no la informa';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat('es-MX', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(date);
 }

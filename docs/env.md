@@ -27,7 +27,7 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `MERCADO_PAGO_ACCESS_TOKEN` | **secreto** | `.dev.vars` / `wrangler secret` | Credencial server-side del ambiente de Mercado Pago. |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC del modo productivo; es la única aceptada cuando `MERCADO_PAGO_TEST_MODE=0`. |
 | `MERCADO_PAGO_WEBHOOK_TEST_SECRET` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Firma HMAC del modo prueba; sólo se acepta mientras `MERCADO_PAGO_TEST_MODE=1`. |
-| `MERCADO_PAGO_TEST_MODE` | var temporal | `.dev.vars` / ambiente remoto de prueba | `1` habilita únicamente el checkout técnico de Mercado Pago. Debe ser `0` para cobros reales. |
+| `MERCADO_PAGO_TEST_MODE` | var temporal | `.dev.vars` / ambiente remoto de prueba | `1` habilita el checkout y la suscripción técnica de Mercado Pago. Debe ser `0` para cobros reales. |
 | `PUBLIC_WEB_URL`      | var             | wrangler.toml                 | Origen canónico del frontend.                        |
 | `PUBLIC_API_URL`      | var             | wrangler.toml                 | Origen canónico del Public API y callback OAuth.     |
 | `FREE_SITE_BASE_DOMAIN` | var           | wrangler.toml                 | Dominio wildcard de las páginas Free.                |
@@ -50,6 +50,13 @@ existe cuando el modo de prueba está apagado: producción siempre exige HMAC v�
 Cada checkout técnico vence a los 30 minutos y el primer pago aprobado conciliado queda
 como pago canónico; cualquier aprobado adicional se conserva por separado y bloquea la
 propuesta para revisión.
+
+La misma URL de Webhook recibe los tópicos `payment`, `subscription_preapproval` y
+`subscription_authorized_payment`. Los dos tópicos recurrentes siempre consultan el
+recurso oficial antes de cambiar D1. En modo de prueba pueden usar el mismo fallback
+verificado por proveedor; con `MERCADO_PAGO_TEST_MODE=0` todos los Webhooks modernos
+requieren HMAC válida. La aplicación de Mercado Pago debe tener seleccionados los tres
+tópicos y conservar como callback `https://api.lmwares.com/payments/webhooks/mercado-pago`.
 
 ## Admin API Worker
 

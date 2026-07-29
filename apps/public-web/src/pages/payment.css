@@ -143,8 +143,66 @@
   margin-top: 22px;
 }
 
+.lmw-subscription-card {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(34, 120, 255, 0.14), rgba(58, 220, 143, 0.08));
+  border: 1px solid rgba(112, 239, 177, 0.28);
+  border-radius: 20px;
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 24px;
+  padding: clamp(22px, 4vw, 36px);
+}
+
+.lmw-subscription-copy h2 {
+  font-size: clamp(1.7rem, 4vw, 2.7rem);
+  margin: 10px 0 12px;
+}
+
+.lmw-subscription-copy > p:last-of-type {
+  color: #9cadc8;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 620px;
+}
+
+.lmw-subscription-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 22px 0 0;
+}
+
+.lmw-subscription-details div {
+  min-width: 130px;
+}
+
+.lmw-subscription-details dt {
+  color: #6f82a0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lmw-subscription-details dd {
+  color: #e6f0ff;
+  font-size: 0.88rem;
+  margin: 5px 0 0;
+}
+
+.lmw-subscription-actions {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(100%, 280px);
+}
+
 .lmw-payment-primary,
-.lmw-payment-secondary {
+.lmw-payment-secondary,
+.lmw-payment-danger {
   border-radius: 12px;
   cursor: pointer;
   display: inline-flex;
@@ -166,8 +224,15 @@
   color: #b9d8ff;
 }
 
+.lmw-payment-danger {
+  background: rgba(255, 52, 35, 0.08);
+  border: 1px solid rgba(255, 102, 90, 0.36);
+  color: #ffaaa3;
+}
+
 .lmw-payment-primary:disabled,
-.lmw-payment-secondary:disabled {
+.lmw-payment-secondary:disabled,
+.lmw-payment-danger:disabled {
   cursor: wait;
   opacity: 0.55;
 }
@@ -229,6 +294,10 @@
   .lmw-payment-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .lmw-subscription-card {
+    grid-template-columns: 1fr;
   }
 
   .lmw-payment-back {
