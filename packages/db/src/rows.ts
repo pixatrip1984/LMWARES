@@ -175,6 +175,7 @@ export interface LmwaresApprovalRow {
 
 export interface FreeIntakeRow {
   id: string;
+  user_id: string | null;
   slug: string;
   site_name: string;
   status: string;
@@ -199,6 +200,31 @@ export interface FreeIntakeRow {
   updated_at: string;
 }
 
+export interface PublicUserRow {
+  id: string;
+  email: string;
+  name: string | null;
+  picture_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublicSessionWithUserRow extends PublicUserRow {
+  session_id: string;
+  expires_at: string;
+}
+
+export interface OAuthTransactionRow {
+  state_hash: string;
+  provider: string;
+  code_verifier: string;
+  nonce: string;
+  return_to: string;
+  expires_at: string;
+  consumed_at: string | null;
+  created_at: string;
+}
+
 export interface FreeContactMethodRow {
   id: string;
   intake_id: string;
@@ -214,6 +240,7 @@ export interface FreeIntakeAssetRow {
   id: string;
   intake_id: string;
   file_asset_id: string;
+  sanitized_file_asset_id: string | null;
   role: string;
   position: number;
   safety_status: string;

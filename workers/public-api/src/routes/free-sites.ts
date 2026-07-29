@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { AppError } from '@starter/domain';
 import { createRepositories } from '@starter/db';
 import type { Bindings, Variables } from '../env';
@@ -7,6 +7,13 @@ export const freeSites = new Hono<{ Bindings: Bindings; Variables: Variables }>(
 
 freeSites.get('/:slug', async (c) => {
   const slug = c.req.param('slug')!;
+  return serveFreeSite(c, slug);
+});
+
+export async function serveFreeSite(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  slug: string,
+) {
   const repos = createRepositories(c.env.DB);
   const site = await repos.lmwaresFreeIntakes.getPublishedSiteBySlug(slug);
   if (!site) throw AppError.notFound('Sitio Free');
@@ -17,6 +24,7 @@ freeSites.get('/:slug', async (c) => {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('cache-control', 'public, max-age=120');
+  headers.set('x-content-type-options', 'nosniff');
   headers.set('x-lmwares-free-site', slug);
   return new Response(object.body, { headers });
-});
+}

@@ -19,8 +19,16 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `ALLOWED_ORIGINS`     | var             | wrangler.toml                 | Orígenes CORS permitidos (coma).                     |
 | `MEDIA_BASE_URL`      | var             | wrangler.toml                 | CDN/dominio de R2. Vacío = servir vía `/media`.      |
 | `PROJECT_SLUG`        | var             | wrangler.toml                 | Slug del proyecto.                                   |
-| `TURNSTILE_DISABLED`  | var             | wrangler.toml                 | `1` en local para saltar Turnstile.                  |
+| `TURNSTILE_DISABLED`  | var local       | `.dev.vars`                   | `1` sólo en local para saltar Turnstile.             |
 | `TURNSTILE_SECRET_KEY`| **secreto**     | `.dev.vars` / `wrangler secret` | Clave secreta de Turnstile (server-side).          |
+| `FREE_RUNNER_TOKEN`   | **secreto**     | `.dev.vars` / `wrangler secret` | Autentica al runner Free.                           |
+| `GOOGLE_OAUTH_CLIENT_ID` | **secreto de entorno** | `.dev.vars` / `wrangler secret` | OAuth Web Client de Google.                 |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Secreto OAuth de Google.                    |
+| `PUBLIC_WEB_URL`      | var             | wrangler.toml                 | Origen canónico del frontend.                        |
+| `PUBLIC_API_URL`      | var             | wrangler.toml                 | Origen canónico del Public API y callback OAuth.     |
+| `FREE_SITE_BASE_DOMAIN` | var           | wrangler.toml                 | Dominio wildcard de las páginas Free.                |
+| `EMAIL_FROM` / `EMAIL_REPLY_TO` | var   | wrangler.toml                 | Remitente y respuesta transaccional.                 |
+| `EMAIL`               | binding email   | wrangler.toml                 | Cloudflare Email Service.                            |
 | `DB`                  | binding D1      | wrangler.toml                 | Base de datos.                                       |
 | `MEDIA`               | binding R2      | wrangler.toml                 | Bucket de archivos.                                  |
 
@@ -55,6 +63,9 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 ```bash
 cd workers/public-api
 npx wrangler@4.105.0 secret put TURNSTILE_SECRET_KEY
+npx wrangler@4.105.0 secret put FREE_RUNNER_TOKEN
+npx wrangler@4.105.0 secret put GOOGLE_OAUTH_CLIENT_ID
+npx wrangler@4.105.0 secret put GOOGLE_OAUTH_CLIENT_SECRET
 ```
 
 Para staging administrado, genera artefactos desde un perfil local y carga los

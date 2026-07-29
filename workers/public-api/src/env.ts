@@ -1,4 +1,5 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
+import type { PublicUser } from '@starter/domain';
 
 /** Bindings y variables del Public API Worker. */
 export interface Bindings {
@@ -13,6 +14,18 @@ export interface Bindings {
   FREE_RUNNER_TOKEN: string;
   /** Dominio base para publicar URLs tipo slug.lmwares.com. */
   FREE_SITE_BASE_DOMAIN: string;
+  /** Origen canónico del frontend público, sin slash final. */
+  PUBLIC_WEB_URL: string;
+  /** Origen canónico de este Worker, sin slash final. */
+  PUBLIC_API_URL: string;
+  /** OAuth Web Client de Google. */
+  GOOGLE_OAUTH_CLIENT_ID: string;
+  /** Secreto del OAuth Web Client de Google. Siempre como secret. */
+  GOOGLE_OAUTH_CLIENT_SECRET: string;
+  /** Binding tipado generado por `wrangler types`. */
+  EMAIL: Env['EMAIL'];
+  EMAIL_FROM: string;
+  EMAIL_REPLY_TO: string;
   /** "1" para saltar la verificación de Turnstile (solo local). */
   TURNSTILE_DISABLED: string;
   /** Secreto de Turnstile (server-side). Inyectado como secret. */
@@ -21,4 +34,7 @@ export interface Bindings {
 
 export type Variables = {
   requestId: string;
+  publicUser: PublicUser;
+  publicSessionId: string;
+  publicSessionExpiresAt: string;
 };

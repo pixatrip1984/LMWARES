@@ -13,6 +13,7 @@ export * from './models/admin-user';
 export * from './models/audit';
 export * from './models/lmwares-project';
 export * from './models/free-intake';
+export * from './models/public-user';
 export * from './models/site-blog';
 export * from './models/site-gallery';
 export * from './models/site-docs';

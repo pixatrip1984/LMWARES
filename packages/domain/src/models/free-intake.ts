@@ -51,6 +51,7 @@ export type FreeGenerationJobStatus = (typeof FREE_JOB_STATUSES)[number];
 
 export interface FreeIntake extends Timestamps {
   id: Id;
+  userId: Id | null;
   slug: string;
   siteName: string;
   status: FreeIntakeStatus;
@@ -88,6 +89,7 @@ export interface FreeIntakeAsset {
   id: Id;
   intakeId: Id;
   fileAssetId: Id;
+  sanitizedFileAssetId: Id | null;
   role: string;
   position: number;
   safetyStatus: FreeAssetSafetyStatus;

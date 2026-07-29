@@ -66,6 +66,7 @@ infra/
   wrangler/       Convenciones de despliegue
 docs/
   setup.md · env.md · launch-checklist.md · security-checklist.md
+  LMWARES-FREE-E2E-RUNBOOK.md
 ```
 
 ## Modelos base
@@ -82,6 +83,16 @@ GET  /publications          listado paginado (solo publicadas)
 GET  /publications/:slug     detalle con imágenes
 POST /requests               crear solicitud (Turnstile)
 GET  /media/:key             proxy de lectura de R2
+GET  /auth/session           sesión pública actual
+GET  /auth/google/start      inicio Google OIDC
+GET  /auth/google/callback   callback server-side
+POST /auth/logout            revocar sesión pública
+GET  /free/slugs/:slug       disponibilidad de subdominio
+POST /free                   crear intake Free autenticado
+POST /free/:id/images        cargar original privado
+POST /free/:id/submit        enviar a generación
+GET  /free/:id/status        estado y URL para el propietario
+GET  /sites/:slug            preview local del sitio Free
 ```
 
 **Privada (tras Access)**

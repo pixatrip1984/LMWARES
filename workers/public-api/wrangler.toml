@@ -7,10 +7,11 @@ compatibility_date = "2026-06-28"
 ALLOWED_ORIGINS = "http://localhost:5273,http://127.0.0.1:5273,http://localhost:5274,http://127.0.0.1:5274,http://localhost:4273,http://127.0.0.1:4273,http://localhost:4274,http://127.0.0.1:4274"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "starter"
-FREE_RUNNER_TOKEN = "local-free-runner-token"
 FREE_SITE_BASE_DOMAIN = "lmwares.com"
-# En local deja "1" para saltar Turnstile. En producción pon "0".
-TURNSTILE_DISABLED = "1"
+PUBLIC_WEB_URL = "http://127.0.0.1:5273"
+PUBLIC_API_URL = "http://127.0.0.1:8887"
+EMAIL_FROM = "notificaciones@lmwares.com"
+EMAIL_REPLY_TO = "soporte@lmwares.com"
 
 [[d1_databases]]
 binding = "DB"
@@ -20,3 +21,9 @@ database_id = "00000000-0000-0000-0000-000000000000"
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "starter-media"
+
+# En local Wrangler simula los envíos y guarda/loguea el mensaje.
+# Producción requiere habilitar lmwares.com en Cloudflare Email Sending.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["notificaciones@lmwares.com"]

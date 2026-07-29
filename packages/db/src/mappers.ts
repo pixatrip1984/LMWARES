@@ -27,6 +27,7 @@ import type {
   LmwaresValidationResult,
   LmwaresValidationStatus,
   Publication,
+  PublicUser,
   PublicationImage,
   PublicationStatus,
   Request,
@@ -51,6 +52,7 @@ import type {
   PublicationImageJoinRow,
   PublicationImageRow,
   PublicationRow,
+  PublicUserRow,
   RequestNoteRow,
   RequestRow,
   StatusHistoryRow,
@@ -258,6 +260,7 @@ export function mapLmwaresApproval(r: LmwaresApprovalRow): LmwaresApproval {
 export function mapFreeIntake(r: FreeIntakeRow): FreeIntake {
   return {
     id: r.id,
+    userId: r.user_id,
     slug: r.slug,
     siteName: r.site_name,
     status: r.status as FreeIntakeStatus,
@@ -283,6 +286,17 @@ export function mapFreeIntake(r: FreeIntakeRow): FreeIntake {
   };
 }
 
+export function mapPublicUser(r: PublicUserRow): PublicUser {
+  return {
+    id: r.id,
+    email: r.email,
+    name: r.name,
+    pictureUrl: r.picture_url,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
 export function mapFreeContactMethod(r: FreeContactMethodRow): FreeContactMethod {
   return {
     id: r.id,
@@ -301,6 +315,7 @@ export function mapFreeIntakeAsset(r: FreeIntakeAssetRow): FreeIntakeAsset {
     id: r.id,
     intakeId: r.intake_id,
     fileAssetId: r.file_asset_id,
+    sanitizedFileAssetId: r.sanitized_file_asset_id,
     role: r.role,
     position: r.position,
     safetyStatus: r.safety_status as FreeAssetSafetyStatus,

@@ -1,4 +1,4 @@
-import type { Paginated, Publication } from '@starter/domain';
+import type { Paginated, PublicAuthSession, Publication } from '@starter/domain';
 import type { CreateFreeIntakeInput, CreateRequestInput, SubmitFreeIntakeInput } from '@starter/validation';
 import { createHttpClient } from './http';
 
@@ -39,11 +39,37 @@ export interface SubmitFreeIntakeResult {
   publicUrl: string | null;
 }
 
+export interface FreeIntakeStatusResult {
+  intake: {
+    id: string;
+    slug: string;
+    status: string;
+    publishedUrl: string | null;
+  };
+  job: { status: string; errorCode: string | null; errorMessage: string | null } | null;
+  publicUrl: string | null;
+  assetCount: number;
+}
+
 /** Cliente del Public API Worker. Solo expone datos/acciones públicas. */
 export function createPublicClient(baseUrl: string) {
-  const http = createHttpClient({ baseUrl });
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  const http = createHttpClient({ baseUrl: normalizedBaseUrl, withCredentials: true });
 
   return {
+    getAuthSession() {
+      return http.get<PublicAuthSession>('/auth/session');
+    },
+
+    getGoogleAuthUrl(returnTo = '/configurar') {
+      const query = new URLSearchParams({ returnTo });
+      return `${normalizedBaseUrl}/auth/google/start?${query}`;
+    },
+
+    logout() {
+      return http.post<void>('/auth/logout');
+    },
+
     listPublications(params: { page?: number; pageSize?: number; q?: string } = {}) {
       const qs = new URLSearchParams();
       if (params.page) qs.set('page', String(params.page));
@@ -78,6 +104,10 @@ export function createPublicClient(baseUrl: string) {
 
     submitFreeIntake(intakeId: string, input: SubmitFreeIntakeInput = {}) {
       return http.post<SubmitFreeIntakeResult>(`/free/${encodeURIComponent(intakeId)}/submit`, input);
+    },
+
+    getFreeIntakeStatus(intakeId: string) {
+      return http.get<FreeIntakeStatusResult>(`/free/${encodeURIComponent(intakeId)}/status`);
     },
   };
 }

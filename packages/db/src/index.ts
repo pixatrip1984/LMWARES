@@ -13,6 +13,8 @@ import {
   LmwaresValidationResultsRepository,
 } from './repositories/lmwares-evidence';
 import { LmwaresFreeIntakesRepository } from './repositories/lmwares-free-intakes';
+import { LmwaresAuthRepository } from './repositories/lmwares-auth';
+import { LmwaresNotificationsRepository } from './repositories/lmwares-notifications';
 import { SiteBlogRepository } from './repositories/site-blog';
 import { SiteGalleryRepository } from './repositories/site-gallery';
 import { SiteDocsRepository } from './repositories/site-docs';
@@ -28,6 +30,8 @@ export * from './repositories/admin-users';
 export * from './repositories/lmwares-projects';
 export * from './repositories/lmwares-evidence';
 export * from './repositories/lmwares-free-intakes';
+export * from './repositories/lmwares-auth';
+export * from './repositories/lmwares-notifications';
 export * from './repositories/site-blog';
 export * from './repositories/site-gallery';
 export * from './repositories/site-docs';
@@ -47,6 +51,8 @@ export interface Repositories {
   lmwaresValidationResults: LmwaresValidationResultsRepository;
   lmwaresApprovals: LmwaresApprovalsRepository;
   lmwaresFreeIntakes: LmwaresFreeIntakesRepository;
+  lmwaresAuth: LmwaresAuthRepository;
+  lmwaresNotifications: LmwaresNotificationsRepository;
   siteBlog: SiteBlogRepository;
   siteGalleries: SiteGalleryRepository;
   siteDocs: SiteDocsRepository;
@@ -71,6 +77,8 @@ export function createRepositories(db: D1Database): Repositories {
     lmwaresValidationResults: new LmwaresValidationResultsRepository(db),
     lmwaresApprovals: new LmwaresApprovalsRepository(db),
     lmwaresFreeIntakes: new LmwaresFreeIntakesRepository(db),
+    lmwaresAuth: new LmwaresAuthRepository(db),
+    lmwaresNotifications: new LmwaresNotificationsRepository(db),
     siteBlog: new SiteBlogRepository(db),
     siteGalleries: new SiteGalleryRepository(db),
     siteDocs: new SiteDocsRepository(db),

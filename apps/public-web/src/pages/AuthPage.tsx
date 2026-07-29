@@ -1,23 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  createDemoSession,
-  getDemoSession,
-  getProviderName,
-  type DemoAuthProvider,
-} from '../features/package-builder/demoAuth';
+import type { PublicAuthSession } from '@starter/domain';
+import { api } from '../lib/api';
 import './packageBuilder.css';
-
-const PROVIDERS: { id: DemoAuthProvider; mark: string; detail: string }[] = [
-  { id: 'google', mark: 'G', detail: 'Cuenta personal o de empresa' },
-  { id: 'github', mark: 'GH', detail: 'Identidad de desarrollo' },
-  { id: 'microsoft', mark: 'M', detail: 'Cuenta institucional' },
-];
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const [loadingProvider, setLoadingProvider] = useState<DemoAuthProvider | null>(null);
-  const existingSession = getDemoSession();
+  const [session, setSession] = useState<PublicAuthSession | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -31,12 +22,26 @@ export function AuthPage() {
     };
   }, []);
 
-  const signIn = (provider: DemoAuthProvider) => {
-    setLoadingProvider(provider);
-    window.setTimeout(() => {
-      createDemoSession(provider);
-      navigate('/configurar');
-    }, 420);
+  useEffect(() => {
+    let active = true;
+    api.getAuthSession()
+      .then((result) => {
+        if (active) setSession(result);
+      })
+      .catch(() => {
+        if (active) setSession(null);
+      })
+      .finally(() => {
+        if (active) setSessionLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const signIn = () => {
+    setStarting(true);
+    window.location.assign(api.getGoogleAuthUrl('/configurar'));
   };
 
   return (
@@ -51,7 +56,7 @@ export function AuthPage() {
         <Link className="lmw-builder-brand" to="/">
           <span>LM</span>WARES<i />
         </Link>
-        <span className="lmw-builder-mode">CONFIGURADOR · MODO DEMO</span>
+        <span className="lmw-builder-mode">CONFIGURADOR · ACCESO SEGURO</span>
       </header>
 
       <main className="lmw-auth-layout">
@@ -78,61 +83,63 @@ export function AuthPage() {
           <ul className="lmw-auth-proof">
             <li><i />Recomendación automática, selección manual.</li>
             <li><i />Un borrador que puedes ajustar antes de hablar con nosotros.</li>
-            <li><i />Sin pago ni contratación durante esta simulación.</li>
+            <li><i />Sin pago ni contratación durante esta etapa.</li>
           </ul>
         </section>
 
         <section className="lmw-auth-card" aria-labelledby="lmw-access-title">
           <div className="lmw-auth-card__status">
             <span>01 / ACCESO</span>
-            <i>SESIÓN SIMULADA</i>
+            <i>GOOGLE OIDC</i>
           </div>
           <h2 id="lmw-access-title">Continúa para configurar tu paquete.</h2>
           <p>
-            Usaremos una identidad de prueba. Cuando conectemos OAuth real, esta pantalla y el
-            recorrido permanecerán iguales.
+            Tu cuenta identifica la solicitud, protege tus imágenes y recibe la URL cuando tu
+            página Free esté publicada.
           </p>
 
-          {existingSession ? (
+          {sessionLoaded && session?.authenticated && session.user ? (
             <button className="lmw-auth-continue" type="button" onClick={() => navigate('/configurar')}>
-              <span>CD</span>
+              <span>{initials(session.user.name, session.user.email)}</span>
               <b>
-                Continuar como Cuenta demo
-                <small>{existingSession.email}</small>
+                Continuar como {session.user.name ?? session.user.email}
+                <small>{session.user.email}</small>
               </b>
               <i>→</i>
             </button>
           ) : null}
 
-          <div className="lmw-auth-divider"><span>OAuth simulado</span></div>
+          <div className="lmw-auth-divider"><span>Acceso protegido</span></div>
 
           <div className="lmw-auth-providers">
-            {PROVIDERS.map((provider) => (
-              <button
-                disabled={loadingProvider !== null}
-                key={provider.id}
-                onClick={() => signIn(provider.id)}
-                type="button"
-              >
-                <span>{provider.mark}</span>
-                <b>
-                  Continuar con {getProviderName(provider.id)}
-                  <small>{provider.detail}</small>
-                </b>
-                <i>{loadingProvider === provider.id ? '···' : '↗'}</i>
-              </button>
-            ))}
+            <button disabled={starting} onClick={signIn} type="button">
+              <span>G</span>
+              <b>
+                Continuar con Google
+                <small>Cuenta personal o de empresa</small>
+              </b>
+              <i>{starting ? '···' : '↗'}</i>
+            </button>
           </div>
 
           <div className="lmw-auth-card__notice">
             <i />
             <span>
-              Esta fase no envía información a Google, GitHub o Microsoft. La sesión existe sólo
-              en este navegador.
+              Sólo solicitamos identidad básica: nombre, email y perfil. La sesión usa una cookie
+              segura y no concede permisos de pago.
             </span>
           </div>
         </section>
       </main>
     </div>
   );
+}
+
+function initials(name: string | null, email: string) {
+  return (name ?? email)
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
 }

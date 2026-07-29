@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { clearDemoSession, getDemoSession, getProviderName } from '../features/package-builder/demoAuth';
+import type { PublicUser } from '@starter/domain';
 import { PackagePreviewModal } from '../features/package-builder/PackagePreviewModal';
 import { api } from '../lib/api';
 import {
@@ -40,7 +40,7 @@ type FreeImageFile = {
 };
 
 type FreeSubmitState = {
-  status: 'idle' | 'checking' | 'uploading' | 'queued' | 'failed';
+  status: 'idle' | 'checking' | 'uploading' | 'queued' | 'published' | 'failed';
   intakeId?: string;
   slug?: string;
   publicUrl?: string | null;
@@ -70,12 +70,12 @@ const PLAN_COPY: Record<PlanId, { name: string; eyebrow: string; description: st
   starter: {
     name: 'Starter',
     eyebrow: 'Operación ligera',
-    description: 'Subdominio LMWares y dominio personalizado, con Landing, Panel y hasta dos complementos.',
+    description: 'Empieza en un subdominio LMWares y puede migrar a dominio personalizado, con Landing, Panel y hasta dos complementos.',
   },
   pro: {
     name: 'Pro',
     eyebrow: 'Capacidad completa',
-    description: 'Subdominio LMWares y dominio personalizado, con todas las capacidades disponibles.',
+    description: 'Empieza en un subdominio LMWares y puede migrar a dominio personalizado, con todas las capacidades disponibles.',
   },
 };
 
@@ -94,7 +94,7 @@ const MODULE_IMAGE_PATHS: Record<PackageModuleId, string> = {
 
 export function PackageBuilderPage() {
   const navigate = useNavigate();
-  const session = getDemoSession();
+  const [session, setSession] = useState<PublicUser | null | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
   const [draft, setDraft] = useState<PackageDraft>(() => loadPackageDraft());
@@ -110,8 +110,8 @@ export function PackageBuilderPage() {
   const [freeForm, setFreeForm] = useState(() => ({
     slug: '',
     siteName: '',
-    contactName: session?.name === 'Cuenta demo' ? '' : (session?.name ?? ''),
-    contactEmail: session?.email ?? '',
+    contactName: '',
+    contactEmail: '',
     businessDescription: '',
     audience: '',
     sector: '',
@@ -156,6 +156,84 @@ export function PackageBuilderPage() {
     savePackageDraft(draft);
   }, [draft]);
 
+  useEffect(() => {
+    let active = true;
+    api.getAuthSession()
+      .then((result) => {
+        if (active) setSession(result.authenticated ? result.user : null);
+      })
+      .catch(() => {
+        if (active) setSession(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    setFreeForm((current) => ({
+      ...current,
+      contactName: current.contactName || session.name || '',
+      contactEmail: session.email,
+    }));
+  }, [session]);
+
+  useEffect(() => {
+    if (freeSubmit.status !== 'queued' || !freeSubmit.intakeId) return;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const poll = async () => {
+      try {
+        const result = await api.getFreeIntakeStatus(freeSubmit.intakeId!);
+        if (cancelled) return;
+        if (result.publicUrl) {
+          setFreeSubmit((current) => ({
+            ...current,
+            status: 'published',
+            publicUrl: result.publicUrl,
+            message: result.intake.status === 'notified'
+              ? 'Tu página Free ya está publicada. También enviamos el enlace a tu email.'
+              : 'Tu página Free ya está publicada. El enlace quedó programado para tu email.',
+          }));
+          return;
+        }
+        if (
+          result.job?.status === 'failed' ||
+          ['generation_failed', 'moderation_hold', 'manual_review'].includes(result.intake.status)
+        ) {
+          setFreeSubmit((current) => ({
+            ...current,
+            status: 'failed',
+            message: result.job?.errorMessage ?? 'La generación requiere revisión.',
+          }));
+          return;
+        }
+      } catch {
+        // Una interrupción breve no invalida el trabajo ya en cola.
+      }
+      if (!cancelled) timer = window.setTimeout(poll, 3000);
+    };
+
+    timer = window.setTimeout(poll, 1500);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [freeSubmit.intakeId, freeSubmit.status]);
+
+  if (session === undefined) {
+    return (
+      <div className="lmw-builder-shell lmw-auth-shell">
+        <main className="lmw-auth-layout">
+          <section className="lmw-auth-card">
+            <p>Validando tu sesión segura...</p>
+          </section>
+        </main>
+      </div>
+    );
+  }
   if (!session) return <Navigate replace to="/acceso" />;
 
   const flashNotice = (message: string) => {
@@ -322,8 +400,8 @@ export function PackageBuilderPage() {
     setFreeForm({
       slug: '',
       siteName: '',
-      contactName: session?.name === 'Cuenta demo' ? '' : (session?.name ?? ''),
-      contactEmail: session?.email ?? '',
+      contactName: session.name ?? '',
+      contactEmail: session.email,
       businessDescription: '',
       audience: '',
       sector: '',
@@ -344,9 +422,13 @@ export function PackageBuilderPage() {
     flashNotice('Restauramos el ejemplo Starter.');
   };
 
-  const signOut = () => {
-    clearDemoSession();
-    navigate('/acceso');
+  const signOut = async () => {
+    try {
+      await api.logout();
+    } finally {
+      setSession(null);
+      navigate('/acceso');
+    }
   };
 
   const submitDraft = async () => {
@@ -506,8 +588,8 @@ export function PackageBuilderPage() {
         </ol>
 
         <div className="lmw-builder-account">
-          <span>CD</span>
-          <b>Cuenta demo<small>{getProviderName(session.provider)}</small></b>
+          <span>{userInitials(session)}</span>
+          <b>{session.name ?? 'Cuenta LMWares'}<small>{session.email}</small></b>
           <button onClick={signOut} type="button">Salir</button>
         </div>
       </header>
@@ -622,13 +704,14 @@ export function PackageBuilderPage() {
                       />
                     </label>
                     <label>
-                      <span>Email de contacto</span>
+                      <span>Email de notificación</span>
                       <input
-                        onChange={(event) => updateFreeForm({ contactEmail: event.target.value })}
-                        placeholder="correo@negocio.com"
+                        aria-readonly="true"
+                        readOnly
                         type="email"
                         value={freeForm.contactEmail}
                       />
+                      <small>Se toma de la cuenta con la que iniciaste sesión.</small>
                     </label>
                     <label className="is-wide">
                       <span>¿De qué trata?</span>
@@ -781,6 +864,16 @@ export function PackageBuilderPage() {
                   {freeSubmit.message ? (
                     <p className={`lmw-free-assets__status is-${freeSubmit.status}`}>{freeSubmit.message}</p>
                   ) : null}
+                  {freeSubmit.publicUrl ? (
+                    <a
+                      className="lmw-free-assets__status is-published"
+                      href={freeSubmit.publicUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Abrir {freeSubmit.slug}.lmwares.com ↗
+                    </a>
+                  ) : null}
                   {draft.images.length > 0 ? (
                     <ul>
                       {draft.images.map((image) => (
@@ -861,7 +954,7 @@ export function PackageBuilderPage() {
               ) : (
                 <>
                   <div><i>01</i><span><b>Landing + Panel</b><small>Base incluida, sin decisiones extra</small></span></div>
-                  <div><i>02</i><span><b>Subdominio + dominio propio</b><small>Entorno LMWares y publicación personalizada</small></span></div>
+                  <div><i>02</i><span><b>Subdominio desde el inicio</b><small>Dominio propio opcional después</small></span></div>
                   <div><i>03</i><span><b>{selectedComplements.length} {selectedComplements.length === 1 ? 'complemento elegido' : 'complementos elegidos'}</b><small>{selectedComplements.length > 0 ? selectedComplements.map(({ name }) => name).join(' · ') : 'Todavía no has añadido ninguno'}</small></span></div>
                   <div><i>04</i><span><b>{draft.plan === 'pro' ? 'Todas las capacidades' : 'Hasta 2 de 6 compatibles'}</b><small>{draft.plan === 'pro' ? 'Incluye Carrito y Optimization' : 'Carrito y Optimization requieren Pro'}</small></span></div>
                 </>
@@ -953,11 +1046,11 @@ export function PackageBuilderPage() {
               </article>
               <article>
                 <span>PUBLICACIÓN</span>
-                <h2>{draft.plan === 'free' ? 'tu-negocio.lmwares.com' : 'Subdominio + dominio propio'}</h2>
+                <h2>{draft.plan === 'free' ? 'tu-negocio.lmwares.com' : 'Subdominio primero'}</h2>
                 <p>
                   {draft.plan === 'free'
                     ? `${draft.images.length}/${FREE_IMAGE_LIMIT} imágenes preparadas.`
-                    : 'El subdominio LMWares acompaña el desarrollo; el dominio personalizado se conecta al formalizar el alcance.'}
+                    : 'El proyecto se publica primero en LMWares; después puede migrarse a un dominio personalizado.'}
                 </p>
               </article>
               <article className={draft.marketing ? 'is-astra' : ''}>
@@ -1025,4 +1118,13 @@ function parseFreeLines(value: string) {
       return true;
     })
     .slice(0, 8);
+}
+
+function userInitials(user: PublicUser) {
+  return (user.name ?? user.email)
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
 }

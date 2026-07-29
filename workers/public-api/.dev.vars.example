@@ -1,3 +1,9 @@
 # Copia este archivo a .dev.vars (en .gitignore) para desarrollo local.
 # Secreto de Turnstile (lado servidor). Obtenlo en el dashboard de Cloudflare.
 TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"
+TURNSTILE_DISABLED="1"
+FREE_RUNNER_TOKEN="reemplaza-con-un-token-local-largo"
+# Google Cloud Console > APIs y servicios > Credenciales > Cliente OAuth Web.
+# Redirect local exacto: http://127.0.0.1:8887/auth/google/callback
+GOOGLE_OAUTH_CLIENT_ID=""
+GOOGLE_OAUTH_CLIENT_SECRET=""

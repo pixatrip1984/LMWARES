@@ -23,6 +23,7 @@ import type {
 } from '../rows';
 
 export interface CreateFreeIntakeData {
+  userId: string;
   slug: string;
   siteName: string;
   contactName: string;
@@ -52,7 +53,10 @@ export interface CreateFreeAssetData {
 
 export interface FreeAssetWithFile {
   asset: FreeIntakeAsset;
+  /** Original privado recibido del usuario. Nunca se publica por `/media`. */
   fileAsset: FileAsset;
+  /** Derivado reencodificado que sí puede incorporarse al sitio. */
+  sanitizedFileAsset: FileAsset | null;
 }
 
 export interface PublishedSite {
@@ -87,24 +91,24 @@ export class LmwaresFreeIntakesRepository {
     const id = newId();
     const now = nowIso();
 
-    await this.db
-      .prepare(
+    const statements = [
+      this.db
+        .prepare(
         `INSERT INTO lmw_slug_reservations
           (slug, intake_id, status, expires_at, created_at, updated_at)
          VALUES (?, ?, 'reserved', NULL, ?, ?)`,
       )
-      .bind(data.slug, id, now, now)
-      .run();
-
-    await this.db
-      .prepare(
+        .bind(data.slug, id, now, now),
+      this.db
+        .prepare(
         `INSERT INTO lmw_free_intakes
-          (id, slug, site_name, status, contact_name, contact_email, business_description, audience,
+          (id, user_id, slug, site_name, status, contact_name, contact_email, business_description, audience,
            sector, style, primary_action, terms_accepted_at, metadata, created_at, updated_at)
-         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(
+        .bind(
         id,
+        data.userId,
         data.slug,
         data.siteName,
         data.contactName,
@@ -118,17 +122,18 @@ export class LmwaresFreeIntakesRepository {
         JSON.stringify(data.metadata ?? {}),
         now,
         now,
-      )
-      .run();
+        ),
+    ];
 
     for (const [position, contact] of data.contacts.entries()) {
-      await this.db
-        .prepare(
+      statements.push(
+        this.db
+          .prepare(
           `INSERT INTO lmw_contact_methods
             (id, intake_id, platform, value, label, public_visible, position, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(
+          .bind(
           newId(),
           id,
           contact.platform,
@@ -137,9 +142,12 @@ export class LmwaresFreeIntakesRepository {
           boolToDb(contact.publicVisible),
           position,
           now,
-        )
-        .run();
+          ),
+      );
     }
+
+    // D1 ejecuta batch como transacción: no quedan slugs huérfanos si falla el intake.
+    await this.db.batch(statements);
 
     return (await this.getById(id))!;
   }
@@ -181,9 +189,19 @@ export class LmwaresFreeIntakesRepository {
             f.original_name AS f_original_name,
             f.checksum AS f_checksum,
             f.created_by AS f_created_by,
-            f.created_at AS f_created_at
+            f.created_at AS f_created_at,
+            sf.id AS sf_id,
+            sf.key AS sf_key,
+            sf.bucket AS sf_bucket,
+            sf.content_type AS sf_content_type,
+            sf.size_bytes AS sf_size_bytes,
+            sf.original_name AS sf_original_name,
+            sf.checksum AS sf_checksum,
+            sf.created_by AS sf_created_by,
+            sf.created_at AS sf_created_at
          FROM lmw_free_assets a
          INNER JOIN file_assets f ON f.id = a.file_asset_id
+         LEFT JOIN file_assets sf ON sf.id = a.sanitized_file_asset_id
          WHERE a.intake_id = ?
          ORDER BY a.position ASC`,
       )
@@ -198,6 +216,15 @@ export class LmwaresFreeIntakesRepository {
         f_checksum: string | null;
         f_created_by: string | null;
         f_created_at: string;
+        sf_id: string | null;
+        sf_key: string | null;
+        sf_bucket: string | null;
+        sf_content_type: string | null;
+        sf_size_bytes: number | null;
+        sf_original_name: string | null;
+        sf_checksum: string | null;
+        sf_created_by: string | null;
+        sf_created_at: string | null;
       }>();
 
     return results.map((row) => ({
@@ -213,7 +240,34 @@ export class LmwaresFreeIntakesRepository {
         createdBy: row.f_created_by,
         createdAt: row.f_created_at,
       },
+      sanitizedFileAsset:
+        row.sf_id &&
+        row.sf_key &&
+        row.sf_bucket &&
+        row.sf_content_type &&
+        row.sf_size_bytes !== null &&
+        row.sf_created_at
+          ? {
+              id: row.sf_id,
+              key: row.sf_key,
+              bucket: row.sf_bucket,
+              contentType: row.sf_content_type,
+              sizeBytes: row.sf_size_bytes,
+              originalName: row.sf_original_name,
+              checksum: row.sf_checksum,
+              createdBy: row.sf_created_by,
+              createdAt: row.sf_created_at,
+            }
+          : null,
     }));
+  }
+
+  async getAssetById(id: string): Promise<FreeIntakeAsset | null> {
+    const row = await this.db
+      .prepare(`SELECT * FROM lmw_free_assets WHERE id = ?`)
+      .bind(id)
+      .first<FreeIntakeAssetRow>();
+    return row ? mapFreeIntakeAsset(row) : null;
   }
 
   async countAssets(intakeId: string): Promise<number> {
@@ -250,6 +304,34 @@ export class LmwaresFreeIntakesRepository {
       .bind(id)
       .first<FreeIntakeAssetRow>();
     return mapFreeIntakeAsset(row!);
+  }
+
+  async markAssetSanitized(data: {
+    assetId: string;
+    sanitizedFileAssetId: string;
+    checksum: string;
+    width: number;
+    height: number;
+  }): Promise<FreeIntakeAsset | null> {
+    await this.db
+      .prepare(
+        `UPDATE lmw_free_assets
+         SET sanitized_file_asset_id = ?,
+             safety_status = 'sanitized',
+             checksum = ?,
+             width = ?,
+             height = ?
+         WHERE id = ?`,
+      )
+      .bind(
+        data.sanitizedFileAssetId,
+        data.checksum,
+        data.width,
+        data.height,
+        data.assetId,
+      )
+      .run();
+    return this.getAssetById(data.assetId);
   }
 
   async submit(intakeId: string, requestId: string | null): Promise<FreeIntake | null> {
@@ -327,17 +409,19 @@ export class LmwaresFreeIntakesRepository {
   }
 
   async claimNextGenerationJob(claimedBy: string, leaseSeconds = 900): Promise<FreeGenerationJob | null> {
+    const now = nowIso();
     const row = await this.db
       .prepare(
         `SELECT * FROM lmw_generation_jobs
          WHERE status = 'queued'
+            OR (status = 'claimed' AND lease_until IS NOT NULL AND lease_until <= ?)
          ORDER BY queued_at ASC, created_at ASC
          LIMIT 1`,
       )
+      .bind(now)
       .first<FreeGenerationJobRow>();
     if (!row) return null;
 
-    const now = nowIso();
     const leaseUntil = new Date(Date.now() + leaseSeconds * 1000).toISOString();
     const result = await this.db
       .prepare(
@@ -345,12 +429,16 @@ export class LmwaresFreeIntakesRepository {
          SET status = 'claimed',
              attempt = attempt + 1,
              lease_until = ?,
-             claimed_by = ?,
-             started_at = COALESCE(started_at, ?),
-             updated_at = ?
-         WHERE id = ? AND status = 'queued'`,
+              claimed_by = ?,
+              started_at = COALESCE(started_at, ?),
+              updated_at = ?
+         WHERE id = ?
+           AND (
+             status = 'queued'
+             OR (status = 'claimed' AND lease_until IS NOT NULL AND lease_until <= ?)
+           )`,
       )
-      .bind(leaseUntil, claimedBy, now, now, row.id)
+      .bind(leaseUntil, claimedBy, now, now, row.id, now)
       .run();
     if ((result.meta.changes ?? 0) < 1) return null;
 
@@ -379,8 +467,19 @@ export class LmwaresFreeIntakesRepository {
     if (!intake) return null;
 
     const now = nowIso();
-    await this.db
-      .prepare(
+    const notificationId = newId();
+    const notificationDedupeKey = `free-site-published:${intake.id}:v1`;
+    const notificationPayload = JSON.stringify({
+      intakeId: intake.id,
+      userId: intake.userId,
+      slug: intake.slug,
+      siteName: intake.siteName,
+      publicUrl: data.publicUrl,
+    });
+
+    await this.db.batch([
+      this.db
+        .prepare(
         `INSERT INTO lmw_published_sites
           (slug, intake_id, version, manifest_key, index_key, status, created_at, updated_at)
          VALUES (?, ?, 1, ?, ?, 'active', ?, ?)
@@ -392,20 +491,16 @@ export class LmwaresFreeIntakesRepository {
           status = 'active',
           updated_at = excluded.updated_at`,
       )
-      .bind(intake.slug, intake.id, data.manifestKey, data.indexKey, now, now)
-      .run();
-
-    await this.db
-      .prepare(
+        .bind(intake.slug, intake.id, data.manifestKey, data.indexKey, now, now),
+      this.db
+        .prepare(
         `UPDATE lmw_generation_jobs
          SET status = 'succeeded', completed_at = ?, updated_at = ?
          WHERE id = ?`,
       )
-      .bind(now, now, data.jobId)
-      .run();
-
-    await this.db
-      .prepare(
+        .bind(now, now, data.jobId),
+      this.db
+        .prepare(
         `UPDATE lmw_free_intakes
          SET status = 'published',
              published_url = ?,
@@ -415,8 +510,28 @@ export class LmwaresFreeIntakesRepository {
              updated_at = ?
          WHERE id = ?`,
       )
-      .bind(data.publicUrl, now, now, intake.id)
-      .run();
+        .bind(data.publicUrl, now, now, intake.id),
+      this.db
+        .prepare(
+          `INSERT INTO lmw_notifications
+            (id, user_id, intake_id, channel, template, to_address, dedupe_key, status,
+             attempt, max_attempts, next_attempt_at, payload, created_at, updated_at)
+           SELECT ?, user_id, id, 'email', 'free-site-published', contact_email, ?, 'pending',
+                  0, 5, ?, ?, ?, ?
+           FROM lmw_free_intakes
+           WHERE id = ? AND user_id IS NOT NULL
+           ON CONFLICT(dedupe_key) DO NOTHING`,
+        )
+        .bind(
+          notificationId,
+          notificationDedupeKey,
+          now,
+          notificationPayload,
+          now,
+          now,
+          intake.id,
+        ),
+    ]);
 
     return this.getById(intake.id);
   }

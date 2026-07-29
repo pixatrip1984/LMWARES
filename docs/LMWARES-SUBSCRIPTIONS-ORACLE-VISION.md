@@ -51,18 +51,21 @@ renta para conservar la licencia.
 | Plan | Resultado inicial | Módulos | Publicación | Administración | Marketing |
 | --- | --- | --- | --- | --- | --- |
 | Free | Página informativa de una sola pantalla y una sola generación | Contacto, redes, texto esencial, hasta 10 imágenes de 5 MB | `slug.lmwares.com` | Sin portal operativo; sólo estado, enlace y QR | No |
-| Starter | Landing + panel + hasta 2 complementos | Blog, Galerías, Catálogo, Formulario, Eventos o Docs | Subdominio LMWares y dominio personalizado | Según mantenimiento | Posible en el futuro |
-| Pro | Sistema completo configurable | Todo Starter + Carrito + Optimization | Subdominio LMWares y dominio personalizado | Según mantenimiento | Posible en el futuro |
+| Starter | Landing + panel + hasta 2 complementos | Blog, Galerías, Catálogo, Formulario, Eventos o Docs | Empieza en `slug.lmwares.com`; dominio personalizado opcional después | Según mantenimiento | Posible en el futuro |
+| Pro | Sistema completo configurable | Todo Starter + Carrito + Optimization | Empieza en `slug.lmwares.com`; dominio personalizado opcional después | Según mantenimiento | Posible en el futuro |
 
 Reglas ya acordadas:
 
 - Landing y Panel forman la base de Starter y Pro.
 - Starter permite hasta dos complementos.
 - Carrito y Optimization requieren Pro.
-- Todos los planes reciben un subdominio LMWares.
-- Starter y Pro pueden operar además en un dominio personalizado.
+- Todos los planes se despliegan primero en un subdominio LMWares.
+- Starter y Pro pueden migrar después a un dominio personalizado.
 - El dominio final no sustituye el subdominio; éste conserva valor como ruta de
   revisión, recuperación y operación administrada.
+- Compartir el patrón público `slug.lmwares.com` no elimina el aislamiento
+  técnico de Starter y Pro: cada proyecto pagado conserva su propio contrato,
+  repositorio, runtime y recursos cuando corresponda.
 
 ## 4. Dos capas distintas: plan y acompañamiento
 

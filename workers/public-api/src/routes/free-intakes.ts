@@ -11,7 +11,13 @@ import {
   submitFreeIntakeSchema,
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
+import { assertFreeImageDimensions, inspectFreeImage } from '../lib/free-image';
 import { verifyTurnstile } from '../lib/turnstile';
+import {
+  assertIntakeOwner,
+  assertTrustedPublicOrigin,
+  requirePublicSession,
+} from '../middleware/public-auth';
 
 export const freeIntakes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -43,6 +49,8 @@ freeIntakes.get('/slugs/:slug', async (c) => {
 });
 
 freeIntakes.post('/', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
   const raw = await readJson(c);
   const input = parseInput(createFreeIntakeSchema, {
     ...(raw as Record<string, unknown>),
@@ -56,10 +64,11 @@ freeIntakes.post('/', async (c) => {
   if (!available) throw new AppError('conflict', 'Ese subdominio ya no está disponible.');
 
   const intake = await repos.lmwaresFreeIntakes.create({
+    userId: session.user.id,
     slug: input.slug,
     siteName: input.siteName,
     contactName: input.contactName,
-    contactEmail: input.contactEmail,
+    contactEmail: session.user.email,
     businessDescription: input.businessDescription,
     audience: input.audience,
     sector: input.sector ?? null,
@@ -75,6 +84,7 @@ freeIntakes.post('/', async (c) => {
 
   await repos.audit.record({
     actorType: 'public',
+    actorId: session.user.id,
     action: 'lmwares.free_intake.create',
     entityType: 'lmwares_free_intake',
     entityId: intake.id,
@@ -87,10 +97,13 @@ freeIntakes.post('/', async (c) => {
 });
 
 freeIntakes.post('/:id/images', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
   const intakeId = c.req.param('id')!;
   const repos = createRepositories(c.env.DB);
   const intake = await repos.lmwaresFreeIntakes.getById(intakeId);
   if (!intake) throw AppError.notFound('Solicitud Free');
+  assertIntakeOwner(intake, session.user.id);
   if (intake.status !== 'draft') {
     throw new AppError('conflict', 'Esta solicitud ya fue enviada y no acepta más imágenes.');
   }
@@ -100,7 +113,12 @@ freeIntakes.post('/:id/images', async (c) => {
     throw new AppError('validation_error', `El plan Free permite máximo ${FREE_INTAKE_IMAGE_LIMIT} imágenes.`);
   }
 
-  const body = await c.req.parseBody();
+  let body: Record<string, string | File | (string | File)[]>;
+  try {
+    body = await c.req.parseBody();
+  } catch {
+    throw new AppError('validation_error', 'La carga multipart de la imagen es inválida.');
+  }
   const file = firstFile(body.image);
   if (!file) throw new AppError('validation_error', 'Debes adjuntar una imagen.');
   if (file.size <= 0) throw new AppError('validation_error', 'La imagen está vacía.');
@@ -113,17 +131,18 @@ freeIntakes.post('/:id/images', async (c) => {
     throw new AppError('validation_error', 'La imagen supera el máximo de 5 MB.');
   }
 
-  const detected = detectImageType(new Uint8Array(bytes));
-  if (!detected) {
+  const inspected = inspectFreeImage(new Uint8Array(bytes));
+  if (!inspected) {
     throw new AppError('validation_error', 'Formato no permitido. Usa JPG, PNG o WebP.');
   }
+  assertFreeImageDimensions(inspected.width, inspected.height);
 
   const checksum = await sha256Hex(bytes);
   const fileId = crypto.randomUUID();
-  const key = freeIntakeOriginalImageKey(intakeId, fileId, detected.ext);
+  const key = freeIntakeOriginalImageKey(intakeId, fileId, inspected.extension);
 
   await c.env.MEDIA.put(key, bytes, {
-    httpMetadata: { contentType: detected.contentType },
+    httpMetadata: { contentType: inspected.contentType },
     customMetadata: {
       intakeId,
       originalName: safeFileName(file.name),
@@ -132,30 +151,44 @@ freeIntakes.post('/:id/images', async (c) => {
     },
   });
 
-  const fileAsset = await repos.fileAssets.create({
-    key,
-    bucket: 'MEDIA',
-    contentType: detected.contentType,
-    sizeBytes: bytes.byteLength,
-    originalName: safeFileName(file.name),
-    checksum,
-    createdBy: `public:${intakeId}`,
-  });
-  const asset = await repos.lmwaresFreeIntakes.addAsset({
-    intakeId,
-    fileAssetId: fileAsset.id,
-    checksum,
-    position: currentAssets,
-    role: 'source',
-    safetyStatus: 'quarantined',
-  });
+  let asset;
+  let fileAsset;
+  try {
+    fileAsset = await repos.fileAssets.create({
+      key,
+      bucket: 'MEDIA',
+      contentType: inspected.contentType,
+      sizeBytes: bytes.byteLength,
+      originalName: safeFileName(file.name),
+      checksum,
+      createdBy: `public:${intakeId}`,
+    });
+    asset = await repos.lmwaresFreeIntakes.addAsset({
+      intakeId,
+      fileAssetId: fileAsset.id,
+      checksum,
+      position: currentAssets,
+      role: 'source',
+      safetyStatus: 'quarantined',
+    });
+  } catch (error) {
+    await c.env.MEDIA.delete(key);
+    throw error;
+  }
 
   await repos.audit.record({
     actorType: 'public',
+    actorId: session.user.id,
     action: 'lmwares.free_intake.image_upload',
     entityType: 'lmwares_free_intake',
     entityId: intakeId,
-    metadata: { assetId: asset.id, fileAssetId: fileAsset.id, contentType: detected.contentType },
+    metadata: {
+      assetId: asset.id,
+      fileAssetId: fileAsset.id,
+      contentType: inspected.contentType,
+      width: inspected.width,
+      height: inspected.height,
+    },
     ip: c.req.header('CF-Connecting-IP') ?? null,
     userAgent: c.req.header('User-Agent') ?? null,
   });
@@ -169,6 +202,8 @@ freeIntakes.post('/:id/images', async (c) => {
 });
 
 freeIntakes.post('/:id/submit', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
   const intakeId = c.req.param('id')!;
   const raw = await readJson(c);
   const input = parseInput(submitFreeIntakeSchema, raw);
@@ -177,6 +212,7 @@ freeIntakes.post('/:id/submit', async (c) => {
   const repos = createRepositories(c.env.DB);
   const intake = await repos.lmwaresFreeIntakes.getById(intakeId);
   if (!intake) throw AppError.notFound('Solicitud Free');
+  assertIntakeOwner(intake, session.user.id);
 
   const assetCount = await repos.lmwaresFreeIntakes.countAssets(intakeId);
   if (assetCount < 1) throw new AppError('validation_error', 'Debes subir al menos una imagen.');
@@ -207,6 +243,7 @@ freeIntakes.post('/:id/submit', async (c) => {
 
   await repos.audit.record({
     actorType: 'public',
+    actorId: session.user.id,
     action: 'lmwares.free_intake.submit',
     entityType: 'lmwares_free_intake',
     entityId: intakeId,
@@ -226,10 +263,12 @@ freeIntakes.post('/:id/submit', async (c) => {
 });
 
 freeIntakes.get('/:id/status', async (c) => {
+  const session = await requirePublicSession(c);
   const intakeId = c.req.param('id')!;
   const repos = createRepositories(c.env.DB);
   const intake = await repos.lmwaresFreeIntakes.getById(intakeId);
   if (!intake) throw AppError.notFound('Solicitud Free');
+  assertIntakeOwner(intake, session.user.id);
 
   const [contacts, assets, job] = await Promise.all([
     repos.lmwaresFreeIntakes.listContacts(intakeId),
@@ -289,37 +328,6 @@ async function verifyPublicTurnstile(
 function firstFile(value: unknown): File | null {
   const candidate = Array.isArray(value) ? value[0] : value;
   return candidate instanceof File ? candidate : null;
-}
-
-function detectImageType(bytes: Uint8Array): { contentType: string; ext: string } | null {
-  if (
-    bytes.length >= 8 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  ) {
-    return { contentType: 'image/png', ext: 'png' };
-  }
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return { contentType: 'image/jpeg', ext: 'jpg' };
-  }
-  if (
-    bytes.length >= 12 &&
-    ascii(bytes, 0, 4) === 'RIFF' &&
-    ascii(bytes, 8, 12) === 'WEBP'
-  ) {
-    return { contentType: 'image/webp', ext: 'webp' };
-  }
-  return null;
-}
-
-function ascii(bytes: Uint8Array, start: number, end: number) {
-  return String.fromCharCode(...bytes.slice(start, end));
 }
 
 async function sha256Hex(bytes: ArrayBuffer) {
