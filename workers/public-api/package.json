@@ -9,6 +9,7 @@
     "deploy:production": "wrangler deploy --env production",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "test": "node --test src/lib/*.test.mjs",
     "check:production": "wrangler deploy --env production --dry-run",
     "cf-typegen": "wrangler types",
     "lint": "echo \"(public-api) no lint configured\""

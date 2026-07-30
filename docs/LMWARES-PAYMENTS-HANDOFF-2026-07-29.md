@@ -19,6 +19,8 @@ subscription and D1 persists it as active with the next monthly debit.
 - La aplicación `LMWares Suscripciones` (`7312500347579301`) pertenece a la
   cuenta real y no se usa para esta prueba Seller TEST + Buyer TEST.
 - Callback: `https://api.lmwares.com/payments/webhooks/mercado-pago`.
+- Suscripciones envía esa URL también como `notification_url` en cada
+  `POST /preapproval`; la configuración del panel por sí sola no cubre esta API.
 - Test topic selected: `Planes y suscripciones`.
 - Cloudflare secret names:
   - `MERCADO_PAGO_ACCESS_TOKEN`
@@ -105,20 +107,19 @@ results.
 - Test creation requires `MERCADO_PAGO_SUBSCRIPTIONS_TEST_PAYER_EMAIL`; no
   synthetic or real-account payer is hardcoded.
 - The hosted return URL points to `/pago/{proposalId}`.
+- Each new preapproval embeds the canonical HTTPS `notification_url`.
 - A provider-verified webhook smoke test returned HTTP 200 and persisted a
   `processed` subscription event.
-- Public API deployment `0b43f04a-8c8a-4632-b6a8-a25c27bbf9af` is active at
+- Public API deployment `d48e63ae-2f9d-4a73-a867-0831c5153527` is active at
   100%; `https://api.lmwares.com/health` returned HTTP 200 after deployment.
 
 ## Next gate
 
-1. In the Seller TEST application, configure the callback and select `Planes y
-   suscripciones`.
-2. Replace `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET` with the signing
-   secret from that exact Seller TEST application.
-3. Confirm a provider-originated `subscription_preapproval` notification is
+1. Keep the Seller TEST callback and its signing secret configured as diagnostic
+   support, but rely on the `notification_url` embedded during creation.
+2. Confirm a provider-originated `subscription_preapproval` notification is
    delivered and recorded with a validated signature.
-4. Keep the subscription active until its first scheduled debit to validate
+3. Keep the subscription active until its first scheduled debit to validate
    `subscription_authorized_payment`, charge persistence and retry state.
-5. Do not enable real production charges until test mode is removed and the
+4. Do not enable real production charges until test mode is removed and the
    commercial amount, cancellation and notification policies are approved.

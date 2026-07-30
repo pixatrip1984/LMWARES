@@ -95,6 +95,7 @@ try {
       currency_id = 'MXN'
     }
     back_url = "https://contratar.lmwares.com/pago/$([Uri]::EscapeDataString($ProposalId))"
+    notification_url = 'https://api.lmwares.com/payments/webhooks/mercado-pago'
     status = 'pending'
   } | ConvertTo-Json -Depth 5 -Compress
 

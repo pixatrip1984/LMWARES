@@ -133,17 +133,22 @@ export async function createMercadoPagoPreapproval(input: {
   payerEmail: string;
   amountCents: number;
   currency: 'MXN';
+  publicApiUrl: string;
   publicWebUrl: string;
   proposalId: string;
 }): Promise<MercadoPagoPreapproval> {
+  const notificationUrl = publicHttpsUrl(
+    input.publicApiUrl,
+    '/payments/webhooks/mercado-pago',
+  );
   const backUrl = publicHttpsUrl(
     input.publicWebUrl,
     `/pago/${encodeURIComponent(input.proposalId)}`,
   );
-  if (!backUrl) {
+  if (!notificationUrl || !backUrl) {
     throw new AppError(
       'internal_error',
-      'La URL pública de LMWares no permite autorizar suscripciones.',
+      'Las URLs públicas de LMWares no permiten autorizar suscripciones.',
     );
   }
 
@@ -165,6 +170,7 @@ export async function createMercadoPagoPreapproval(input: {
         currency_id: input.currency,
       },
       back_url: backUrl,
+      notification_url: notificationUrl,
       status: 'pending',
     }),
   });

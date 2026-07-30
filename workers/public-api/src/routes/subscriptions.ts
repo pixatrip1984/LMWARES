@@ -79,6 +79,7 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
         payerEmail: subscriptionPayerEmail(c.env, session.user.email),
         amountCents: subscription.amountCents,
         currency: subscription.currency,
+        publicApiUrl: c.env.PUBLIC_API_URL,
         publicWebUrl: c.env.PUBLIC_WEB_URL,
         proposalId: proposal.id,
       }));
