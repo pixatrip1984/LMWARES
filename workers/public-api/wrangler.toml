@@ -33,7 +33,8 @@ allowed_sender_addresses = ["notificaciones@lmwares.com"]
 [env.production]
 name = "starter-public-api"
 routes = [
-  { pattern = "api.lmwares.com", custom_domain = true }
+  { pattern = "api.lmwares.com", custom_domain = true },
+  { pattern = "*.lmwares.com/*", zone_name = "lmwares.com" }
 ]
 
 [env.production.vars]

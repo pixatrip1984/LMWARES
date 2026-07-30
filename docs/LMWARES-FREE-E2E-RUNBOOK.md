@@ -51,6 +51,27 @@ La validación local más reciente publicó:
 El binding de correo de Wrangler fue local y simulado; no se envió un mensaje
 real.
 
+## Wildcard remoto validado
+
+Fecha: 2026-07-30
+
+El dominio administrado ya resuelve hostnames nuevos hacia el Public API Worker:
+
+- DNS proxy `*.lmwares.com`;
+- ruta `*.lmwares.com/*` hacia `starter-public-api`;
+- HTTPS válido en un hostname aleatorio;
+- respuesta controlada `404 Sitio Free no encontrado` para un slug inexistente;
+- 16 subdominios proxy preexistentes protegidos mediante rutas exactas sin
+  script;
+- los 16 conservaron el mismo código HTTP antes y después de activar el
+  wildcard;
+- Worker desplegado al 100% con la versión
+  `7cc90f39-3e61-4ae7-9240-254d2a80e3ad`.
+
+La base D1 remota todavía no contenía sitios Free publicados al cerrar esta
+prueba. Falta publicar el primer sitio real y comprobar su HTML desde una red
+externa; el wildcard por sí solo no valida el runner ni la notificación.
+
 ## OAuth implementado
 
 Google usa Authorization Code server-side con:
@@ -91,10 +112,32 @@ pruebas reales:
    - Revisar inbox, spam y logs del proveedor.
 
 3. **Wildcard de publicación**
-   - Configurar DNS proxy y ruta Worker para `*.lmwares.com/*`.
-   - Confirmar HTTPS y certificado wildcard.
-   - Abrir la URL real desde una red externa.
-   - Confirmar que el original de R2 sigue devolviendo `404`.
+   - DNS proxy, ruta Worker, HTTPS y aislamiento de subdominios existentes:
+     aprobado el 2026-07-30.
+   - Pendiente: abrir la primera publicación Free real desde una red externa.
+   - Pendiente: confirmar que el original de R2 sigue devolviendo `404`.
+
+   No se debe crear la ruta amplia directamente. `lmwares.com` ya contiene
+   subdominios administrados por Pages, Workers y otros orígenes. Antes de
+   activar el wildcard se deben crear rutas exactas sin script para todos los
+   hosts proxy existentes; esas rutas más específicas conservan sus orígenes.
+   El configurador aplica el orden seguro: exclusiones, DNS wildcard y ruta
+   wildcard al final.
+
+   ```powershell
+   npm run lmwares:wildcard:audit
+   npm run lmwares:wildcard:apply
+   npm run lmwares:wildcard:audit
+   ```
+
+   El token usado por `CLOUDFLARE_API_TOKEN` requiere, como mínimo, lectura de
+   zona/DNS, edición de DNS y `Workers Routes Read`/`Workers Routes Write` para
+   `lmwares.com`. El script nunca imprime el token.
+
+   Después de aplicar las exclusiones, `workers/public-api/wrangler.toml`
+   conserva `*.lmwares.com/*` como fuente de verdad del Worker. No se debe
+   eliminar esa ruta en despliegues posteriores ni crear el wildcard a mano sin
+   ejecutar antes la auditoría.
 
 4. **Protecciones públicas**
    - Cargar el secreto real de Turnstile.

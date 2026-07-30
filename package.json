@@ -41,6 +41,8 @@
     "lmwares:agents:test": "node --test scripts/lmwares-agent-runner/*.test.mjs",
     "lmwares:free:run": "node scripts/lmwares-free-site-runner/cli.mjs",
     "lmwares:free:test": "node --test scripts/lmwares-free-site-runner/*.test.mjs",
+    "lmwares:wildcard:audit": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/configure-lmwares-free-wildcard.ps1",
+    "lmwares:wildcard:apply": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/configure-lmwares-free-wildcard.ps1 -Apply",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
