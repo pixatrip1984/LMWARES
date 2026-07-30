@@ -1007,9 +1007,20 @@ export function PackageBuilderPage() {
               </button>
             ) : null}
 
-            <button className="lmw-builder-primary" onClick={() => setPreviewOpen(true)} type="button">
-              Ver mi sitio <span>↗</span>
-            </button>
+            {draft.plan === 'free' && freeSubmit.publicUrl ? (
+              <a
+                className="lmw-builder-primary"
+                href={freeSubmit.publicUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Ver mi sitio <span>↗</span>
+              </a>
+            ) : (
+              <button className="lmw-builder-primary" onClick={() => setPreviewOpen(true)} type="button">
+                Ver ejemplo <span>↗</span>
+              </button>
+            )}
           </aside>
         </main>
       ) : (
@@ -1060,7 +1071,11 @@ export function PackageBuilderPage() {
               </article>
               <article>
                 <span>PUBLICACIÓN</span>
-                <h2>{draft.plan === 'free' ? 'tu-negocio.lmwares.com' : 'Subdominio primero'}</h2>
+                <h2>
+                  {draft.plan === 'free'
+                    ? `${normalizeFreeSlug(freeForm.slug) || 'tu-negocio'}.lmwares.com`
+                    : 'Subdominio primero'}
+                </h2>
                 <p>
                   {draft.plan === 'free'
                     ? `${draft.images.length}/${FREE_IMAGE_LIMIT} imágenes preparadas.`

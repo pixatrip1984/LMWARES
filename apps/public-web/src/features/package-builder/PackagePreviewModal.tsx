@@ -300,29 +300,6 @@ function PublicPreview({ draft }: { draft: PackageDraft }) {
         />
       </section>
 
-      {draft.plan === 'free' ? (
-        <section className="lmw-live-free">
-          <span>Plan Free</span>
-          <h2>Pagina informativa unica.</h2>
-          <p>
-            En Free se publica una sola pagina con descripcion, contacto, redes y hasta diez
-            imagenes cargadas por el cliente.
-          </p>
-          <div>
-            {(draft.images.length > 0 ? draft.images : [
-              { id: 'empty-1', name: 'Imagen principal', size: 0, type: 'image/png' },
-              { id: 'empty-2', name: 'Imagen secundaria', size: 0, type: 'image/png' },
-              { id: 'empty-3', name: 'Referencia visual', size: 0, type: 'image/png' },
-            ]).slice(0, 6).map((image, index) => (
-              <figure key={image.id}>
-                <i>{String(index + 1).padStart(2, '0')}</i>
-                <figcaption>{image.name}</figcaption>
-              </figure>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {sections.map((section) => (
         <section
           className={`lmw-live-shot-section lmw-live-shot-section--${section.moduleId}`}
@@ -344,6 +321,28 @@ function PublicPreview({ draft }: { draft: PackageDraft }) {
           )}
         </section>
       ))}
+    </div>
+  );
+}
+
+function FreeExamplePreview() {
+  return (
+    <div className="lmw-free-example">
+      <header className="lmw-free-example__notice">
+        <div>
+          <span>Ejemplo demostrativo</span>
+          <strong>Ferretería El Tornillo</strong>
+        </div>
+        <p>
+          Este ejemplo usa contenido ficticio. No incluye los datos ni las imágenes de tu
+          solicitud. Cuando tu página esté publicada, “Ver mi sitio” abrirá únicamente su URL real.
+        </p>
+      </header>
+      <img
+        alt="Ejemplo demostrativo de una página informativa Free para una ferretería"
+        className="lmw-free-example__poster"
+        src="/assets/free-poster-tests/ferreteria-el-tornillo-poster-test.png"
+      />
     </div>
   );
 }
@@ -610,7 +609,7 @@ export function PackagePreviewModal({
   return (
     <div className="lmw-preview-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        aria-label="Preview funcional de tu paquete"
+        aria-label="Ejemplo demostrativo del paquete"
         aria-modal="true"
         className="lmw-preview-dialog"
         onMouseDown={(event) => event.stopPropagation()}
@@ -627,7 +626,7 @@ export function PackagePreviewModal({
               onClick={() => setMode('public')}
               type="button"
             >
-              Public
+              {draft.plan === 'free' ? 'Ejemplo' : 'Public'}
             </button>
             <button
               aria-disabled={!hasAdmin}
@@ -640,25 +639,36 @@ export function PackagePreviewModal({
               Admin
             </button>
           </div>
-          <button className="lmw-preview-close" onClick={onClose} type="button" aria-label="Cerrar preview">
+          <button className="lmw-preview-close" onClick={onClose} type="button" aria-label="Cerrar ejemplo">
             Cerrar
           </button>
         </header>
 
         <div className="lmw-preview-canvas">
-          {mode === 'admin' ? <AdminPreview draft={draft} /> : <PublicPreview draft={draft} />}
+          {mode === 'admin' ? (
+            <AdminPreview draft={draft} />
+          ) : draft.plan === 'free' ? (
+            <FreeExamplePreview />
+          ) : (
+            <PublicPreview draft={draft} />
+          )}
         </div>
 
         <footer className="lmw-preview-footer">
           <button onClick={onClose} type="button">Editar seleccion</button>
           <div className="lmw-preview-footer__meta">
             <div>
-              <span>{mode === 'public' ? 'Micrositio vertical' : 'Portal administrador'}</span>
+              <span>
+                {mode === 'public'
+                  ? draft.plan === 'free' ? 'Ejemplo público' : 'Micrositio vertical'
+                  : 'Portal administrador'}
+              </span>
               <strong>{draft.plan.toUpperCase()}</strong>
             </div>
             <p>
-              Vista demostrativa para identificar los módulos seleccionados. El diseño y la
-              organización final pueden cambiar según tus necesidades y requerimientos.
+              {draft.plan === 'free'
+                ? 'Demostración fija del formato Free. Tus datos e imágenes sólo aparecerán en la página real después de completar la generación.'
+                : 'Vista demostrativa para identificar los módulos seleccionados. El diseño y la organización final pueden cambiar según tus necesidades y requerimientos.'}
             </p>
           </div>
           <button onClick={onContinue} type="button">Continuar con este paquete</button>
