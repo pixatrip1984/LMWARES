@@ -14,7 +14,10 @@ import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/p
 
 const TEST_SUBSCRIPTION_AMOUNT_CENTS = 1000;
 const TEST_SUBSCRIPTION_PRICING_VERSION = 'technical-monthly-mxn-10-v1';
-const TEST_SUBSCRIPTION_PAYER_EMAIL = 'test@testuser.com';
+// Mercado Pago documents this synthetic payer for pending subscriptions.
+// It keeps both collector and payer inside the test environment until the
+// buyer selects the real test account in the hosted authorization flow.
+const TEST_SUBSCRIPTION_PAYER_EMAIL = 'test_payer@example.com';
 
 export const subscriptions = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
