@@ -14,10 +14,6 @@ import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/p
 
 const TEST_SUBSCRIPTION_AMOUNT_CENTS = 1000;
 const TEST_SUBSCRIPTION_PRICING_VERSION = 'technical-monthly-mxn-10-v1';
-// Mercado Pago documents this synthetic payer for pending subscriptions.
-// It keeps both collector and payer inside the test environment until the
-// buyer selects the real test account in the hosted authorization flow.
-const TEST_SUBSCRIPTION_PAYER_EMAIL = 'test_payer@example.com';
 
 export const subscriptions = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -80,10 +76,7 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
         accessToken,
         subscriptionId: subscription.externalReference,
         plan: proposal.plan,
-        payerEmail:
-          c.env.MERCADO_PAGO_TEST_MODE === '1'
-            ? TEST_SUBSCRIPTION_PAYER_EMAIL
-            : session.user.email,
+        payerEmail: subscriptionPayerEmail(c.env, session.user.email),
         amountCents: subscription.amountCents,
         currency: subscription.currency,
         publicWebUrl: c.env.PUBLIC_WEB_URL,
@@ -233,6 +226,18 @@ function testSubscriptionAccessToken(env: Bindings): string {
     );
   }
   return accessToken;
+}
+
+function subscriptionPayerEmail(env: Bindings, sessionEmail: string): string {
+  if (env.MERCADO_PAGO_TEST_MODE !== '1') return sessionEmail;
+  const payerEmail = env.MERCADO_PAGO_SUBSCRIPTIONS_TEST_PAYER_EMAIL?.trim().toLowerCase();
+  if (!payerEmail || !/^[^@\s]+@testuser\.com$/.test(payerEmail)) {
+    throw new AppError(
+      'internal_error',
+      'Falta configurar el correo del Buyer TEST de la aplicación de Suscripciones.',
+    );
+  }
+  return payerEmail;
 }
 
 function publicSubscription(subscription: PackageSubscription) {

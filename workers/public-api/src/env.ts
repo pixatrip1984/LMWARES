@@ -26,6 +26,8 @@ export interface Bindings {
   MERCADO_PAGO_ACCESS_TOKEN: string;
   /** Access Token de la aplicación separada para Suscripciones. Siempre como secret. */
   MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN?: string;
+  /** Correo real del Buyer TEST emparejado con la aplicación Seller TEST. */
+  MERCADO_PAGO_SUBSCRIPTIONS_TEST_PAYER_EMAIL?: string;
   /** Firma productiva de Webhooks de Checkout Pro; siempre se configura como secret. */
   MERCADO_PAGO_WEBHOOK_SECRET?: string;
   /** Firma de Webhooks de prueba de Checkout Pro; sólo se acepta en modo prueba. */

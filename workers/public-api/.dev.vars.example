@@ -11,6 +11,8 @@ GOOGLE_OAUTH_CLIENT_SECRET=""
 MERCADO_PAGO_ACCESS_TOKEN=""
 # Credencial de PRUEBA de la aplicación separada LMWares Suscripciones.
 MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN=""
+# Correo del Buyer TEST emparejado con el Seller TEST que posee la aplicación.
+MERCADO_PAGO_SUBSCRIPTIONS_TEST_PAYER_EMAIL=""
 # Tus integraciones > lmwares > Webhooks > Modo productivo > Firma secreta.
 MERCADO_PAGO_WEBHOOK_SECRET=""
 # Tus integraciones > lmwares > Webhooks > Modo prueba > Firma secreta.

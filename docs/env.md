@@ -26,6 +26,7 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `GOOGLE_OAUTH_CLIENT_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Secreto OAuth de Google.                    |
 | `MERCADO_PAGO_ACCESS_TOKEN` | **secreto** | `.dev.vars` / `wrangler secret` | Credencial server-side de la aplicación Checkout Pro. |
 | `MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN` | **secreto** | `.dev.vars` / `wrangler secret` | Credencial server-side de la aplicación separada para Suscripciones. |
+| `MERCADO_PAGO_SUBSCRIPTIONS_TEST_PAYER_EMAIL` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Correo del Buyer TEST emparejado con el Seller TEST de Suscripciones. |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC productiva de Checkout Pro. |
 | `MERCADO_PAGO_WEBHOOK_TEST_SECRET` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Firma HMAC de prueba de Checkout Pro. |
 | `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC productiva de la aplicación Suscripciones. |
@@ -98,6 +99,7 @@ npx wrangler@4.105.0 secret put GOOGLE_OAUTH_CLIENT_ID
 npx wrangler@4.105.0 secret put GOOGLE_OAUTH_CLIENT_SECRET
 npx wrangler@4.105.0 secret put MERCADO_PAGO_ACCESS_TOKEN
 npx wrangler@4.105.0 secret put MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN
+npx wrangler@4.105.0 secret put MERCADO_PAGO_SUBSCRIPTIONS_TEST_PAYER_EMAIL
 npx wrangler@4.105.0 secret put MERCADO_PAGO_WEBHOOK_SECRET
 npx wrangler@4.105.0 secret put MERCADO_PAGO_WEBHOOK_TEST_SECRET
 npx wrangler@4.105.0 secret put MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET

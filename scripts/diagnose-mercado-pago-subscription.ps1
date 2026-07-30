@@ -3,6 +3,12 @@ param(
   [Parameter(Mandatory = $true)]
   [ValidatePattern('^[a-zA-Z0-9_-]{1,160}$')]
   [string]$ExternalReference,
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^[^@\s]+@testuser\.com$')]
+  [string]$PayerEmail,
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$')]
+  [string]$ProposalId,
   [switch]$UseStage
 )
 
@@ -81,14 +87,14 @@ try {
   $body = @{
     reason = 'Prueba técnica LMWares Starter mensual'
     external_reference = $ExternalReference
-    payer_email = 'test_payer@example.com'
+    payer_email = $PayerEmail
     auto_recurring = @{
       frequency = 1
       frequency_type = 'months'
       transaction_amount = 10
       currency_id = 'MXN'
     }
-    back_url = 'https://contratar.lmwares.com'
+    back_url = "https://contratar.lmwares.com/pago/$([Uri]::EscapeDataString($ProposalId))"
     status = 'pending'
   } | ConvertTo-Json -Depth 5 -Compress
 
