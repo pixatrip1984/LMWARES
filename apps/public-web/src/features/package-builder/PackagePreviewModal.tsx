@@ -330,18 +330,18 @@ function FreeExamplePreview() {
     <div className="lmw-free-example">
       <header className="lmw-free-example__notice">
         <div>
-          <span>Ejemplo demostrativo</span>
-          <strong>Ferretería El Tornillo</strong>
+          <span>Demostración de entrega Free</span>
+          <strong>Dr. Mateo Ríos</strong>
         </div>
         <p>
-          Este ejemplo usa contenido ficticio. No incluye los datos ni las imágenes de tu
-          solicitud. Cuando tu página esté publicada, “Ver mi sitio” abrirá únicamente su URL real.
+          Muestra fija basada en la plantilla de una página Free: portada, información esencial,
+          servicios, galería y contacto. No utiliza los datos ni las imágenes de tu solicitud.
         </p>
       </header>
       <img
-        alt="Ejemplo demostrativo de una página informativa Free para una ferretería"
+        alt="Demostración de una página informativa Free para un médico"
         className="lmw-free-example__poster"
-        src="/assets/free-poster-tests/ferreteria-el-tornillo-poster-test.png"
+        src="/assets/free-poster-tests/dr-mateo-rios-poster-test.png"
       />
     </div>
   );

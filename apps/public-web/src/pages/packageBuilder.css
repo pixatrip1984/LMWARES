@@ -1314,30 +1314,6 @@
   padding: 0;
 }
 
-.lmw-free-terms {
-  align-items: start;
-  border-top: 1px solid rgba(93, 141, 217, 0.24);
-  display: flex !important;
-  flex-direction: row;
-  gap: 10px !important;
-  padding-top: 14px;
-}
-
-.lmw-free-terms input {
-  min-height: auto;
-  margin-top: 2px;
-}
-
-.lmw-free-terms span {
-  color: rgba(224, 235, 252, 0.76) !important;
-  font-family: inherit !important;
-  font-size: 10px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0 !important;
-  line-height: 1.55;
-  text-transform: none !important;
-}
-
 .lmw-free-assets {
   align-items: center;
   background: linear-gradient(135deg, rgba(4, 17, 39, 0.94), rgba(1, 7, 18, 0.95));
@@ -1847,6 +1823,67 @@
 .lmw-summary-grid p { color: var(--builder-muted); font-size: 9px; line-height: 1.55; }
 .lmw-summary-grid ul { color: rgba(224, 235, 252, 0.68); display: grid; font-size: 8px; gap: 4px; list-style: none; margin: 11px 0 0; padding: 0; }
 .lmw-summary-grid li::before { color: var(--builder-blue); content: '✓'; margin-right: 6px; }
+
+.lmw-summary-consent {
+  background:
+    linear-gradient(135deg, rgba(8, 31, 68, 0.88), rgba(3, 12, 28, 0.94)),
+    radial-gradient(circle at 100% 0%, rgba(47, 132, 255, 0.2), transparent 48%);
+  border: 1px solid rgba(80, 151, 255, 0.54);
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 17px 18px;
+}
+
+.lmw-summary-consent label {
+  align-items: start;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+}
+
+.lmw-summary-consent input {
+  accent-color: #2d82ff;
+  flex: 0 0 auto;
+  height: 17px;
+  margin: 2px 0 0;
+  width: 17px;
+}
+
+.lmw-summary-consent span {
+  color: rgba(224, 235, 252, 0.76);
+  display: grid;
+  font-size: 10px;
+  gap: 5px;
+  line-height: 1.55;
+}
+
+.lmw-summary-consent strong {
+  color: #f7fbff;
+  font-family: var(--builder-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.lmw-summary-consent small {
+  border-top: 1px solid rgba(94, 151, 241, 0.2);
+  color: rgba(188, 211, 245, 0.58);
+  font-size: 8px;
+  line-height: 1.5;
+  padding: 9px 29px 0;
+}
+
+.lmw-summary-main > .lmw-summary-error {
+  background: rgba(71, 7, 15, 0.48);
+  border-left: 3px solid #ff543c;
+  color: #ff9a88;
+  font-family: var(--builder-mono);
+  font-size: 9px;
+  margin: 12px 0 0;
+  max-width: none;
+  padding: 12px 14px;
+}
 
 .lmw-summary-actions {
   display: grid;

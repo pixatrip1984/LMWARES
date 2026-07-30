@@ -847,14 +847,6 @@ export function PackageBuilderPage() {
                     ))}
                   </div>
 
-                  <label className="lmw-free-terms">
-                    <input
-                      checked={freeForm.termsAccepted}
-                      onChange={(event) => updateFreeForm({ termsAccepted: event.target.checked })}
-                      type="checkbox"
-                    />
-                    <span>Acepto que LMWares use esta información e imágenes para generar y publicar una página informativa Free.</span>
-                  </label>
                 </section>
 
                 <section className="lmw-free-assets">
@@ -1088,6 +1080,34 @@ export function PackageBuilderPage() {
                 <p>{draft.marketing ? 'Se evaluará como servicio separado.' : 'Puedes añadirlo antes de enviar.'}</p>
               </article>
             </div>
+
+            {draft.plan === 'free' ? (
+              <section className="lmw-summary-consent" aria-labelledby="free-publication-consent">
+                <label>
+                  <input
+                    checked={freeForm.termsAccepted}
+                    onChange={(event) => {
+                      updateFreeForm({ termsAccepted: event.target.checked });
+                      if (event.target.checked) setFileError('');
+                    }}
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong id="free-publication-consent">Autorización final de publicación</strong>
+                    Acepto que LMWares use la información e imágenes enviadas para generar y
+                    publicar esta página informativa Free.
+                  </span>
+                </label>
+                <small>
+                  El ejemplo no necesita autorización. Esta casilla corresponde únicamente a tu
+                  solicitud real.
+                </small>
+              </section>
+            ) : null}
+
+            {fileError ? (
+              <p className="lmw-summary-error" role="alert">{fileError}</p>
+            ) : null}
 
             <div className="lmw-summary-actions">
               <button onClick={() => setView('package')} type="button">← Volver a configurar</button>
