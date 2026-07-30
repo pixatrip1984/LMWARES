@@ -128,7 +128,6 @@ export async function createMercadoPagoPreference(input: {
 
 export async function createMercadoPagoPreapproval(input: {
   accessToken: string;
-  testMode: boolean;
   subscriptionId: string;
   plan: 'starter' | 'pro';
   payerEmail: string;
@@ -154,9 +153,6 @@ export async function createMercadoPagoPreapproval(input: {
       Accept: 'application/json',
       Authorization: `Bearer ${input.accessToken}`,
       'Content-Type': 'application/json',
-      ...(input.testMode && input.accessToken.startsWith('TEST-')
-        ? { 'X-scope': 'stage' }
-        : {}),
     },
     body: JSON.stringify({
       reason: `Prueba técnica LMWares · ${capitalize(input.plan)} mensual`,
