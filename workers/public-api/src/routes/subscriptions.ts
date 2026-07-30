@@ -78,6 +78,7 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
       recovered ??
       (await createMercadoPagoPreapproval({
         accessToken,
+        testMode: c.env.MERCADO_PAGO_TEST_MODE === '1',
         subscriptionId: subscription.externalReference,
         plan: proposal.plan,
         payerEmail:
