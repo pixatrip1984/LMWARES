@@ -12,8 +12,9 @@ creada en Mercado Pago con estado `pending`.
 - Suscripción: MXN $10 cada mes, mínimo aceptado por Mercado Pago en esta prueba.
 - Moneda: MXN.
 - Ambiente: credenciales de prueba con `MERCADO_PAGO_TEST_MODE=1`.
-- Pagador API en sandbox: `test@testuser.com`; la cuenta Google sólo conserva la
-  propiedad interna de la propuesta y no se mezcla con el vendedor de prueba.
+- Pagador API en sandbox: correo generado del Buyer TEST emparejado; se guarda como
+  secreto y nunca se hardcodea. La cuenta Google sólo conserva la propiedad interna
+  de la propuesta y no se mezcla con el vendedor de prueba.
 - Requisito: propuesta `paid` y `payment_review_required=0`.
 - No valida todavía precios reales, fecha contractual de inicio, gracia ni reembolsos.
 

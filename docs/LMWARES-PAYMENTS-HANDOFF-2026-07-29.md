@@ -6,6 +6,11 @@ Checkout Pro and Subscriptions now use separate Mercado Pago applications,
 Access Tokens and Webhook signing secrets. The one-time payment flow remains
 isolated from the recurring flow.
 
+El postmortem completo de la investigación, incluyendo las identidades de prueba,
+los errores de sandbox y la inconsistencia observada en el simulador de Webhooks,
+está en
+[`MERCADO-PAGO-SUBSCRIPTIONS-SANDBOX-POSTMORTEM-2026-07-30.md`](./MERCADO-PAGO-SUBSCRIPTIONS-SANDBOX-POSTMORTEM-2026-07-30.md).
+
 The recurring sandbox is now validated end to end with a Seller TEST
 application and a separate Buyer TEST account. Mercado Pago authorized the
 subscription and D1 persists it as active with the next monthly debit.
