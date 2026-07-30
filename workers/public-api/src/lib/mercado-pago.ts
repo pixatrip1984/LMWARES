@@ -45,6 +45,13 @@ export interface MercadoPagoAuthorizedPayment {
   paymentStatus: string | null;
 }
 
+export function mercadoPagoProviderDiagnostic(error: unknown): string {
+  if (!(error instanceof AppError)) return 'unexpected_error';
+  const diagnostic = error.details?.providerDiagnostic?.[0];
+  if (diagnostic && /^[a-z0-9_:-]{1,80}$/.test(diagnostic)) return diagnostic;
+  return `app_${error.code}`;
+}
+
 export async function createMercadoPagoPreference(input: {
   accessToken: string;
   proposal: PackageProposal;
@@ -555,17 +562,22 @@ function providerError(action: string, status: number, payload: unknown): AppErr
     return new AppError(
       'validation_error',
       'Mercado Pago rechazó el monto porque no alcanza el mínimo permitido para la suscripción.',
+      { providerDiagnostic: ['amount_below_minimum'] },
     );
   }
   if (status === 400 && /payer and collector must be real or test users/i.test(safeProviderMessage)) {
     return new AppError(
       'validation_error',
       'Mercado Pago rechazó una mezcla entre identidades reales y de prueba.',
+      { providerDiagnostic: ['mixed_test_and_real_users'] },
     );
   }
+  const providerDiagnostic =
+    status >= 500 ? 'provider_internal_error' : `provider_http_${Math.max(0, status)}`;
   return new AppError(
     'internal_error',
     `No fue posible ${action} en Mercado Pago. Revisa las credenciales de prueba.`,
+    { providerDiagnostic: [providerDiagnostic] },
   );
 }
 

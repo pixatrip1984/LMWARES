@@ -24,9 +24,12 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `FREE_RUNNER_TOKEN`   | **secreto**     | `.dev.vars` / `wrangler secret` | Autentica al runner Free.                           |
 | `GOOGLE_OAUTH_CLIENT_ID` | **secreto de entorno** | `.dev.vars` / `wrangler secret` | OAuth Web Client de Google.                 |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Secreto OAuth de Google.                    |
-| `MERCADO_PAGO_ACCESS_TOKEN` | **secreto** | `.dev.vars` / `wrangler secret` | Credencial server-side del ambiente de Mercado Pago. |
-| `MERCADO_PAGO_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC del modo productivo; es la única aceptada cuando `MERCADO_PAGO_TEST_MODE=0`. |
-| `MERCADO_PAGO_WEBHOOK_TEST_SECRET` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Firma HMAC del modo prueba; sólo se acepta mientras `MERCADO_PAGO_TEST_MODE=1`. |
+| `MERCADO_PAGO_ACCESS_TOKEN` | **secreto** | `.dev.vars` / `wrangler secret` | Credencial server-side de la aplicación Checkout Pro. |
+| `MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN` | **secreto** | `.dev.vars` / `wrangler secret` | Credencial server-side de la aplicación separada para Suscripciones. |
+| `MERCADO_PAGO_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC productiva de Checkout Pro. |
+| `MERCADO_PAGO_WEBHOOK_TEST_SECRET` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Firma HMAC de prueba de Checkout Pro. |
+| `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC productiva de la aplicación Suscripciones. |
+| `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Firma HMAC de prueba de la aplicación Suscripciones. |
 | `MERCADO_PAGO_TEST_MODE` | var temporal | `.dev.vars` / ambiente remoto de prueba | `1` habilita el checkout y la suscripción técnica de Mercado Pago. Debe ser `0` para cobros reales. |
 | `PUBLIC_WEB_URL`      | var             | wrangler.toml                 | Origen canónico del frontend.                        |
 | `PUBLIC_API_URL`      | var             | wrangler.toml                 | Origen canónico del Public API y callback OAuth.     |
@@ -52,11 +55,12 @@ como pago canónico; cualquier aprobado adicional se conserva por separado y blo
 propuesta para revisión.
 
 La misma URL de Webhook recibe los tópicos `payment`, `subscription_preapproval` y
-`subscription_authorized_payment`. Los dos tópicos recurrentes siempre consultan el
+`subscription_authorized_payment`. Checkout Pro debe enviar `payment`; la aplicación
+separada de Suscripciones debe enviar los otros dos tópicos. Los tópicos recurrentes consultan el
 recurso oficial antes de cambiar D1. En modo de prueba pueden usar el mismo fallback
 verificado por proveedor; con `MERCADO_PAGO_TEST_MODE=0` todos los Webhooks modernos
-requieren HMAC válida. La aplicación de Mercado Pago debe tener seleccionados los tres
-tópicos y conservar como callback `https://api.lmwares.com/payments/webhooks/mercado-pago`.
+requieren HMAC válida. Ambas aplicaciones conservan como callback
+`https://api.lmwares.com/payments/webhooks/mercado-pago`, cada una con su firma propia.
 
 ## Admin API Worker
 
@@ -93,8 +97,11 @@ npx wrangler@4.105.0 secret put FREE_RUNNER_TOKEN
 npx wrangler@4.105.0 secret put GOOGLE_OAUTH_CLIENT_ID
 npx wrangler@4.105.0 secret put GOOGLE_OAUTH_CLIENT_SECRET
 npx wrangler@4.105.0 secret put MERCADO_PAGO_ACCESS_TOKEN
+npx wrangler@4.105.0 secret put MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN
 npx wrangler@4.105.0 secret put MERCADO_PAGO_WEBHOOK_SECRET
 npx wrangler@4.105.0 secret put MERCADO_PAGO_WEBHOOK_TEST_SECRET
+npx wrangler@4.105.0 secret put MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET
+npx wrangler@4.105.0 secret put MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET
 ```
 
 Para staging administrado, genera artefactos desde un perfil local y carga los

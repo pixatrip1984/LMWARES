@@ -7,6 +7,7 @@ import {
   createMercadoPagoPreapproval,
   findMercadoPagoPreapproval,
   getMercadoPagoPreapproval,
+  mercadoPagoProviderDiagnostic,
   type MercadoPagoPreapproval,
 } from '../lib/mercado-pago';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
@@ -30,7 +31,7 @@ subscriptions.get('/proposals/:proposalId', async (c) => {
 subscriptions.post('/proposals/:proposalId', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
-  assertTestSubscriptionConfiguration(c.env);
+  const accessToken = testSubscriptionAccessToken(c.env);
   const proposal = await ownedProposal(c.env, c.req.param('proposalId'), session.user.id);
   if (proposal.status !== 'paid' || proposal.paymentReviewRequired) {
     throw new AppError(
@@ -57,7 +58,7 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
       );
     }
     const providerSubscription = await getMercadoPagoPreapproval({
-      accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+      accessToken,
       preapprovalId: subscription.providerPreapprovalId,
     });
     assertPreapprovalMatches(providerSubscription, subscription);
@@ -67,13 +68,13 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
 
   try {
     const recovered = await findMercadoPagoPreapproval({
-      accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+      accessToken,
       externalReference: subscription.externalReference,
     });
     const providerSubscription =
       recovered ??
       (await createMercadoPagoPreapproval({
-        accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+        accessToken,
         subscriptionId: subscription.externalReference,
         plan: proposal.plan,
         payerEmail:
@@ -88,7 +89,10 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
     assertPreapprovalMatches(providerSubscription, subscription);
     subscription = await saveProviderSubscription(c.env, subscription, providerSubscription);
   } catch (error) {
-    await repos.lmwaresSubscriptions.markCreationFailed(subscription.id);
+    await repos.lmwaresSubscriptions.markCreationFailed(
+      subscription.id,
+      mercadoPagoProviderDiagnostic(error),
+    );
     throw error;
   }
 
@@ -106,15 +110,15 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
 subscriptions.post('/:id/reconcile', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
-  assertTestSubscriptionConfiguration(c.env);
+  const accessToken = testSubscriptionAccessToken(c.env);
   let subscription = await ownedSubscription(c.env, c.req.param('id'), session.user.id);
   const providerSubscription = subscription.providerPreapprovalId
     ? await getMercadoPagoPreapproval({
-        accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+        accessToken,
         preapprovalId: subscription.providerPreapprovalId,
       })
     : await findMercadoPagoPreapproval({
-        accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+        accessToken,
         externalReference: subscription.externalReference,
       });
   if (!providerSubscription) {
@@ -133,7 +137,7 @@ subscriptions.post('/:id/reconcile', async (c) => {
 subscriptions.post('/:id/cancel', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
-  assertTestSubscriptionConfiguration(c.env);
+  const accessToken = testSubscriptionAccessToken(c.env);
   let subscription = await ownedSubscription(c.env, c.req.param('id'), session.user.id);
   if (!subscription.providerPreapprovalId) {
     throw new AppError('conflict', 'La suscripción todavía no existe en Mercado Pago.');
@@ -142,7 +146,7 @@ subscriptions.post('/:id/cancel', async (c) => {
     return c.json({ subscription: publicSubscription(subscription) });
   }
   const providerSubscription = await cancelMercadoPagoPreapproval({
-    accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+    accessToken,
     preapprovalId: subscription.providerPreapprovalId,
   });
   assertPreapprovalMatches(providerSubscription, subscription);
@@ -214,16 +218,18 @@ async function ownedSubscription(
   return subscription;
 }
 
-function assertTestSubscriptionConfiguration(env: Bindings): void {
+function testSubscriptionAccessToken(env: Bindings): string {
   if (env.MERCADO_PAGO_TEST_MODE !== '1') {
     throw new AppError('forbidden', 'La suscripción técnica de MXN $10 no está habilitada.');
   }
-  if (!env.MERCADO_PAGO_ACCESS_TOKEN?.trim()) {
+  const accessToken = env.MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN?.trim();
+  if (!accessToken) {
     throw new AppError(
       'internal_error',
-      'Falta configurar el Access Token de prueba de Mercado Pago.',
+      'Falta configurar el Access Token de la aplicación de Suscripciones.',
     );
   }
+  return accessToken;
 }
 
 function publicSubscription(subscription: PackageSubscription) {

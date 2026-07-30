@@ -117,7 +117,7 @@ export class LmwaresSubscriptionsRepository {
           `UPDATE lmw_subscriptions
            SET status = 'creating', amount_cents = ?, currency = ?,
                frequency = 1, frequency_type = 'months', pricing_version = ?,
-               updated_at = ?
+                provider_status = NULL, updated_at = ?
            WHERE id = ? AND status = 'creation_failed' AND provider_preapproval_id IS NULL`,
         )
         .bind(
@@ -189,13 +189,17 @@ export class LmwaresSubscriptionsRepository {
     });
   }
 
-  async markCreationFailed(id: string): Promise<void> {
+  async markCreationFailed(id: string, providerDiagnostic: string): Promise<void> {
+    const safeDiagnostic = /^[a-z0-9_:-]{1,80}$/.test(providerDiagnostic)
+      ? providerDiagnostic
+      : 'unexpected_error';
     await this.db
       .prepare(
-        `UPDATE lmw_subscriptions SET status = 'creation_failed', updated_at = ?
+        `UPDATE lmw_subscriptions
+         SET status = 'creation_failed', provider_status = ?, updated_at = ?
          WHERE id = ? AND status = 'creating' AND provider_preapproval_id IS NULL`,
       )
-      .bind(nowIso(), id)
+      .bind(`creation_error:${safeDiagnostic}`.slice(0, 80), nowIso(), id)
       .run();
   }
 

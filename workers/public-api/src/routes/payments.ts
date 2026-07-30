@@ -29,10 +29,15 @@ const TEST_PRICING_VERSION = 'technical-mxn-5-v1';
 export const payments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 payments.post('/webhooks/mercado-pago', async (c) => {
-  const webhookSecrets = mercadoPagoWebhookSecrets(c.env);
   const webhookTopic = c.req.query('type') ?? '';
   const ipnTopic = c.req.query('topic') ?? '';
   const topic = webhookTopic || ipnTopic;
+  const webhookSecrets = mercadoPagoWebhookSecrets(
+    c.env,
+    topic === 'subscription_preapproval' || topic === 'subscription_authorized_payment'
+      ? 'subscriptions'
+      : 'checkout',
+  );
   if (topic === 'subscription_preapproval') {
     return handleSubscriptionPreapprovalWebhook(c, webhookSecrets);
   }
@@ -232,7 +237,7 @@ async function handleSubscriptionPreapprovalWebhook(
   }
   const signature = await validateSignedWebhook(c, webhookSecrets, resourceId);
   const provider = await getMercadoPagoPreapproval({
-    accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+    accessToken: mercadoPagoSubscriptionsAccessToken(c.env),
     preapprovalId: resourceId,
   });
   const repos = createRepositories(c.env.DB);
@@ -311,7 +316,7 @@ async function handleSubscriptionAuthorizedPaymentWebhook(
   }
   const signature = await validateSignedWebhook(c, webhookSecrets, resourceId);
   const provider = await getMercadoPagoAuthorizedPayment({
-    accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+    accessToken: mercadoPagoSubscriptionsAccessToken(c.env),
     authorizedPaymentId: resourceId,
   });
   const repos = createRepositories(c.env.DB);
@@ -733,13 +738,36 @@ function assertTestPaymentConfiguration(env: Bindings): void {
   }
 }
 
-function mercadoPagoWebhookSecrets(env: Bindings): string[] {
-  if (!env.MERCADO_PAGO_ACCESS_TOKEN?.trim()) {
-    throw new AppError('internal_error', 'Falta configurar el Access Token de Mercado Pago.');
+function mercadoPagoSubscriptionsAccessToken(env: Bindings): string {
+  const accessToken = env.MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN?.trim();
+  if (!accessToken) {
+    throw new AppError(
+      'internal_error',
+      'Falta configurar el Access Token de la aplicación de Suscripciones.',
+    );
   }
-  const productionSecret = env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();
+  return accessToken;
+}
+
+function mercadoPagoWebhookSecrets(
+  env: Bindings,
+  application: 'checkout' | 'subscriptions',
+): string[] {
+  if (application === 'subscriptions') {
+    mercadoPagoSubscriptionsAccessToken(env);
+  } else if (!env.MERCADO_PAGO_ACCESS_TOKEN?.trim()) {
+    throw new AppError('internal_error', 'Falta configurar el Access Token de Checkout Pro.');
+  }
+  const productionSecret =
+    application === 'subscriptions'
+      ? env.MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET?.trim()
+      : env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();
   const testSecret =
-    env.MERCADO_PAGO_TEST_MODE === '1' ? env.MERCADO_PAGO_WEBHOOK_TEST_SECRET?.trim() : undefined;
+    env.MERCADO_PAGO_TEST_MODE === '1'
+      ? application === 'subscriptions'
+        ? env.MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET?.trim()
+        : env.MERCADO_PAGO_WEBHOOK_TEST_SECRET?.trim()
+      : undefined;
   const secrets = [...new Set([productionSecret, testSecret].filter(Boolean) as string[])];
   if (secrets.length > 0) return secrets;
   if (env.MERCADO_PAGO_TEST_MODE !== '1') {

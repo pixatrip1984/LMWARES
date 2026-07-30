@@ -22,12 +22,18 @@ export interface Bindings {
   GOOGLE_OAUTH_CLIENT_ID: string;
   /** Secreto del OAuth Web Client de Google. Siempre como secret. */
   GOOGLE_OAUTH_CLIENT_SECRET: string;
-  /** Access Token de una aplicación de prueba de Mercado Pago. Siempre como secret. */
+  /** Access Token de la aplicación Checkout Pro. Siempre como secret. */
   MERCADO_PAGO_ACCESS_TOKEN: string;
-  /** Firma productiva de Webhooks de Mercado Pago; siempre se configura como secret. */
+  /** Access Token de la aplicación separada para Suscripciones. Siempre como secret. */
+  MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN?: string;
+  /** Firma productiva de Webhooks de Checkout Pro; siempre se configura como secret. */
   MERCADO_PAGO_WEBHOOK_SECRET?: string;
-  /** Firma de Webhooks del modo prueba; sólo se acepta con MERCADO_PAGO_TEST_MODE=1. */
+  /** Firma de Webhooks de prueba de Checkout Pro; sólo se acepta en modo prueba. */
   MERCADO_PAGO_WEBHOOK_TEST_SECRET?: string;
+  /** Firma productiva de Webhooks de la aplicación Suscripciones. */
+  MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET?: string;
+  /** Firma de Webhooks de prueba de la aplicación Suscripciones. */
+  MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET?: string;
   /** Debe ser "1" para habilitar el checkout técnico con credenciales de prueba. */
   MERCADO_PAGO_TEST_MODE: string;
   /** Binding tipado generado por `wrangler types`. */
