@@ -312,6 +312,31 @@ async function handleSubscriptionAuthorizedPaymentWebhook(
 ) {
   const resourceId = c.req.query('data.id') ?? '';
   if (!/^\d{1,32}$/.test(resourceId)) {
+    // Mercado Pago's dashboard simulator currently sends an alphanumeric
+    // placeholder and the subscription_authorized_payment topic in the URL,
+    // even when its sample body describes a preapproval. It also signs the
+    // body's data.id instead of the URL placeholder. In test mode we may
+    // acknowledge that connectivity probe, but only after its HMAC validates.
+    // It must never be fetched or persisted as a real billing event.
+    if (
+      c.env.MERCADO_PAGO_TEST_MODE === '1' &&
+      /^[a-zA-Z0-9_-]{1,160}$/.test(resourceId)
+    ) {
+      const probeDataId = await readMercadoPagoSubscriptionProbeDataId(c);
+      if (probeDataId) {
+        const probeSignature = await validateSignedWebhook(c, webhookSecrets, probeDataId);
+        if (probeSignature.validated) {
+          console.info(
+            JSON.stringify({
+              message: 'mercado_pago_subscription_webhook_test_probe_received',
+              topic: 'subscription_authorized_payment',
+              requestId: probeSignature.requestId,
+            }),
+          );
+          return c.json({ received: true, testProbe: true });
+        }
+      }
+    }
     throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
   }
   const signature = await validateSignedWebhook(c, webhookSecrets, resourceId);
@@ -389,6 +414,32 @@ async function handleSubscriptionAuthorizedPaymentWebhook(
     );
     throw error;
   }
+}
+
+async function readMercadoPagoSubscriptionProbeDataId(
+  c: Parameters<typeof requirePublicSession>[0],
+): Promise<string | null> {
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return null;
+  }
+  if (
+    !isWebhookRecord(payload) ||
+    payload.type !== 'subscription_preapproval' ||
+    payload.entity !== 'preapproval' ||
+    !isWebhookRecord(payload.data) ||
+    typeof payload.data.id !== 'string' ||
+    !/^[a-zA-Z0-9_-]{1,160}$/.test(payload.data.id)
+  ) {
+    return null;
+  }
+  return payload.data.id;
+}
+
+function isWebhookRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function validateSignedWebhook(
