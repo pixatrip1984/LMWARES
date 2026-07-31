@@ -63,3 +63,4 @@ bucket_name = "starter-media"
 [[env.production.send_email]]
 name = "EMAIL"
 allowed_sender_addresses = ["notificaciones@lmwares.com"]
+allowed_destination_addresses = ["lmwareservice@gmail.com"]
