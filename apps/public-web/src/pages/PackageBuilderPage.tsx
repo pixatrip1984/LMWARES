@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import type { AccountOverview } from '@starter/api-client';
 import type { PublicUser } from '@starter/domain';
 import { createFreeIntakeSchema } from '@starter/validation';
 import { Turnstile } from '../components/Turnstile';
+import {
+  AccountCenterModal,
+  type AccountCenterTab,
+} from '../features/account/AccountCenterModal';
 import {
   FreePublicationModal,
   type FreePublicationStatus,
@@ -151,6 +156,11 @@ export function PackageBuilderPage() {
   const [submitted, setSubmitted] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [publicationOpen, setPublicationOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountTab, setAccountTab] = useState<AccountCenterTab>('sites');
+  const [accountOverview, setAccountOverview] = useState<AccountOverview | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountError, setAccountError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [freeFiles, setFreeFiles] = useState<FreeImageFile[]>([]);
   const [freeSubmit, setFreeSubmit] = useState<FreeSubmitState>({ status: 'idle' });
@@ -188,6 +198,52 @@ export function PackageBuilderPage() {
   const proCapabilities = visibleModules.filter(({ tier }) => tier === 'pro');
   const selectedComplements = selectedModules.filter(({ id }) => !FOUNDATION_MODULES.includes(id));
   const priceEstimate = useMemo(() => estimatePackagePrice(draft), [draft]);
+
+  const loadAccount = useCallback(async () => {
+    setAccountLoading(true);
+    setAccountError('');
+    try {
+      setAccountOverview(await api.getAccountOverview());
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'No se pudo cargar tu cuenta.');
+    } finally {
+      setAccountLoading(false);
+    }
+  }, []);
+
+  const markAccountNotificationRead = useCallback(async (notificationId: string) => {
+    const result = await api.markAccountNotificationRead(notificationId);
+    setAccountOverview((current) => {
+      if (!current) return current;
+      const wasUnread = current.notifications.some(
+        ({ id, readAt }) => id === notificationId && !readAt,
+      );
+      return {
+        ...current,
+        unreadCount: wasUnread ? Math.max(0, current.unreadCount - 1) : current.unreadCount,
+        notifications: current.notifications.map((notification) =>
+          notification.id === notificationId ? result.notification : notification
+        ),
+      };
+    });
+  }, []);
+
+  const markAllAccountNotificationsRead = useCallback(async () => {
+    await api.markAllAccountNotificationsRead();
+    const readAt = new Date().toISOString();
+    setAccountOverview((current) =>
+      current
+        ? {
+            ...current,
+            unreadCount: 0,
+            notifications: current.notifications.map((notification) => ({
+              ...notification,
+              readAt: notification.readAt ?? readAt,
+            })),
+          }
+        : current
+    );
+  }, []);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -227,7 +283,8 @@ export function PackageBuilderPage() {
       contactName: current.contactName || session.name || '',
       contactEmail: session.email,
     }));
-  }, [session]);
+    void loadAccount();
+  }, [loadAccount, session]);
 
   useEffect(() => {
     if (freeSubmit.status !== 'queued' || !freeSubmit.intakeId) return;
@@ -247,6 +304,7 @@ export function PackageBuilderPage() {
               ? 'Tu página Free ya está publicada. También enviamos el enlace a tu email.'
               : 'Tu página Free ya está publicada. El enlace quedó programado para tu email.',
           }));
+          void loadAccount();
           setPublicationOpen(true);
           return;
         }
@@ -273,7 +331,7 @@ export function PackageBuilderPage() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [freeSubmit.intakeId, freeSubmit.status]);
+  }, [freeSubmit.intakeId, freeSubmit.status, loadAccount]);
 
   if (session === undefined) {
     return (
@@ -483,6 +541,12 @@ export function PackageBuilderPage() {
     }
   };
 
+  const openAccount = (tab: AccountCenterTab) => {
+    setAccountTab(tab);
+    setAccountOpen(true);
+    if (!accountOverview && !accountLoading) void loadAccount();
+  };
+
   const submitDraft = async () => {
     if (draft.plan !== 'free') {
       setFileError('');
@@ -671,9 +735,27 @@ export function PackageBuilderPage() {
         </ol>
 
         <div className="lmw-builder-account">
-          <span>{userInitials(session)}</span>
-          <b>{session.name ?? 'Cuenta LMWares'}<small>{session.email}</small></b>
-          <button onClick={signOut} type="button">Salir</button>
+          <button
+            aria-label={`Notificaciones${accountOverview?.unreadCount ? `: ${accountOverview.unreadCount} sin leer` : ''}`}
+            className="lmw-builder-account__notifications"
+            onClick={() => openAccount('notifications')}
+            type="button"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+            </svg>
+            {accountOverview?.unreadCount ? <i>{accountOverview.unreadCount}</i> : null}
+          </button>
+          <button
+            aria-label="Abrir mi cuenta y mis sitios"
+            className="lmw-builder-account__profile"
+            onClick={() => openAccount('sites')}
+            type="button"
+          >
+            <span>{userInitials(session)}</span>
+            <b>{session.name ?? 'Cuenta LMWares'}<small>{session.email}</small></b>
+            <i aria-hidden="true">⌄</i>
+          </button>
         </div>
       </header>
 
@@ -1229,6 +1311,18 @@ export function PackageBuilderPage() {
         publicUrl={freeSubmit.publicUrl}
         slug={freeSubmit.slug}
         status={freeSubmit.status}
+      />
+      <AccountCenterModal
+        error={accountError}
+        initialTab={accountTab}
+        loading={accountLoading}
+        onClose={() => setAccountOpen(false)}
+        onMarkAllRead={markAllAccountNotificationsRead}
+        onMarkRead={markAccountNotificationRead}
+        onReload={loadAccount}
+        onSignOut={signOut}
+        open={accountOpen}
+        overview={accountOverview}
       />
     </div>
   );

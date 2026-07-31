@@ -1,4 +1,4 @@
-import type { Paginated, PublicAuthSession, Publication } from '@starter/domain';
+import type { Paginated, PublicAuthSession, Publication, PublicUser } from '@starter/domain';
 import type {
   CreateFreeIntakeInput,
   CreateRequestInput,
@@ -54,6 +54,43 @@ export interface FreeIntakeStatusResult {
   job: { status: string; errorCode: string | null; errorMessage: string | null } | null;
   publicUrl: string | null;
   assetCount: number;
+}
+
+export interface AccountNotification {
+  id: string;
+  kind: string;
+  title: string;
+  summary: string;
+  body: string[];
+  plan: string;
+  siteName: string;
+  referenceId: string | null;
+  actionUrl: string | null;
+  actionLabel: string | null;
+  deliveryStatus: string;
+  readAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface AccountSite {
+  id: string;
+  slug: string;
+  siteName: string;
+  plan: 'free';
+  status: string;
+  publicUrl: string | null;
+  createdAt: string;
+  submittedAt: string | null;
+  publishedAt: string | null;
+  updatedAt: string;
+}
+
+export interface AccountOverview {
+  user: PublicUser;
+  unreadCount: number;
+  notifications: AccountNotification[];
+  sites: AccountSite[];
 }
 
 export interface PublicPackageProposal {
@@ -168,6 +205,20 @@ export function createPublicClient(baseUrl: string) {
 
     getFreeIntakeStatus(intakeId: string) {
       return http.get<FreeIntakeStatusResult>(`/free/${encodeURIComponent(intakeId)}/status`);
+    },
+
+    getAccountOverview() {
+      return http.get<AccountOverview>('/account');
+    },
+
+    markAccountNotificationRead(notificationId: string) {
+      return http.patch<{ notification: AccountNotification }>(
+        `/account/notifications/${encodeURIComponent(notificationId)}/read`,
+      );
+    },
+
+    markAllAccountNotificationsRead() {
+      return http.patch<{ updated: number }>('/account/notifications/read-all');
     },
 
     createTestPackageProposal(input: CreateTestPackageProposalInput) {

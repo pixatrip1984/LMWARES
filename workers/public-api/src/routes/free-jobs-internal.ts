@@ -292,6 +292,13 @@ freeJobsInternal.post('/free-notifications/dispatch', async (c) => {
     const email = buildFreePublishedEmail({
       siteName: readMetadataString(notification.payload, 'siteName'),
       publicUrl: readMetadataString(notification.payload, 'publicUrl'),
+      referenceId: notification.intakeId ?? readMetadataString(notification.payload, 'intakeId'),
+      notificationId: notification.id,
+      recipientEmail: notification.toAddress,
+      publishedAt:
+        readOptionalMetadataString(notification.payload, 'publishedAt')
+        ?? notification.createdAt,
+      supportEmail: c.env.EMAIL_REPLY_TO,
     });
     const result = await c.env.EMAIL.send({
       to: notification.toAddress,
@@ -375,6 +382,11 @@ function readMetadataString(payload: Record<string, unknown>, key: string): stri
     throw new AppError('validation_error', `La notificación no contiene ${key}.`);
   }
   return value.trim();
+}
+
+function readOptionalMetadataString(payload: Record<string, unknown>, key: string): string | null {
+  const value = payload[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function emailErrorCode(error: unknown): string {

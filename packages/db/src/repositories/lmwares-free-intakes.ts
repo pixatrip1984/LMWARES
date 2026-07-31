@@ -160,6 +160,20 @@ export class LmwaresFreeIntakesRepository {
     return row ? mapFreeIntake(row) : null;
   }
 
+  async listForUser(userId: string, limit = 100): Promise<FreeIntake[]> {
+    const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM lmw_free_intakes
+         WHERE user_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .bind(userId, safeLimit)
+      .all<FreeIntakeRow>();
+    return results.map(mapFreeIntake);
+  }
+
   async listContacts(intakeId: string): Promise<FreeContactMethod[]> {
     const { results } = await this.db
       .prepare(`SELECT * FROM lmw_contact_methods WHERE intake_id = ? ORDER BY position ASC`)
@@ -475,6 +489,9 @@ export class LmwaresFreeIntakesRepository {
       slug: intake.slug,
       siteName: intake.siteName,
       publicUrl: data.publicUrl,
+      plan: 'free',
+      publishedAt: now,
+      supportEmail: 'soporte@lmwares.com',
     });
 
     await this.db.batch([

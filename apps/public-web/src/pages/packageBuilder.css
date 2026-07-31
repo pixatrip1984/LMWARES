@@ -531,13 +531,82 @@
 
 .lmw-builder-account {
   align-items: center;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 34px 1fr auto;
+  display: flex;
+  gap: 8px;
   justify-self: end;
 }
 
-.lmw-builder-account > span {
+.lmw-builder-account button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.lmw-builder-account__notifications {
+  align-items: center;
+  background: rgba(10, 35, 70, 0.4);
+  border: 1px solid rgba(72, 143, 255, 0.3);
+  color: #8fbfff;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  width: 34px;
+}
+
+.lmw-builder-account__notifications:hover {
+  background: rgba(21, 77, 151, 0.42);
+  border-color: rgba(72, 143, 255, 0.72);
+}
+
+.lmw-builder-account__notifications svg {
+  fill: none;
+  height: 15px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+  width: 15px;
+}
+
+.lmw-builder-account__notifications i {
+  align-items: center;
+  background: #ff4c36;
+  border: 2px solid #030b18;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  font-family: var(--builder-mono);
+  font-size: 6px;
+  font-style: normal;
+  font-weight: 900;
+  height: 15px;
+  justify-content: center;
+  min-width: 15px;
+  padding: 0 3px;
+  position: absolute;
+  right: -5px;
+  top: -5px;
+}
+
+.lmw-builder-account__profile {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #e7f0ff;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  padding: 0;
+  text-align: left;
+}
+
+.lmw-builder-account__profile:hover > span {
+  background: rgba(34, 96, 187, 0.24);
+  border-color: rgba(72, 143, 255, 0.94);
+}
+
+.lmw-builder-account__profile > span {
   align-items: center;
   border: 1px solid rgba(72, 143, 255, 0.62);
   color: #9ccaff;
@@ -549,11 +618,11 @@
   width: 34px;
 }
 
-.lmw-builder-account b {
+.lmw-builder-account__profile b {
   font-size: 10px;
 }
 
-.lmw-builder-account small {
+.lmw-builder-account__profile small {
   color: rgba(191, 211, 244, 0.48);
   display: block;
   font-size: 8px;
@@ -561,18 +630,11 @@
   margin-top: 2px;
 }
 
-.lmw-builder-account button {
-  background: transparent;
-  border: 0;
-  color: rgba(212, 225, 248, 0.52);
-  cursor: pointer;
-  font-family: var(--builder-mono);
-  font-size: 8px;
-  padding: 7px;
-  text-transform: uppercase;
+.lmw-builder-account__profile > i {
+  color: rgba(175, 204, 244, 0.5);
+  font-size: 12px;
+  font-style: normal;
 }
-
-.lmw-builder-account button:hover { color: #ff7258; }
 
 .lmw-builder-toast {
   align-items: center;
@@ -2017,7 +2079,7 @@ button.lmw-free-assets__status.is-published {
   .lmw-builder-topbar { grid-template-columns: 1fr auto; height: 66px; }
   .lmw-builder-progress { display: none; }
   .lmw-builder-mode { display: none; }
-  .lmw-builder-account b { display: none; }
+  .lmw-builder-account__profile b { display: none; }
   .lmw-auth-layout,
   .lmw-configurator,
   .lmw-package-summary { grid-template-columns: 1fr; }
@@ -2038,8 +2100,9 @@ button.lmw-free-assets__status.is-published {
 
 @media (max-width: 540px) {
   .lmw-builder-brand { font-size: 12px; }
-  .lmw-builder-account { grid-template-columns: 30px auto; }
-  .lmw-builder-account > span { height: 30px; width: 30px; }
+  .lmw-builder-account__notifications { height: 30px; width: 30px; }
+  .lmw-builder-account__profile { grid-template-columns: 30px auto; }
+  .lmw-builder-account__profile > span { height: 30px; width: 30px; }
   .lmw-auth-signal { gap: 6px; }
   .lmw-auth-signal span { display: none; }
   .lmw-auth-proof li { align-items: flex-start; font-size: 10px; }

@@ -21,6 +21,7 @@ interface NotificationRow {
   error_code: string | null;
   error_message: string | null;
   sent_at: string | null;
+  read_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +45,7 @@ export interface LmwaresNotification {
   errorCode: string | null;
   errorMessage: string | null;
   sentAt: string | null;
+  readAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -170,6 +172,47 @@ export class LmwaresNotificationsRepository {
       .first<NotificationRow>();
     return row ? mapNotification(row) : null;
   }
+
+  async listForUser(userId: string, limit = 50): Promise<LmwaresNotification[]> {
+    const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM lmw_notifications
+         WHERE user_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .bind(userId, safeLimit)
+      .all<NotificationRow>();
+    return results.map(mapNotification);
+  }
+
+  async markRead(id: string, userId: string): Promise<LmwaresNotification | null> {
+    const now = nowIso();
+    const result = await this.db
+      .prepare(
+        `UPDATE lmw_notifications
+         SET read_at = COALESCE(read_at, ?), updated_at = ?
+         WHERE id = ? AND user_id = ?`,
+      )
+      .bind(now, now, id, userId)
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) return null;
+    return this.getById(id);
+  }
+
+  async markAllRead(userId: string): Promise<number> {
+    const now = nowIso();
+    const result = await this.db
+      .prepare(
+        `UPDATE lmw_notifications
+         SET read_at = ?, updated_at = ?
+         WHERE user_id = ? AND read_at IS NULL`,
+      )
+      .bind(now, now, userId)
+      .run();
+    return result.meta.changes ?? 0;
+  }
 }
 
 function mapNotification(row: NotificationRow): LmwaresNotification {
@@ -192,6 +235,7 @@ function mapNotification(row: NotificationRow): LmwaresNotification {
     errorCode: row.error_code,
     errorMessage: row.error_message,
     sentAt: row.sent_at,
+    readAt: row.read_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

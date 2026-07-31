@@ -17,6 +17,7 @@ import { siteEvents } from './routes/site-events';
 import { authRoutes } from './routes/auth';
 import { payments } from './routes/payments';
 import { subscriptions } from './routes/subscriptions';
+import { account } from './routes/account';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -31,7 +32,7 @@ app.use('*', (c, next) => {
   const allowed = parseList(c.env.ALLOWED_ORIGINS);
   return cors({
     origin: (origin) => (allowed.includes(origin) ? origin : null),
-    allowMethods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
     allowHeaders: ['Content-Type'],
     credentials: true,
     maxAge: 86400,
@@ -49,6 +50,7 @@ app.notFound((c) =>
 app.get('/health', (c) => c.json({ ok: true, service: 'public-api' }));
 
 app.route('/auth', authRoutes);
+app.route('/account', account);
 app.route('/payments', payments);
 app.route('/subscriptions', subscriptions);
 app.route('/publications', publications);
