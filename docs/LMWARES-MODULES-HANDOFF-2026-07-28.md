@@ -39,14 +39,23 @@ La revisión Starter confirmó:
   activo, extensión doble, MIME falso y OOXML con macro antes de crear objetos;
 - las rutas profundas `/sites/:projectId/<module>` activan ahora el módulo
   correspondiente, y el preview de Docs usa el origen público correcto.
+- Eventos completó crear → publicar → registrar → cancelar inscripción →
+  reutilizar el lugar → cancelar evento;
+- una carrera real de dos solicitudes por el último lugar produjo exactamente
+  un `201` y un `409`, manteniendo el conteo en `2/2`;
+- correo duplicado, restauración sobre cupo, reducción de capacidad por debajo
+  de confirmados y registro sobre evento cancelado quedaron rechazados con
+  `409`.
 
 La prueba creó en el proyecto local `astraeus` el artículo
 `elegir-herramientas-primer-proyecto` y una solicitud pública con el folio corto
 `272ba7c7`. También comprobó la inicialización explícita de un formulario nuevo
 en `dharma-lab`. Docs publicó además `Guía de seguridad` en `astraeus` y usó
-`dharma-lab` como corpus de aceptación/rechazo. No se desplegaron módulos ni
-migraciones remotas. La siguiente prueba funcional recomendada es Eventos:
-publicación, registro, cupos, duplicados, cancelación y concurrencia.
+`dharma-lab` como corpus de aceptación/rechazo. Eventos creó en `astraeus`
+`prueba-cupo-eventos-0731` como evidencia del ciclo y dejó además una prueba
+reproducible en `scripts/validate-starter-events.ps1`. No se desplegaron módulos
+ni migraciones remotas. Los cinco módulos Starter completaron ya su ciclo E2E
+local principal.
 
 Una brecha restante de Galerías no bloquea su ciclo principal, pero debe
 resolverse antes de prometer borradores totalmente aislados: reordenar, cambiar
@@ -421,14 +430,25 @@ Implementado:
 - listado de asistentes en admin;
 - registro público;
 - deduplicación por evento y correo;
-- protección básica contra sobrecupo mediante operación D1 batch;
+- protección contra sobrecupo mediante inserción condicional atómica y
+  diagnóstico en un batch D1;
 - portada opcional mediante `fileAssetId`.
+
+Validado el 2026-07-31:
+
+- creación, publicación y lectura pública;
+- normalización y rechazo de correo duplicado;
+- carrera concurrente por el último cupo: un alta y un rechazo, sin sobrecupo;
+- cancelación de inscripción y reutilización del lugar;
+- bloqueo de restauración y reducción de capacidad cuando producirían
+  sobrecupo;
+- cancelación del evento y cierre inmediato de nuevas inscripciones;
+- contrato reproducible con `scripts/validate-starter-events.ps1`.
 
 Pendiente:
 
 - carga de portada desde el propio workspace;
-- pruebas de concurrencia para el último cupo;
-- pruebas E2E de registro, cancelación y cierre;
+- autenticación real de Access y prueba en infraestructura remota;
 - integrar `EventsPublicModule` en el host real de micrositios.
 
 ## 6. Migraciones y estado D1 local
@@ -489,9 +509,9 @@ de ESLint.
 ### 7.2 Lo que no fue probado
 
 - no hay tests unitarios específicos de los cinco módulos;
-- no hay suite de integración específica;
-- no hay E2E de las mutaciones;
-- no se hizo prueba de carga o concurrencia;
+- no hay una suite de integración automatizada que cubra los cinco módulos;
+- no se hizo prueba de carga sostenida; Eventos sí probó la carrera concurrente
+  por el último cupo;
 - no se verificó Cloudflare remoto;
 - no se probó autenticación real de Access;
 - no se probó Turnstile real;
