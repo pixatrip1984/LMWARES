@@ -1,11 +1,9 @@
 import {
   useCallback,
   useEffect,
-  lazy,
   useMemo,
   useRef,
   useState,
-  Suspense,
   type ChangeEvent,
   type CSSProperties,
 } from 'react';
@@ -27,6 +25,7 @@ import {
   type FreePublicationStatus,
 } from '../features/package-builder/FreePublicationModal';
 import { PackagePreviewModal } from '../features/package-builder/PackagePreviewModal';
+import { OpenStreetMapPicker } from '../features/package-builder/OpenStreetMapPicker';
 import { api } from '../lib/api';
 import { config } from '../lib/config';
 import {
@@ -51,10 +50,6 @@ import {
   type PlanId,
 } from '../features/package-builder/packageBuilderModel';
 import './packageBuilder.css';
-
-const OpenStreetMapPicker = lazy(
-  () => import('../features/package-builder/OpenStreetMapPicker'),
-);
 
 type BuilderView = 'package' | 'summary';
 
@@ -1161,8 +1156,7 @@ export function PackageBuilderPage() {
                       </div>
                       <button onClick={useCurrentLocation} type="button">Usar mi ubicación actual</button>
                     </header>
-                    <Suspense fallback={<div className="lmw-map-picker-loading">Cargando mapa interactivo…</div>}>
-                      <OpenStreetMapPicker
+                    <OpenStreetMapPicker
                         address={freeForm.locationAddress}
                         latitude={locationCoordinates?.latitude ?? null}
                         longitude={locationCoordinates?.longitude ?? null}
@@ -1186,8 +1180,7 @@ export function PackageBuilderPage() {
                           setLocationStatus('Punto seleccionado dentro del mapa.');
                         }}
                         status={locationStatus}
-                      />
-                    </Suspense>
+                    />
                   </section>
 
                   <div className="lmw-free-contacts">
