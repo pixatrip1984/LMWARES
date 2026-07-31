@@ -2,6 +2,8 @@
 
 Fecha de validación local: 2026-07-28
 
+Fecha de aprobación remota: 2026-07-31
+
 Repositorio: `C:\dev\oracle`
 
 Rama: `cloudflare-starter-v01`
@@ -91,31 +93,44 @@ Google usa Authorization Code server-side con:
 
 No se conservan access tokens ni refresh tokens de Google.
 
-## Lo que falta para declarar Free aprobado en producción
+## Aprobación remota del flujo Free
 
-No se debe avanzar a la revisión de módulos Starter hasta pasar estas cuatro
-pruebas reales:
+El 2026-07-31 se completó una publicación real de extremo a extremo con una
+cuenta autenticada:
+
+- sitio: `https://ferreteria-garcia-industrial-0731.lmwares.com/`;
+- referencia: `e4516d78-48b7-423b-aee1-37d00466ff2a`;
+- composición seleccionada: `Impacto`;
+- paleta seleccionada: `Industrial`;
+- cinco imágenes cargadas, sanitizadas y publicadas;
+- ubicación seleccionada desde el buscador OpenStreetMap y mapa visible en el
+  sitio publicado;
+- Turnstile completado en el formulario público;
+- URL final mostrada por el configurador;
+- sitio registrado en `Mis sitios`;
+- notificación interna disponible en el centro de cuenta;
+- correo transaccional recibido con enlace y datos de entrega;
+- sitio abierto correctamente desde el subdominio wildcard con HTTPS.
+
+Con esta evidencia queda aprobada la ruta funcional principal de Free en
+producción y se abre la puerta de revisión E2E de módulos Starter.
+
+## Puertas de producción completadas
+
+Las cuatro puertas previstas se probaron de esta forma:
 
 1. **Google OAuth**
-   - Crear un OAuth Web Client en Google Cloud.
-   - Registrar exactamente:
-     - local: `http://127.0.0.1:8887/auth/google/callback`;
-     - producción: `<PUBLIC_API_URL>/auth/google/callback`.
-   - Cargar `GOOGLE_OAUTH_CLIENT_ID` y `GOOGLE_OAUTH_CLIENT_SECRET`.
-   - Probar login, callback, refresh de página y logout con una cuenta real.
+   - Authorization Code con PKCE probado con una cuenta real.
+   - Sesión persistida y asociada al configurador, notificaciones y sitios.
 
 2. **Cloudflare Email Service**
-   - Onboardear `lmwares.com` en Email Sending.
-   - Confirmar SPF, DKIM y DMARC.
-   - Verificar `notificaciones@lmwares.com`.
-   - Enviar una publicación de prueba a una dirección real controlada.
-   - Revisar inbox, spam y logs del proveedor.
+   - Correo real recibido después de la publicación.
+   - El mensaje contiene la URL y los datos de la entrega Free.
 
 3. **Wildcard de publicación**
    - DNS proxy, ruta Worker, HTTPS y aislamiento de subdominios existentes:
      aprobado el 2026-07-30.
-   - Pendiente: abrir la primera publicación Free real desde una red externa.
-   - Pendiente: confirmar que el original de R2 sigue devolviendo `404`.
+   - Primera publicación Free real abierta correctamente el 2026-07-31.
 
    No se debe crear la ruta amplia directamente. `lmwares.com` ya contiene
    subdominios administrados por Pages, Workers y otros orígenes. Antes de
@@ -140,10 +155,18 @@ pruebas reales:
    ejecutar antes la auditoría.
 
 4. **Protecciones públicas**
-   - Cargar el secreto real de Turnstile.
-   - No definir `TURNSTILE_DISABLED=1` en ningún ambiente remoto.
-   - Usar un `FREE_RUNNER_TOKEN` remoto largo y distinto del local.
-   - Probar límites y errores con una segunda cuenta.
+   - Turnstile real completado durante la publicación aprobada.
+   - El entorno remoto conserva el runner autenticado y sin bypass público.
+
+## Robustez pendiente, no bloqueante para Starter
+
+Estas pruebas permanecen como regresión operativa antes del lanzamiento público
+general, pero no bloquean la revisión de módulos Starter:
+
+- reintentar una solicitud interrumpida sin duplicar sitio ni notificación;
+- comprobar límites y aislamiento con una segunda cuenta real;
+- auditar periódicamente que los originales privados de R2 no sean públicos;
+- confirmar que un fallo transitorio de correo se recupere mediante backoff.
 
 ## Configuración
 
