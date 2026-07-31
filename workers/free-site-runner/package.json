@@ -1,0 +1,23 @@
+{
+  "name": "@workers/free-site-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test ../../scripts/lmwares-free-site-runner/*.test.mjs",
+    "check": "wrangler deploy --dry-run",
+    "cf-typegen": "wrangler types --include-runtime=false src/worker-configuration.d.ts",
+    "lint": "echo \"(free-site-runner) no lint configured\""
+  },
+  "dependencies": {
+    "@starter/domain": "0.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260731.1",
+    "typescript": "~5.9.3",
+    "wrangler": "4.105.0"
+  }
+}

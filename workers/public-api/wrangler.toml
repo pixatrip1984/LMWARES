@@ -22,6 +22,10 @@ database_id = "00000000-0000-0000-0000-000000000000"
 binding = "MEDIA"
 bucket_name = "starter-media"
 
+[[queues.producers]]
+binding = "FREE_JOBS_QUEUE"
+queue = "lmwares-free-jobs"
+
 # En local Wrangler simula los envíos y guarda/loguea el mensaje.
 # Producción requiere habilitar lmwares.com en Cloudflare Email Sending.
 [[send_email]]
@@ -59,6 +63,10 @@ database_id = "682732b7-8517-416d-ac7c-6789e491fe43"
 [[env.production.r2_buckets]]
 binding = "MEDIA"
 bucket_name = "starter-media"
+
+[[env.production.queues.producers]]
+binding = "FREE_JOBS_QUEUE"
+queue = "lmwares-free-jobs"
 
 [[env.production.send_email]]
 name = "EMAIL"

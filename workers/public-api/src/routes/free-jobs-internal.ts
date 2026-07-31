@@ -51,9 +51,12 @@ freeJobsInternal.post('/free-jobs/claim', async (c) => {
     job,
     intake,
     contacts,
-    assets: assets.map(({ asset, fileAsset }) => ({
+    assets: assets.map(({ asset, fileAsset, sanitizedFileAsset }) => ({
       asset,
       fileAsset,
+      sanitized: sanitizedFileAsset
+        ? toSanitizedAssetResponse({ asset }, sanitizedFileAsset)
+        : null,
       sourcePath: `/internal/free-jobs/${encodeURIComponent(job.id)}/assets/${encodeURIComponent(asset.id)}/source`,
     })),
   });

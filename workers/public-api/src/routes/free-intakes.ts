@@ -252,11 +252,18 @@ freeIntakes.post('/:id/submit', async (c) => {
   });
 
   const job = await repos.lmwaresFreeIntakes.getLatestGenerationJob(intakeId);
+  if (!job) throw new AppError('internal_error', 'No fue posible preparar el trabajo Free.');
+  await c.env.FREE_JOBS_QUEUE.send({
+    kind: 'free-intake-submitted',
+    intakeId: submitted.id,
+    jobId: job.id,
+  });
+
   return c.json({
     id: submitted.id,
     slug: submitted.slug,
     status: submitted.status,
-    jobStatus: job?.status ?? null,
+    jobStatus: job.status,
     publicUrl: submitted.publishedUrl,
   });
 });

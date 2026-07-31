@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test src/lib/*.test.mjs",
     "check:production": "wrangler deploy --env production --dry-run",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types --include-runtime=false src/worker-configuration.d.ts",
     "lint": "echo \"(public-api) no lint configured\""
   },
   "dependencies": {

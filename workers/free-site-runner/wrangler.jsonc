@@ -1,0 +1,43 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "lmwares-free-site-runner",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "PUBLIC_API_URL": "https://api.lmwares.com"
+  },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "services": [
+    {
+      "binding": "PUBLIC_API",
+      "service": "starter-public-api"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "FREE_RUNNER_QUEUE",
+        "queue": "lmwares-free-jobs"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "lmwares-free-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+        "retry_delay": 130
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

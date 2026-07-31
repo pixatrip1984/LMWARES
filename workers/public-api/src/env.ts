@@ -40,6 +40,8 @@ export interface Bindings {
   MERCADO_PAGO_TEST_MODE: string;
   /** Binding tipado generado por `wrangler types`. */
   EMAIL: Env['EMAIL'];
+  /** Despierta al runner Free asíncrono después de enviar una solicitud. */
+  FREE_JOBS_QUEUE: Env['FREE_JOBS_QUEUE'];
   EMAIL_FROM: string;
   EMAIL_REPLY_TO: string;
   /** "1" para saltar la verificación de Turnstile (solo local). */
