@@ -55,6 +55,8 @@ export function GalleriesWorkspace({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [imagePendingDeletion, setImagePendingDeletion] =
+    useState<GalleryImageView | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -608,7 +610,7 @@ export function GalleriesWorkspace({
                         className="is-danger"
                         aria-label={`Eliminar imagen ${index + 1}`}
                         disabled={busy}
-                        onClick={() => void deleteImage(image.id)}
+                        onClick={() => setImagePendingDeletion(image)}
                       >
                         ×
                       </button>
@@ -642,6 +644,46 @@ export function GalleriesWorkspace({
           </div>
         </aside>
       </div>
+
+      {imagePendingDeletion ? (
+        <div className="lmw-galleries-admin__dialog-backdrop" role="presentation">
+          <div
+            className="lmw-galleries-admin__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gallery-delete-title"
+          >
+            <span>ELIMINAR IMAGEN</span>
+            <h2 id="gallery-delete-title">
+              ¿Eliminar {imagePendingDeletion.alt?.trim() || 'esta imagen'}?
+            </h2>
+            <p>
+              El archivo también se borrará de R2. Esta acción no se puede deshacer.
+            </p>
+            <div>
+              <button
+                type="button"
+                className="is-quiet"
+                onClick={() => setImagePendingDeletion(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="is-danger"
+                disabled={busy}
+                onClick={() => {
+                  const imageId = imagePendingDeletion.id;
+                  setImagePendingDeletion(null);
+                  void deleteImage(imageId);
+                }}
+              >
+                Eliminar de R2
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

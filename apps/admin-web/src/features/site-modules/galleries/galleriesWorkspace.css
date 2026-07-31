@@ -82,6 +82,47 @@
   gap: 8px;
 }
 
+.lmw-galleries-admin__dialog-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(2, 8, 18, 0.72);
+}
+
+.lmw-galleries-admin__dialog {
+  width: min(100%, 32rem);
+  border: 1px solid #2b4668;
+  padding: 2rem;
+  background: #07172d;
+  box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.42);
+  color: #eef5ff;
+}
+
+.lmw-galleries-admin__dialog > span {
+  color: #ff8b7a;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.lmw-galleries-admin__dialog h2 {
+  margin: 0.8rem 0;
+}
+
+.lmw-galleries-admin__dialog p {
+  color: #aac0da;
+}
+
+.lmw-galleries-admin__dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
 .lmw-galleries-admin__header-actions button,
 .lmw-galleries-admin__footer-actions button {
   border-radius: 9px;

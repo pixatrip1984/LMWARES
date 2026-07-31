@@ -28,13 +28,23 @@ La revisión Starter confirmó:
   bypass local, pero continúa requerido en hosts públicos;
 - `GET /modules/forms` ya no crea registros: la inicialización idempotente usa
   ahora `POST /modules/forms/initialize`.
+- Galerías completó crear álbum → cargar tres imágenes → editar textos
+  alternativos → reordenar → elegir portada → publicar → abrir detalle y visor;
+- la eliminación de una imagen retiró el objeto de R2 (`404`) y actualizó el
+  álbum público, y ahora requiere confirmación explícita en el administrador.
 
 La prueba creó en el proyecto local `astraeus` el artículo
 `elegir-herramientas-primer-proyecto` y una solicitud pública con el folio corto
 `272ba7c7`. También comprobó la inicialización explícita de un formulario nuevo
 en `dharma-lab`. No se desplegaron módulos ni migraciones remotas. La siguiente
-prueba funcional recomendada es Galerías, incluida carga, orden, portada y
-eliminación de imágenes.
+prueba funcional recomendada es Docs: checksum, matriz de archivos permitidos,
+publicación, descarga mediada y rechazo de formatos activos.
+
+Una brecha restante de Galerías no bloquea su ciclo principal, pero debe
+resolverse antes de prometer borradores totalmente aislados: reordenar, cambiar
+portada o eliminar imágenes de un álbum publicado modifica la colección pública
+de inmediato. Para mantener la versión publicada intacta mientras se edita será
+necesario versionar o copiar el manifiesto de imágenes por revisión.
 
 ## 1. Resumen ejecutivo
 
