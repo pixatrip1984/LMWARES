@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   parseSiteModules,
+  siteModuleFromPath,
   SiteModuleComposer,
   type SiteModuleKey,
 } from '../features/site-modules/SiteModuleComposer';
@@ -17,11 +18,16 @@ const MODULE_LABELS: Record<SiteModuleKey, string> = {
 };
 
 export function StarterSitePreviewPage() {
-  const { projectId = '' } = useParams<{ projectId: string }>();
+  const params = useParams<{ projectId: string; '*': string }>();
+  const projectId = params.projectId ?? '';
   const [searchParams] = useSearchParams();
   const modules = useMemo(
-    () => parseSiteModules(searchParams.get('modules')),
-    [searchParams],
+    () => {
+      const routeModule = siteModuleFromPath(params['*']);
+      const selected = searchParams.get('modules');
+      return parseSiteModules([selected, routeModule].filter(Boolean).join(','));
+    },
+    [params['*'], searchParams],
   );
 
   if (!projectId) {

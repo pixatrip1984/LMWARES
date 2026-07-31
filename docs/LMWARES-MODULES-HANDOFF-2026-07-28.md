@@ -32,13 +32,21 @@ La revisión Starter confirmó:
   alternativos → reordenar → elegir portada → publicar → abrir detalle y visor;
 - la eliminación de una imagen retiró el objeto de R2 (`404`) y actualizó el
   álbum público, y ahora requiere confirmación explícita en el administrador.
+- Docs completó carga → inspección → checksum → publicación → biblioteca
+  pública → descarga mediada;
+- los nueve formatos permitidos (`PDF`, `JPG`, `PNG`, `WebP`, `DOCX`, `XLSX`,
+  `PPTX`, `CSV`, `TXT`) quedaron `clean` con SHA-256 y se rechazaron contenido
+  activo, extensión doble, MIME falso y OOXML con macro antes de crear objetos;
+- las rutas profundas `/sites/:projectId/<module>` activan ahora el módulo
+  correspondiente, y el preview de Docs usa el origen público correcto.
 
 La prueba creó en el proyecto local `astraeus` el artículo
 `elegir-herramientas-primer-proyecto` y una solicitud pública con el folio corto
 `272ba7c7`. También comprobó la inicialización explícita de un formulario nuevo
-en `dharma-lab`. No se desplegaron módulos ni migraciones remotas. La siguiente
-prueba funcional recomendada es Docs: checksum, matriz de archivos permitidos,
-publicación, descarga mediada y rechazo de formatos activos.
+en `dharma-lab`. Docs publicó además `Guía de seguridad` en `astraeus` y usó
+`dharma-lab` como corpus de aceptación/rechazo. No se desplegaron módulos ni
+migraciones remotas. La siguiente prueba funcional recomendada es Eventos:
+publicación, registro, cupos, duplicados, cancelación y concurrencia.
 
 Una brecha restante de Galerías no bloquea su ciclo principal, pero debe
 resolverse antes de prometer borradores totalmente aislados: reordenar, cambiar
@@ -313,21 +321,32 @@ Implementado:
 - preview administrativo limitado;
 - listado público descargable;
 - descarga mediada por Worker;
+- checksum SHA-256 persistido en D1 y verificado por R2 durante la carga;
 - `Content-Disposition`;
 - `X-Content-Type-Options: nosniff`;
 - `Cache-Control` restrictivo;
 - bloqueo del prefijo Docs en el proxy genérico `/media/<key>`.
+- compositor público accesible tanto por `?modules=docs` como por la ruta
+  profunda `/sites/:projectId/docs`.
+
+Validado localmente:
+
+- los nueve formatos de la allowlist quedaron `clean` y con checksum;
+- `activo.txt`, `manual.pdf.exe`, un PDF con MIME falso y un DOCX con
+  `vbaProject.bin` quedaron `rejected` sin `file_asset` ni key de R2;
+- el checksum almacenado coincidió byte por byte con `Get-FileHash SHA256`;
+- la descarga respondió `attachment`, `nosniff`, `noopen` y `private,
+  no-store`;
+- la ruta genérica `/media/sites/<proyecto>/docs/...` respondió `404`;
+- la biblioteca real fue comprobada desde el panel y el sitio público.
 
 Pendientes importantes:
 
-1. `processUpload` crea actualmente el `file_asset` con `checksum: null`.
-   Debe calcular y persistir SHA-256 antes de declarar completa la protección de
-   integridad.
-2. Los estados `quarantine` y `scanning` representan validación síncrona básica;
+1. Los estados `quarantine` y `scanning` representan validación síncrona básica;
    todavía no existe antivirus profundo, sandbox ni Queue de escaneo.
-3. No existe aún una conversión/preview completo para Office.
-4. Debe probarse la matriz real de PDF, OOXML, CSV, TXT e imágenes.
-5. Integrar `DocsPublicModule` en el host real de micrositios.
+2. No existe aún una conversión/preview completo para Office.
+3. Falta una prueba inyectada del rollback R2/D1 ante fallos parciales de
+   persistencia; el camino de compensación ya existe.
 
 No debe trasladarse el antivirus profundo al Worker. La dirección acordada es
 Queue + runner o escáner externo.
@@ -578,10 +597,9 @@ módulos del configurador.
 
 ### P1. Endurecer archivos
 
-1. Implementar checksum SHA-256 para Docs.
-2. Probar allowlist y magic bytes con un corpus de archivos.
-3. Diseñar Queue/runner para escaneo profundo.
-4. Verificar limpieza de objetos R2 ante cualquier fallo parcial.
+1. Diseñar Queue/runner para escaneo profundo.
+2. Verificar con fallos inyectados la limpieza de objetos R2 ante cualquier
+   fallo parcial.
 
 ### P1. Pruebas
 

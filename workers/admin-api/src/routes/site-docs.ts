@@ -240,14 +240,26 @@ async function processUpload(
   let objectWritten = false;
 
   try {
-    await c.env.MEDIA.put(key, file, {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.byteLength !== file.size) {
+      throw new AppError(
+        'validation_error',
+        'El tamaño leído del archivo no coincide con el tamaño declarado.',
+      );
+    }
+    const checksumBuffer = await crypto.subtle.digest('SHA-256', bytes);
+    const checksum = `sha256:${toHex(new Uint8Array(checksumBuffer))}`;
+
+    await c.env.MEDIA.put(key, bytes, {
       httpMetadata: { contentType: inspection.detectedMime },
       customMetadata: {
         projectId,
         documentId,
         versionId: version.id,
         validator: inspection.report.validator,
+        checksum,
       },
+      sha256: checksumBuffer,
     });
     objectWritten = true;
 
@@ -255,9 +267,9 @@ async function processUpload(
       key,
       bucket: c.env.MEDIA_BUCKET_NAME,
       contentType: inspection.detectedMime,
-      sizeBytes: file.size,
+      sizeBytes: bytes.byteLength,
       originalName: inspection.fileName,
-      checksum: null,
+      checksum,
       createdBy: c.get('admin').email,
     });
     assetId = asset.id;
@@ -277,6 +289,7 @@ async function processUpload(
       versionId: version.id,
       version: version.version,
       fileAssetId: asset.id,
+      checksum,
       validation: inspection.report,
     });
     return document;
@@ -462,6 +475,12 @@ function normalizeMime(value: string): string | null {
 
 function safeSize(value: number): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function toHex(bytes: Uint8Array): string {
+  let output = '';
+  for (const byte of bytes) output += byte.toString(16).padStart(2, '0');
+  return output;
 }
 
 function contentDisposition(kind: 'inline' | 'attachment', fileName: string): string {

@@ -167,9 +167,16 @@ export function DocsWorkspace({ projectId }: DocsWorkspaceProps) {
   }
 
   function preview() {
-    const base = (import.meta.env.VITE_PUBLIC_WEB_URL ?? window.location.origin).replace(/\/$/, '');
+    const configuredBase = import.meta.env.VITE_PUBLIC_WEB_URL?.trim();
+    const isLoopback =
+      window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+    const base = configuredBase || (isLoopback ? 'http://127.0.0.1:5273' : '');
+    if (!base) {
+      setMessage('Falta configurar VITE_PUBLIC_WEB_URL para abrir la vista pública.');
+      return;
+    }
     window.open(
-      `${base}/sites/${encodeURIComponent(projectId)}/docs`,
+      `${base.replace(/\/$/, '')}/sites/${encodeURIComponent(projectId)}/docs`,
       '_blank',
       'noopener,noreferrer',
     );

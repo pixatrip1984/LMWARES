@@ -58,6 +58,11 @@ export function parseSiteModules(value: string | null): SiteModuleKey[] {
   return normalizeSiteModules(value.split(','));
 }
 
+export function siteModuleFromPath(path: string | undefined): SiteModuleKey | null {
+  const firstSegment = path?.split('/').find(Boolean) ?? '';
+  return isSiteModuleKey(firstSegment) ? firstSegment : null;
+}
+
 function normalizeSiteModules(modules: readonly string[]): SiteModuleKey[] {
   const seen = new Set<SiteModuleKey>();
   const normalized: SiteModuleKey[] = [];
