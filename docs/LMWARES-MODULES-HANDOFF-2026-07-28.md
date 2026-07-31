@@ -6,6 +6,29 @@ Rama: `cloudflare-starter-v01`
 HEAD observado: `7acdd84` (`panel terminado`, 2026-07-24)
 Estado: implementación local avanzada, sin commit y sin despliegue remoto.
 
+## Actualización de continuidad: 2026-07-31
+
+El estado Git descrito en el corte original ya no es vigente:
+
+- las bases de Free y módulos quedaron preservadas en `fbc63e9`;
+- Free fue aprobado remotamente y documentado en `616741f`;
+- el árbol estaba limpio antes de iniciar esta revisión.
+
+La revisión Starter confirmó:
+
+- las migraciones `0005` a `0009` ya están aplicadas en D1 local;
+- los cinco workspaces administrativos cargan sin errores de consola;
+- Blog completó el ciclo crear → previsualizar → guardar borrador → publicar;
+- la API pública devolvió tanto el listado como el detalle publicado;
+- existe ahora un compositor explícito `moduleKey → public component`;
+- la ruta local `/sites/:projectId?modules=...` monta combinaciones reales de
+  Blog, Galerías, Docs, Formulario y Eventos usando sus APIs públicas.
+
+La prueba creó en el proyecto local `astraeus` el artículo
+`elegir-herramientas-primer-proyecto`. No se desplegaron módulos ni migraciones
+remotas. La siguiente prueba funcional debe publicar y enviar un Formulario,
+porque valida a la vez configuración, revisión publicada, Turnstile e inbox.
+
 ## 1. Resumen ejecutivo
 
 Se implementaron cinco verticales iniciales de módulos LMWares:

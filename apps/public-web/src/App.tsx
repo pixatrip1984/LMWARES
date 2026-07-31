@@ -5,10 +5,12 @@ import { ContactPage } from './pages/ContactPage';
 import { ContractPage } from './pages/ContractPage';
 import { PackageBuilderPage } from './pages/PackageBuilderPage';
 import { PaymentPage } from './pages/PaymentPage';
+import { StarterSitePreviewPage } from './pages/StarterSitePreviewPage';
 
 export function App() {
   return (
     <Routes>
+      <Route path="/sites/:projectId/*" element={<StarterSitePreviewPage />} />
       <Route element={<SiteLayout />}>
         <Route index element={<ContractPage />} />
         <Route path="/contratar" element={<ContractPage />} />
