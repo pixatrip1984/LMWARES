@@ -303,7 +303,9 @@ export function loadPackageDraft(): PackageDraft {
       plan,
       modules: normalizedModules,
       marketing: parsed.marketing === true,
-      images: Array.isArray(parsed.images) ? parsed.images.slice(0, FREE_IMAGE_LIMIT) : [],
+      // File objects cannot be restored from localStorage. Restoring only their
+      // metadata would show stale images that the intake cannot actually upload.
+      images: [],
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : DEFAULT_DRAFT.updatedAt,
     };
   } catch {
@@ -313,7 +315,7 @@ export function loadPackageDraft(): PackageDraft {
 
 export function savePackageDraft(draft: PackageDraft) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...draft, images: [] }));
 }
 
 export function formatFileSize(bytes: number) {
