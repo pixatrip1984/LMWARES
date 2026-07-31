@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { PublicUser } from '@starter/domain';
+import { Turnstile } from '../components/Turnstile';
 import { PackagePreviewModal } from '../features/package-builder/PackagePreviewModal';
 import { api } from '../lib/api';
+import { config } from '../lib/config';
 import {
   DEFAULT_DRAFT,
   FOUNDATION_MODULES,
@@ -127,6 +129,8 @@ export function PackageBuilderPage() {
   const [freeContacts, setFreeContacts] = useState<FreeContactDraft[]>([
     { id: 'contact-1', platform: 'whatsapp', value: '' },
   ]);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
 
   const selectedModules = useMemo(
     () => PACKAGE_MODULES.filter(({ id }) => draft.modules.includes(id)),
@@ -493,6 +497,10 @@ export function PackageBuilderPage() {
       setFileError('Acepta la publicación de la información enviada.');
       return;
     }
+    if (!turnstileToken) {
+      setFileError('Completa la verificación anti-spam antes de enviar.');
+      return;
+    }
 
     setFileError('');
     setSubmitting(true);
@@ -518,7 +526,9 @@ export function PackageBuilderPage() {
         },
         contacts: contacts.map(({ id: _id, ...contact }) => ({ ...contact, publicVisible: true })),
         termsAccepted: true,
+        turnstileToken,
       });
+      setTurnstileToken(null);
 
       setFreeSubmit({ status: 'uploading', intakeId: created.id, slug: created.slug, message: 'Subiendo imágenes...' });
       for (const { file } of freeFiles) {
@@ -537,6 +547,8 @@ export function PackageBuilderPage() {
       flashNotice(`Solicitud Free enviada: ${submittedFree.slug}.lmwares.com`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud Free.';
+      setTurnstileToken(null);
+      setTurnstileAttempt((current) => current + 1);
       setFreeSubmit({ status: 'failed', message });
       setFileError(message);
     } finally {
@@ -1082,27 +1094,41 @@ export function PackageBuilderPage() {
             </div>
 
             {draft.plan === 'free' ? (
-              <section className="lmw-summary-consent" aria-labelledby="free-publication-consent">
-                <label>
-                  <input
-                    checked={freeForm.termsAccepted}
-                    onChange={(event) => {
-                      updateFreeForm({ termsAccepted: event.target.checked });
-                      if (event.target.checked) setFileError('');
-                    }}
-                    type="checkbox"
+              <>
+                <section className="lmw-summary-consent" aria-labelledby="free-publication-consent">
+                  <label>
+                    <input
+                      checked={freeForm.termsAccepted}
+                      onChange={(event) => {
+                        updateFreeForm({ termsAccepted: event.target.checked });
+                        if (event.target.checked) setFileError('');
+                      }}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong id="free-publication-consent">Autorización final de publicación</strong>
+                      Acepto que LMWares use la información e imágenes enviadas para generar y
+                      publicar esta página informativa Free.
+                    </span>
+                  </label>
+                  <small>
+                    El ejemplo no necesita autorización. Esta casilla corresponde únicamente a tu
+                    solicitud real.
+                  </small>
+                </section>
+                <section className="lmw-summary-turnstile" aria-labelledby="free-turnstile-label">
+                  <div>
+                    <strong id="free-turnstile-label">Verificación anti-spam</strong>
+                    <span>Protege la cola Free antes de crear la solicitud.</span>
+                  </div>
+                  <Turnstile
+                    action="turnstile-spin-v1"
+                    key={turnstileAttempt}
+                    onToken={setTurnstileToken}
+                    siteKey={config.turnstileSiteKey}
                   />
-                  <span>
-                    <strong id="free-publication-consent">Autorización final de publicación</strong>
-                    Acepto que LMWares use la información e imágenes enviadas para generar y
-                    publicar esta página informativa Free.
-                  </span>
-                </label>
-                <small>
-                  El ejemplo no necesita autorización. Esta casilla corresponde únicamente a tu
-                  solicitud real.
-                </small>
-              </section>
+                </section>
+              </>
             ) : null}
 
             {fileError ? (

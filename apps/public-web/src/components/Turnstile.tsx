@@ -15,9 +15,11 @@ const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render
 export function Turnstile({
   siteKey,
   onToken,
+  action = 'turnstile-spin-v1',
 }: {
   siteKey: string;
   onToken: (token: string | null) => void;
+  action?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
@@ -30,6 +32,7 @@ export function Turnstile({
       if (cancelled || !containerRef.current || !window.turnstile) return;
       widgetId.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
+        action,
         callback: (token: string) => onToken(token),
         'expired-callback': () => onToken(null),
         'error-callback': () => onToken(null),
@@ -57,7 +60,7 @@ export function Turnstile({
       cancelled = true;
       if (widgetId.current && window.turnstile) window.turnstile.remove(widgetId.current);
     };
-  }, [siteKey, onToken]);
+  }, [action, siteKey, onToken]);
 
   if (!siteKey) {
     return (

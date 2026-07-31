@@ -206,8 +206,7 @@ freeIntakes.post('/:id/submit', async (c) => {
   const session = await requirePublicSession(c);
   const intakeId = c.req.param('id')!;
   const raw = await readJson(c);
-  const input = parseInput(submitFreeIntakeSchema, raw);
-  await verifyPublicTurnstile(c, input.turnstileToken);
+  parseInput(submitFreeIntakeSchema, raw);
 
   const repos = createRepositories(c.env.DB);
   const intake = await repos.lmwaresFreeIntakes.getById(intakeId);
