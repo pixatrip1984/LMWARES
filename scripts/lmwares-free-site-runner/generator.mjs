@@ -4,7 +4,7 @@ export function buildManifest({ job, intake, contacts, assets }) {
   return {
     schema: 'lmwares.free-site.v1',
     generatedAt: new Date().toISOString(),
-    generator: 'lmwares-free-site-runner/static-v2',
+    generator: 'lmwares-free-site-runner/static-v3',
     job: {
       id: job.id,
       attempt: job.attempt,
@@ -22,6 +22,10 @@ export function buildManifest({ job, intake, contacts, assets }) {
     theme: {
       name: theme.name,
       source: theme.source,
+    },
+    layout: {
+      name: freePage.layoutPreset,
+      source: 'customer',
     },
     contacts: contacts.map(({ platform, value, label, publicVisible }) => ({
       platform,
@@ -43,6 +47,10 @@ export function buildManifest({ job, intake, contacts, assets }) {
 export function renderSite({ intake, contacts, assets, manifest, apiUrl }) {
   const freePage = normalizeFreePage(intake.metadata?.freePage);
   const theme = resolveTheme({ intake, freePage });
+  const layoutPreset = freePage.layoutPreset;
+  const location = freePage.location;
+  const mapEmbedUrl = location ? buildOpenStreetMapEmbedUrl(location) : null;
+  const directionsUrl = location ? buildGoogleMapsSearchUrl(location) : null;
   const copy = marketingCopyFor({ intake, freePage });
   const images = assets.map((entry) => ({
     ...entry,
@@ -340,17 +348,193 @@ export function renderSite({ intake, contacts, assets, manifest, apiUrl }) {
       padding: 24px clamp(18px, 4.8vw, 72px);
       text-align: center;
     }
+    .location {
+      background: var(--paper-2);
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: clamp(24px, 5vw, 72px);
+      grid-template-columns: minmax(260px, .7fr) minmax(420px, 1.3fr);
+      padding: clamp(44px, 7vw, 92px) clamp(18px, 4.8vw, 72px);
+    }
+    .location-copy {
+      align-self: center;
+    }
+    .location h2 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(34px, 4.4vw, 68px);
+      font-weight: 400;
+      letter-spacing: -0.055em;
+      line-height: .96;
+      margin: 16px 0;
+    }
+    .location p {
+      color: var(--muted);
+      line-height: 1.65;
+      margin: 0 0 28px;
+      max-width: 520px;
+    }
+    .location-map {
+      background: #dfe5dd;
+      border: 1px solid var(--line);
+      min-height: 430px;
+      overflow: hidden;
+      position: relative;
+    }
+    .location-map iframe {
+      border: 0;
+      height: 100%;
+      inset: 0;
+      position: absolute;
+      width: 100%;
+    }
+    .location-map > a {
+      background: rgba(255,255,255,.94);
+      bottom: 8px;
+      color: #244331;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 5px 8px;
+      position: absolute;
+      right: 8px;
+      z-index: 2;
+    }
+
+    /* Composición Impacto: tipografía fuerte, módulos compactos y contraste alto. */
+    .layout-impact h1,
+    .layout-impact .section h2,
+    .layout-impact .location h2,
+    .layout-impact .service-card strong,
+    .layout-impact .brand {
+      font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+      font-weight: 400;
+      letter-spacing: -0.025em;
+      text-transform: uppercase;
+    }
+    .layout-impact h1 {
+      font-size: clamp(58px, 8vw, 124px);
+      line-height: .84;
+    }
+    .layout-impact .hero {
+      grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr);
+    }
+    .layout-impact .hero-copy {
+      background: linear-gradient(140deg, rgba(var(--accent-rgb), .28), transparent 60%);
+    }
+    .layout-impact .pill,
+    .layout-impact .button,
+    .layout-impact .contact-actions a,
+    .layout-impact .contact-actions button {
+      border-radius: 0;
+    }
+    .layout-impact .service-card {
+      border: 0;
+      border-left: 7px solid var(--accent);
+      box-shadow: none;
+    }
+    .layout-impact .service-card strong {
+      font-size: clamp(28px, 3vw, 44px);
+    }
+
+    /* Composición Minimal: superficie clara, menos ornamento y foco en el contenido. */
+    .layout-minimal .topbar {
+      background: var(--paper-2);
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+    }
+    .layout-minimal .pill {
+      border-color: var(--line);
+      color: var(--muted);
+    }
+    .layout-minimal .hero {
+      background: var(--paper);
+      color: var(--ink);
+      grid-template-columns: minmax(0, 1fr) minmax(340px, .86fr);
+      min-height: 66vh;
+    }
+    .layout-minimal h1,
+    .layout-minimal .section h2,
+    .layout-minimal .location h2,
+    .layout-minimal .service-card strong,
+    .layout-minimal .brand {
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+    .layout-minimal h1 {
+      font-size: clamp(46px, 6vw, 88px);
+      font-weight: 760;
+      letter-spacing: -0.06em;
+    }
+    .layout-minimal .summary,
+    .layout-minimal .trust {
+      color: var(--muted);
+    }
+    .layout-minimal .button.secondary {
+      background: transparent;
+      border-color: var(--line);
+      color: var(--ink);
+    }
+    .layout-minimal .hero-image {
+      margin: clamp(18px, 3vw, 48px);
+      min-height: 400px;
+    }
+    .layout-minimal .hero-image::after {
+      background: linear-gradient(90deg, var(--paper), transparent 18%);
+    }
+    .layout-minimal .service-card {
+      box-shadow: none;
+    }
+
+    /* Composición Escaparate: portada fotográfica con el mensaje superpuesto. */
+    .layout-showcase .hero {
+      display: block;
+      min-height: 88vh;
+      position: relative;
+    }
+    .layout-showcase .hero-image {
+      inset: 0;
+      min-height: 0;
+      position: absolute;
+    }
+    .layout-showcase .hero-image::after {
+      background: linear-gradient(90deg, rgba(5, 16, 31, .94) 0%, rgba(5, 16, 31, .64) 52%, rgba(5, 16, 31, .12) 100%);
+    }
+    .layout-showcase .hero-copy {
+      min-height: 88vh;
+      max-width: 820px;
+    }
+    .layout-showcase .gallery {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .layout-showcase .gallery figure {
+      min-height: 340px;
+    }
+    .layout-showcase .gallery figure:first-child {
+      grid-column: span 2;
+      min-height: 688px;
+    }
     @media (max-width: 940px) {
-      .hero, .contact { grid-template-columns: 1fr; }
+      .hero, .contact, .location { grid-template-columns: 1fr; }
       .hero-image { min-height: 360px; order: -1; }
       .quick-facts, .services-grid, .gallery { grid-template-columns: 1fr; }
       .fact, .fact:first-child { border-left: 0; border-right: 0; border-top: 1px solid var(--line); }
       .gallery figure:first-child { grid-column: auto; grid-row: auto; min-height: 260px; }
+      .location-map { min-height: 360px; }
       .topbar { align-items: flex-start; flex-direction: column; }
+      .layout-impact .hero,
+      .layout-minimal .hero { grid-template-columns: 1fr; }
+      .layout-minimal .hero-image {
+        margin: 0;
+        order: 0;
+      }
+      .layout-showcase .hero-image {
+        min-height: 0;
+        order: 0;
+      }
+      .layout-showcase .gallery { grid-template-columns: 1fr; }
+      .layout-showcase .gallery figure:first-child { min-height: 360px; }
     }
   </style>
 </head>
-<body>
+<body class="layout-${escapeAttr(layoutPreset)}">
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="#inicio">${escapeHtml(intake.siteName)}</a>
@@ -368,7 +552,7 @@ export function renderSite({ intake, contacts, assets, manifest, apiUrl }) {
         ${freePage.trustLine ? `<p class="trust">${escapeHtml(freePage.trustLine)}</p>` : ''}
         <div class="actions">
           ${primaryCard?.href ? `<a class="button" href="${escapeAttr(primaryCard.href)}" target="_blank" rel="noopener">${escapeHtml(intake.primaryAction)} →</a>` : ''}
-          ${addressCard?.href ? `<a class="button secondary" href="${escapeAttr(addressCard.href)}" target="_blank" rel="noopener">Ver ubicación</a>` : '<a class="button secondary" href="#contacto">Ver contacto</a>'}
+          ${mapEmbedUrl ? '<a class="button secondary" href="#ubicacion">Ver ubicación</a>' : addressCard?.href ? `<a class="button secondary" href="${escapeAttr(addressCard.href)}" target="_blank" rel="noopener">Ver ubicación</a>` : '<a class="button secondary" href="#contacto">Ver contacto</a>'}
         </div>
       </div>
       <div class="hero-image">${primaryImage ? `<img alt="${escapeAttr(intake.siteName)}" src="${escapeAttr(primaryImage)}" />` : ''}</div>
@@ -392,6 +576,24 @@ export function renderSite({ intake, contacts, assets, manifest, apiUrl }) {
       <h2>${escapeHtml(copy.galleryTitle)}</h2>
       <div class="gallery">
         ${gallery.map((image, index) => `<figure><img alt="${escapeAttr(`${intake.siteName} imagen ${index + 1}`)}" src="${escapeAttr(image.url)}" /></figure>`).join('\n        ')}
+      </div>
+    </section>` : ''}
+
+    ${mapEmbedUrl && location ? `<section class="location" id="ubicacion">
+      <div class="location-copy">
+        <div class="eyebrow">Ubicación</div>
+        <h2>Encuéntranos aquí.</h2>
+        <p>${escapeHtml(location.address)}</p>
+        <a class="button" href="${escapeAttr(directionsUrl)}" target="_blank" rel="noopener">Cómo llegar →</a>
+      </div>
+      <div class="location-map">
+        <iframe
+          loading="lazy"
+          referrerpolicy="strict-origin-when-cross-origin"
+          src="${escapeAttr(mapEmbedUrl)}"
+          title="Mapa de ${escapeAttr(intake.siteName)}"
+        ></iframe>
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>
       </div>
     </section>` : ''}
 
@@ -453,6 +655,18 @@ function renderContactCard(card) {
         </article>`;
 }
 
+const LAYOUT_PRESETS = new Set(['editorial', 'impact', 'minimal', 'showcase']);
+const PALETTE_PRESETS = new Set([
+  'automatic',
+  'professional-blue',
+  'clinical-teal',
+  'industrial-orange',
+  'natural-green',
+  'culinary-terra',
+  'wellness-rose',
+  'night-fire',
+]);
+
 function normalizeFreePage(value) {
   const input = isPlainObject(value) ? value : {};
   return {
@@ -463,6 +677,9 @@ function normalizeFreePage(value) {
     serviceArea: stringOrEmpty(input.serviceArea),
     trustLine: stringOrEmpty(input.trustLine),
     colorPreference: stringOrEmpty(input.colorPreference),
+    layoutPreset: LAYOUT_PRESETS.has(input.layoutPreset) ? input.layoutPreset : 'editorial',
+    palettePreset: PALETTE_PRESETS.has(input.palettePreset) ? input.palettePreset : 'automatic',
+    location: normalizeLocation(input.location),
   };
 }
 
@@ -530,6 +747,19 @@ function marketingCopyFor({ intake, freePage }) {
 }
 
 function resolveTheme({ intake, freePage }) {
+  const explicitThemes = {
+    'professional-blue': THEMES.professional,
+    'clinical-teal': THEMES.clinical,
+    'industrial-orange': THEMES.industrial,
+    'natural-green': THEMES.natural,
+    'culinary-terra': THEMES.culinary,
+    'wellness-rose': THEMES.wellness,
+    'night-fire': THEMES.deepFire,
+  };
+  if (explicitThemes[freePage.palettePreset]) {
+    return withThemeSource(explicitThemes[freePage.palettePreset], 'palettePreset');
+  }
+
   const category = classifyBusiness({ intake, freePage });
   const preferred = normalizeSearchText(freePage.colorPreference);
 
@@ -659,6 +889,20 @@ const THEMES = {
     accentRgb: '168, 111, 45',
     blue: '#2f7058',
   },
+  natural: {
+    name: 'natural-green',
+    ink: '#102016',
+    muted: '#657267',
+    paper: '#f3f3e8',
+    paper2: '#fbfbf3',
+    navy: '#102719',
+    navy2: '#244331',
+    line: 'rgba(16, 32, 22, 0.14)',
+    accent: '#4f8a5b',
+    accent2: '#8bbb73',
+    accentRgb: '79, 138, 91',
+    blue: '#38705a',
+  },
   professional: {
     name: 'professional',
     ink: '#071529',
@@ -684,6 +928,49 @@ function normalizeSearchText(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+}
+
+function normalizeLocation(value) {
+  if (!isPlainObject(value)) return null;
+  const address = stringOrEmpty(value.address);
+  const latitude = Number(value.latitude);
+  const longitude = Number(value.longitude);
+  const zoomValue = Number(value.zoom);
+  if (
+    address.length < 4
+    || !Number.isFinite(latitude)
+    || latitude < -90
+    || latitude > 90
+    || !Number.isFinite(longitude)
+    || longitude < -180
+    || longitude > 180
+  ) {
+    return null;
+  }
+  return {
+    address,
+    latitude,
+    longitude,
+    zoom: Number.isInteger(zoomValue) && zoomValue >= 10 && zoomValue <= 18 ? zoomValue : 16,
+  };
+}
+
+function buildOpenStreetMapEmbedUrl({ latitude, longitude, zoom }) {
+  const latitudeSpan = 0.008 * 2 ** (16 - zoom);
+  const longitudeSpan = latitudeSpan / Math.max(0.25, Math.cos(latitude * Math.PI / 180));
+  const bbox = [
+    longitude - longitudeSpan,
+    latitude - latitudeSpan,
+    longitude + longitudeSpan,
+    latitude + latitudeSpan,
+  ].map((value) => value.toFixed(6)).join(',');
+  const marker = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(marker)}`;
+}
+
+function buildGoogleMapsSearchUrl({ latitude, longitude }) {
+  const query = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
 function toContactCard(contact) {

@@ -1,8 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+} from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { AccountOverview } from '@starter/api-client';
 import type { PublicUser } from '@starter/domain';
-import { createFreeIntakeSchema } from '@starter/validation';
+import {
+  FREE_LAYOUT_PRESETS,
+  FREE_PALETTE_PRESETS,
+  createFreeIntakeSchema,
+} from '@starter/validation';
 import { Turnstile } from '../components/Turnstile';
 import {
   AccountCenterModal,
@@ -59,6 +71,9 @@ type FreeSubmitState = {
   message?: string;
 };
 
+type FreeLayoutPreset = (typeof FREE_LAYOUT_PRESETS)[number];
+type FreePalettePreset = (typeof FREE_PALETTE_PRESETS)[number];
+
 const CONTACT_PLATFORM_OPTIONS: Array<{ value: FreeContactDraft['platform']; label: string }> = [
   { value: 'instagram', label: 'Instagram' },
   { value: 'facebook', label: 'Facebook' },
@@ -66,7 +81,6 @@ const CONTACT_PLATFORM_OPTIONS: Array<{ value: FreeContactDraft['platform']; lab
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'phone', label: 'Teléfono' },
   { value: 'email', label: 'Email' },
-  { value: 'address', label: 'Dirección' },
   { value: 'website', label: 'Sitio web' },
   { value: 'telegram', label: 'Telegram' },
   { value: 'tiktok', label: 'TikTok' },
@@ -87,7 +101,38 @@ const FREE_VALIDATION_LABELS: Record<string, string> = {
   'freePage.serviceArea': 'Zona de atención',
   'freePage.trustLine': 'Frase de confianza',
   'freePage.colorPreference': 'Preferencia de colores',
+  'freePage.layoutPreset': 'Estilo de composición',
+  'freePage.palettePreset': 'Paleta',
+  'freePage.location.address': 'Dirección',
+  'freePage.location.latitude': 'Latitud',
+  'freePage.location.longitude': 'Longitud',
 };
+
+const FREE_LAYOUT_OPTIONS: Array<{
+  id: FreeLayoutPreset;
+  label: string;
+  description: string;
+}> = [
+  { id: 'editorial', label: 'Editorial', description: 'Tipografía con carácter y composición equilibrada.' },
+  { id: 'impact', label: 'Impacto', description: 'Bloques fuertes, títulos grandes y llamadas directas.' },
+  { id: 'minimal', label: 'Minimal', description: 'Más aire, líneas limpias y atención al contenido.' },
+  { id: 'showcase', label: 'Escaparate', description: 'La fotografía domina la portada y la experiencia.' },
+];
+
+const FREE_PALETTE_OPTIONS: Array<{
+  id: FreePalettePreset;
+  label: string;
+  colors: [string, string, string];
+}> = [
+  { id: 'automatic', label: 'Automática', colors: ['#0b284d', '#2a7dff', '#f4f7fb'] },
+  { id: 'professional-blue', label: 'Azul profesional', colors: ['#06162c', '#2a7dff', '#f4f7fb'] },
+  { id: 'clinical-teal', label: 'Clínica teal', colors: ['#062039', '#0e9f9a', '#f7fbff'] },
+  { id: 'industrial-orange', label: 'Industrial', colors: ['#061626', '#e95b24', '#f3efe7'] },
+  { id: 'natural-green', label: 'Natural', colors: ['#102719', '#4f8a5b', '#f3f3e8'] },
+  { id: 'culinary-terra', label: 'Tierra cálida', colors: ['#32170c', '#c94f25', '#fff4e8'] },
+  { id: 'wellness-rose', label: 'Rosa bienestar', colors: ['#351729', '#d85b7b', '#fff6f7'] },
+  { id: 'night-fire', label: 'Noche y fuego', colors: ['#05162c', '#f04a2b', '#f6f0e7'] },
+];
 
 function formatFreeValidationIssue(issue: {
   code: string;
@@ -173,13 +218,18 @@ export function PackageBuilderPage() {
     businessDescription: '',
     audience: '',
     sector: '',
-    style: 'profesional moderno',
+    style: 'Editorial refinado',
+    layoutPreset: 'editorial' as FreeLayoutPreset,
+    palettePreset: 'automatic' as FreePalettePreset,
     primaryAction: 'contactar',
     services: '',
     hours: '',
     serviceArea: '',
     trustLine: '',
     colorPreference: '',
+    locationAddress: '',
+    locationLatitude: '',
+    locationLongitude: '',
     termsAccepted: false,
   }));
   const [freeContacts, setFreeContacts] = useState<FreeContactDraft[]>([
@@ -187,6 +237,7 @@ export function PackageBuilderPage() {
   ]);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileAttempt, setTurnstileAttempt] = useState(0);
+  const [locationStatus, setLocationStatus] = useState('');
 
   const selectedModules = useMemo(
     () => PACKAGE_MODULES.filter(({ id }) => draft.modules.includes(id)),
@@ -198,6 +249,13 @@ export function PackageBuilderPage() {
   const proCapabilities = visibleModules.filter(({ tier }) => tier === 'pro');
   const selectedComplements = selectedModules.filter(({ id }) => !FOUNDATION_MODULES.includes(id));
   const priceEstimate = useMemo(() => estimatePackagePrice(draft), [draft]);
+  const locationCoordinates = parseLocationCoordinates(
+    freeForm.locationLatitude,
+    freeForm.locationLongitude,
+  );
+  const locationMapUrl = locationCoordinates
+    ? buildOpenStreetMapEmbedUrl(locationCoordinates.latitude, locationCoordinates.longitude)
+    : null;
 
   const loadAccount = useCallback(async () => {
     setAccountLoading(true);
@@ -385,6 +443,25 @@ export function PackageBuilderPage() {
     );
   };
 
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('Este navegador no ofrece ubicación.');
+      return;
+    }
+    setLocationStatus('Esperando permiso del navegador…');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        updateFreeForm({
+          locationLatitude: coords.latitude.toFixed(6),
+          locationLongitude: coords.longitude.toFixed(6),
+        });
+        setLocationStatus('Marcador actualizado con tu ubicación actual.');
+      },
+      () => setLocationStatus('No pudimos obtener la ubicación. Puedes escribir las coordenadas.'),
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    );
+  };
+
   const checkFreeSlug = async () => {
     const slug = normalizeFreeSlug(freeForm.slug);
     updateFreeForm({ slug });
@@ -515,18 +592,24 @@ export function PackageBuilderPage() {
       businessDescription: '',
       audience: '',
       sector: '',
-      style: 'profesional moderno',
+      style: 'Editorial refinado',
+      layoutPreset: 'editorial',
+      palettePreset: 'automatic',
       primaryAction: 'contactar',
       services: '',
       hours: '',
       serviceArea: '',
       trustLine: '',
       colorPreference: '',
+      locationAddress: '',
+      locationLatitude: '',
+      locationLongitude: '',
       termsAccepted: false,
     });
     setFreeContacts([{ id: 'contact-1', platform: 'whatsapp', value: '' }]);
     setFreeSubmit({ status: 'idle' });
     setSlugStatus('idle');
+    setLocationStatus('');
     setView('package');
     setFileError('');
     flashNotice('Restauramos el ejemplo Starter.');
@@ -571,6 +654,19 @@ export function PackageBuilderPage() {
     const contacts = freeContacts
       .map((contact) => ({ ...contact, value: contact.value.trim() }))
       .filter((contact) => contact.value.length > 0);
+    const locationRequested = Boolean(
+      freeForm.locationAddress.trim()
+      || freeForm.locationLatitude.trim()
+      || freeForm.locationLongitude.trim(),
+    );
+    const location = locationRequested && locationCoordinates
+      ? {
+          address: freeForm.locationAddress.trim(),
+          latitude: locationCoordinates.latitude,
+          longitude: locationCoordinates.longitude,
+          zoom: 16,
+        }
+      : undefined;
 
     if (!freeForm.slug || !freeForm.siteName || !freeForm.contactName || !freeForm.contactEmail) {
       setFileError('Completa nombre, email, sitio y subdominio antes de enviar.');
@@ -597,8 +693,19 @@ export function PackageBuilderPage() {
       setFileError('Indica la zona de atención o cobertura.');
       return;
     }
+    if (
+      locationRequested
+      && (!location || location.address.length < 4)
+    ) {
+      setFileError('Para publicar el mapa agrega la dirección y coordenadas válidas.');
+      return;
+    }
     if (contacts.length === 0) {
       setFileError('Agrega al menos un dato de contacto visible.');
+      return;
+    }
+    if (location && contacts.length >= 12 && !contacts.some(({ platform }) => platform === 'address')) {
+      setFileError('El mapa ocupa un dato de contacto; elimina una fila antes de enviar.');
       return;
     }
     if (freeFiles.length < 1) {
@@ -614,6 +721,17 @@ export function PackageBuilderPage() {
       return;
     }
 
+    const contactsForPayload = location && !contacts.some(({ platform }) => platform === 'address')
+      ? [
+          ...contacts,
+          {
+            id: 'location-address',
+            platform: 'address' as const,
+            value: location.address,
+          },
+        ]
+      : contacts;
+    const selectedPalette = FREE_PALETTE_OPTIONS.find(({ id }) => id === freeForm.palettePreset);
     const freeIntakePayload = {
       slug: normalizeFreeSlug(freeForm.slug),
       siteName: freeForm.siteName.trim(),
@@ -629,9 +747,18 @@ export function PackageBuilderPage() {
         hours: freeForm.hours.trim(),
         serviceArea: freeForm.serviceArea.trim(),
         trustLine: freeForm.trustLine.trim() || undefined,
-        colorPreference: freeForm.colorPreference.trim() || undefined,
+        colorPreference:
+          freeForm.palettePreset === 'automatic'
+            ? undefined
+            : selectedPalette?.label,
+        layoutPreset: freeForm.layoutPreset,
+        palettePreset: freeForm.palettePreset,
+        location,
       },
-      contacts: contacts.map(({ id: _id, ...contact }) => ({ ...contact, publicVisible: true })),
+      contacts: contactsForPayload.map(({ id: _id, ...contact }) => ({
+        ...contact,
+        publicVisible: true,
+      })),
       termsAccepted: true as const,
       turnstileToken,
     };
@@ -896,16 +1023,6 @@ export function PackageBuilderPage() {
                       />
                     </label>
                     <label>
-                      <span>Estilo visual</span>
-                      <input
-                        maxLength={160}
-                        onChange={(event) => updateFreeForm({ style: event.target.value })}
-                        placeholder="Minimalista, elegante, tecnológico..."
-                        type="text"
-                        value={freeForm.style}
-                      />
-                    </label>
-                    <label>
                       <span>Sector opcional</span>
                       <input
                         onChange={(event) => updateFreeForm({ sector: event.target.value })}
@@ -959,17 +1076,130 @@ export function PackageBuilderPage() {
                         value={freeForm.trustLine}
                       />
                     </label>
-                    <label className="is-wide">
-                      <span>Preferencia de colores opcional</span>
-                      <input
-                        onChange={(event) => updateFreeForm({ colorPreference: event.target.value })}
-                        placeholder="Ej. azul y blanco, tonos cálidos, sobrio clínico..."
-                        type="text"
-                        value={freeForm.colorPreference}
-                      />
-                      <small>Si lo dejas vacío, LMWares elegirá una paleta según sector, estilo e imágenes.</small>
-                    </label>
+                    <fieldset className="lmw-free-design-selector is-wide">
+                      <legend>Composición visual</legend>
+                      <p>Elige cómo se organizarán portada, servicios, galería y contacto.</p>
+                      <div className="lmw-free-layout-options">
+                        {FREE_LAYOUT_OPTIONS.map((option) => (
+                          <button
+                            aria-pressed={freeForm.layoutPreset === option.id}
+                            className={freeForm.layoutPreset === option.id ? 'is-selected' : ''}
+                            key={option.id}
+                            onClick={() =>
+                              updateFreeForm({
+                                layoutPreset: option.id,
+                                style: option.label,
+                              })
+                            }
+                            type="button"
+                          >
+                            <i className={`is-${option.id}`}><span /><span /><span /></i>
+                            <b>{option.label}</b>
+                            <small>{option.description}</small>
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <fieldset className="lmw-free-design-selector is-wide">
+                      <legend>Paleta de color</legend>
+                      <p>Automática usa el sector; las demás fijan exactamente la familia cromática.</p>
+                      <div className="lmw-free-palette-options">
+                        {FREE_PALETTE_OPTIONS.map((option) => (
+                          <button
+                            aria-pressed={freeForm.palettePreset === option.id}
+                            className={freeForm.palettePreset === option.id ? 'is-selected' : ''}
+                            key={option.id}
+                            onClick={() => updateFreeForm({ palettePreset: option.id })}
+                            style={{
+                              '--palette-a': option.colors[0],
+                              '--palette-b': option.colors[1],
+                              '--palette-c': option.colors[2],
+                            } as CSSProperties}
+                            type="button"
+                          >
+                            <i><span /><span /><span /></i>
+                            <b>{option.label}</b>
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
                   </div>
+
+                  <section className="lmw-free-location">
+                    <header>
+                      <div>
+                        <p className="lmw-builder-eyebrow">Ubicación y mapa · Opcional</p>
+                        <h3>Marca el punto exacto del local.</h3>
+                        <span>La dirección se publica como texto; las coordenadas colocan el marcador sin adivinar ubicaciones.</span>
+                      </div>
+                      <button onClick={useCurrentLocation} type="button">Usar mi ubicación actual</button>
+                    </header>
+                    <div className="lmw-free-location__fields">
+                      <label>
+                        <span>Dirección pública</span>
+                        <input
+                          maxLength={240}
+                          onChange={(event) => updateFreeForm({ locationAddress: event.target.value })}
+                          placeholder="Calle, número, colonia, ciudad"
+                          type="text"
+                          value={freeForm.locationAddress}
+                        />
+                      </label>
+                      <label>
+                        <span>Latitud</span>
+                        <input
+                          inputMode="decimal"
+                          max="90"
+                          min="-90"
+                          onChange={(event) => updateFreeForm({ locationLatitude: event.target.value })}
+                          placeholder="25.686614"
+                          step="any"
+                          type="number"
+                          value={freeForm.locationLatitude}
+                        />
+                      </label>
+                      <label>
+                        <span>Longitud</span>
+                        <input
+                          inputMode="decimal"
+                          max="180"
+                          min="-180"
+                          onChange={(event) => updateFreeForm({ locationLongitude: event.target.value })}
+                          placeholder="-100.316113"
+                          step="any"
+                          type="number"
+                          value={freeForm.locationLongitude}
+                        />
+                      </label>
+                    </div>
+                    <div className="lmw-free-location__map">
+                      {locationMapUrl ? (
+                        <iframe
+                          loading="lazy"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          src={locationMapUrl}
+                          title="Vista previa de la ubicación"
+                        />
+                      ) : (
+                        <div><i />Agrega coordenadas o usa tu ubicación para ver el marcador.</div>
+                      )}
+                      <aside>
+                        <p>
+                          En Google Maps puedes hacer clic derecho sobre el punto y copiar las coordenadas.
+                        </p>
+                        {freeForm.locationAddress.trim() ? (
+                          <a
+                            href={buildGoogleMapsSearchUrl(freeForm.locationAddress)}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Buscar dirección en Google Maps ↗
+                          </a>
+                        ) : null}
+                        {locationStatus ? <small role="status">{locationStatus}</small> : null}
+                      </aside>
+                    </div>
+                  </section>
 
                   <div className="lmw-free-contacts">
                     <div>
@@ -1336,6 +1566,45 @@ function normalizeFreeSlug(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function parseLocationCoordinates(latitudeValue: string, longitudeValue: string) {
+  if (!latitudeValue.trim() || !longitudeValue.trim()) return null;
+  const latitude = Number(latitudeValue);
+  const longitude = Number(longitudeValue);
+  if (
+    !Number.isFinite(latitude)
+    || !Number.isFinite(longitude)
+    || latitude < -90
+    || latitude > 90
+    || longitude < -180
+    || longitude > 180
+  ) {
+    return null;
+  }
+  return { latitude, longitude };
+}
+
+function buildOpenStreetMapEmbedUrl(latitude: number, longitude: number) {
+  const latitudeSpan = 0.008;
+  const longitudeSpan = latitudeSpan / Math.max(0.25, Math.cos(latitude * Math.PI / 180));
+  const bbox = [
+    longitude - longitudeSpan,
+    latitude - latitudeSpan,
+    longitude + longitudeSpan,
+    latitude + latitudeSpan,
+  ].map((value) => value.toFixed(6)).join(',');
+  const query = new URLSearchParams({
+    bbox,
+    layer: 'mapnik',
+    marker: `${latitude.toFixed(6)},${longitude.toFixed(6)}`,
+  });
+  return `https://www.openstreetmap.org/export/embed.html?${query.toString()}`;
+}
+
+function buildGoogleMapsSearchUrl(queryValue: string) {
+  const query = new URLSearchParams({ api: '1', query: queryValue.trim() });
+  return `https://www.google.com/maps/search/?${query.toString()}`;
 }
 
 function parseFreeLines(value: string) {

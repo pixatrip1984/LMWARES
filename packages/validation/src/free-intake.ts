@@ -8,6 +8,17 @@ import { emailSchema, idSchema, slugSchema } from './primitives';
 
 export const FREE_INTAKE_IMAGE_LIMIT = 5;
 export const FREE_INTAKE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const FREE_LAYOUT_PRESETS = ['editorial', 'impact', 'minimal', 'showcase'] as const;
+export const FREE_PALETTE_PRESETS = [
+  'automatic',
+  'professional-blue',
+  'clinical-teal',
+  'industrial-orange',
+  'natural-green',
+  'culinary-terra',
+  'wellness-rose',
+  'night-fire',
+] as const;
 
 export const freeContactMethodInputSchema = z.object({
   platform: z.enum(FREE_CONTACT_PLATFORMS),
@@ -17,12 +28,23 @@ export const freeContactMethodInputSchema = z.object({
 });
 export type FreeContactMethodInput = z.infer<typeof freeContactMethodInputSchema>;
 
+export const freeLocationInputSchema = z.object({
+  address: z.string().trim().min(4).max(240),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  zoom: z.number().int().min(10).max(18).default(16),
+});
+export type FreeLocationInput = z.infer<typeof freeLocationInputSchema>;
+
 export const freePageDetailsInputSchema = z.object({
   services: z.array(z.string().trim().min(2).max(80)).min(1).max(8).default([]),
   hours: z.string().trim().max(180).optional(),
   serviceArea: z.string().trim().max(220).optional(),
   trustLine: z.string().trim().max(180).optional(),
   colorPreference: z.string().trim().max(120).optional(),
+  layoutPreset: z.enum(FREE_LAYOUT_PRESETS).default('editorial'),
+  palettePreset: z.enum(FREE_PALETTE_PRESETS).default('automatic'),
+  location: freeLocationInputSchema.optional(),
 });
 export type FreePageDetailsInput = z.infer<typeof freePageDetailsInputSchema>;
 
