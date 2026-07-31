@@ -1,9 +1,11 @@
 import {
   useCallback,
   useEffect,
+  lazy,
   useMemo,
   useRef,
   useState,
+  Suspense,
   type ChangeEvent,
   type CSSProperties,
 } from 'react';
@@ -49,6 +51,10 @@ import {
   type PlanId,
 } from '../features/package-builder/packageBuilderModel';
 import './packageBuilder.css';
+
+const OpenStreetMapPicker = lazy(
+  () => import('../features/package-builder/OpenStreetMapPicker'),
+);
 
 type BuilderView = 'package' | 'summary';
 
@@ -253,9 +259,6 @@ export function PackageBuilderPage() {
     freeForm.locationLatitude,
     freeForm.locationLongitude,
   );
-  const locationMapUrl = locationCoordinates
-    ? buildOpenStreetMapEmbedUrl(locationCoordinates.latitude, locationCoordinates.longitude)
-    : null;
 
   const loadAccount = useCallback(async () => {
     setAccountLoading(true);
@@ -1130,75 +1133,35 @@ export function PackageBuilderPage() {
                       <div>
                         <p className="lmw-builder-eyebrow">Ubicación y mapa · Opcional</p>
                         <h3>Marca el punto exacto del local.</h3>
-                        <span>La dirección se publica como texto; las coordenadas colocan el marcador sin adivinar ubicaciones.</span>
+                        <span>Busca el negocio o la dirección y selecciona el punto directamente, sin copiar coordenadas.</span>
                       </div>
                       <button onClick={useCurrentLocation} type="button">Usar mi ubicación actual</button>
                     </header>
-                    <div className="lmw-free-location__fields">
-                      <label>
-                        <span>Dirección pública</span>
-                        <input
-                          maxLength={240}
-                          onChange={(event) => updateFreeForm({ locationAddress: event.target.value })}
-                          placeholder="Calle, número, colonia, ciudad"
-                          type="text"
-                          value={freeForm.locationAddress}
-                        />
-                      </label>
-                      <label>
-                        <span>Latitud</span>
-                        <input
-                          inputMode="decimal"
-                          max="90"
-                          min="-90"
-                          onChange={(event) => updateFreeForm({ locationLatitude: event.target.value })}
-                          placeholder="25.686614"
-                          step="any"
-                          type="number"
-                          value={freeForm.locationLatitude}
-                        />
-                      </label>
-                      <label>
-                        <span>Longitud</span>
-                        <input
-                          inputMode="decimal"
-                          max="180"
-                          min="-180"
-                          onChange={(event) => updateFreeForm({ locationLongitude: event.target.value })}
-                          placeholder="-100.316113"
-                          step="any"
-                          type="number"
-                          value={freeForm.locationLongitude}
-                        />
-                      </label>
-                    </div>
-                    <div className="lmw-free-location__map">
-                      {locationMapUrl ? (
-                        <iframe
-                          loading="lazy"
-                          referrerPolicy="strict-origin-when-cross-origin"
-                          src={locationMapUrl}
-                          title="Vista previa de la ubicación"
-                        />
-                      ) : (
-                        <div><i />Agrega coordenadas o usa tu ubicación para ver el marcador.</div>
-                      )}
-                      <aside>
-                        <p>
-                          En Google Maps puedes hacer clic derecho sobre el punto y copiar las coordenadas.
-                        </p>
-                        {freeForm.locationAddress.trim() ? (
-                          <a
-                            href={buildGoogleMapsSearchUrl(freeForm.locationAddress)}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            Buscar dirección en Google Maps ↗
-                          </a>
-                        ) : null}
-                        {locationStatus ? <small role="status">{locationStatus}</small> : null}
-                      </aside>
-                    </div>
+                    <Suspense fallback={<div className="lmw-map-picker-loading">Cargando mapa interactivo…</div>}>
+                      <OpenStreetMapPicker
+                        address={freeForm.locationAddress}
+                        latitude={locationCoordinates?.latitude ?? null}
+                        longitude={locationCoordinates?.longitude ?? null}
+                        onAddressChange={(locationAddress) => updateFreeForm({ locationAddress })}
+                        onClear={() => {
+                          updateFreeForm({
+                            locationAddress: '',
+                            locationLatitude: '',
+                            locationLongitude: '',
+                          });
+                          setLocationStatus('Ubicación eliminada.');
+                        }}
+                        onSelect={({ address, latitude, longitude }) => {
+                          updateFreeForm({
+                            locationAddress: address,
+                            locationLatitude: latitude.toFixed(6),
+                            locationLongitude: longitude.toFixed(6),
+                          });
+                          setLocationStatus('Punto seleccionado dentro del mapa.');
+                        }}
+                        status={locationStatus}
+                      />
+                    </Suspense>
                   </section>
 
                   <div className="lmw-free-contacts">
@@ -1583,28 +1546,6 @@ function parseLocationCoordinates(latitudeValue: string, longitudeValue: string)
     return null;
   }
   return { latitude, longitude };
-}
-
-function buildOpenStreetMapEmbedUrl(latitude: number, longitude: number) {
-  const latitudeSpan = 0.008;
-  const longitudeSpan = latitudeSpan / Math.max(0.25, Math.cos(latitude * Math.PI / 180));
-  const bbox = [
-    longitude - longitudeSpan,
-    latitude - latitudeSpan,
-    longitude + longitudeSpan,
-    latitude + latitudeSpan,
-  ].map((value) => value.toFixed(6)).join(',');
-  const query = new URLSearchParams({
-    bbox,
-    layer: 'mapnik',
-    marker: `${latitude.toFixed(6)},${longitude.toFixed(6)}`,
-  });
-  return `https://www.openstreetmap.org/export/embed.html?${query.toString()}`;
-}
-
-function buildGoogleMapsSearchUrl(queryValue: string) {
-  const query = new URLSearchParams({ api: '1', query: queryValue.trim() });
-  return `https://www.google.com/maps/search/?${query.toString()}`;
 }
 
 function parseFreeLines(value: string) {

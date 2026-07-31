@@ -18,6 +18,7 @@ import { authRoutes } from './routes/auth';
 import { payments } from './routes/payments';
 import { subscriptions } from './routes/subscriptions';
 import { account } from './routes/account';
+import { mapLocations } from './routes/map-locations';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -56,6 +57,7 @@ app.route('/subscriptions', subscriptions);
 app.route('/publications', publications);
 app.route('/requests', requests);
 app.route('/free', freeIntakes);
+app.route('/map', mapLocations);
 app.route('/internal', freeJobsInternal);
 app.route('/sites/:projectId/blog', siteBlogPublic);
 app.route('/sites/:projectId/galleries', publicSiteGalleries);

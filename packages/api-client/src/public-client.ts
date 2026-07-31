@@ -29,6 +29,20 @@ export interface FreeSlugAvailability {
   suggestions: string[];
 }
 
+export interface MapSearchLocation {
+  id: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  category: string;
+  type: string;
+}
+
+export interface MapSearchResult {
+  results: MapSearchLocation[];
+  attribution: string;
+}
+
 export interface FreeImageUploadResult {
   id: string;
   fileAssetId: string;
@@ -184,6 +198,11 @@ export function createPublicClient(baseUrl: string) {
 
     checkFreeSlug(slug: string) {
       return http.get<FreeSlugAvailability>(`/free/slugs/${encodeURIComponent(slug)}`);
+    },
+
+    searchMapLocations(query: string) {
+      const params = new URLSearchParams({ q: query.trim() });
+      return http.get<MapSearchResult>(`/map/search?${params}`);
     },
 
     createFreeIntake(input: CreateFreeIntakeInput) {
