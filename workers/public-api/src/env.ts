@@ -20,6 +20,8 @@ export interface Bindings {
   PUBLIC_API_URL: string;
   /** Proveedor de geocodificación intercambiable usado únicamente por el proxy del mapa. */
   MAP_SEARCH_BASE_URL?: string;
+  /** Proveedor OSM preparado para sugerencias mientras el usuario escribe. */
+  MAP_SUGGEST_BASE_URL?: string;
   /** OAuth Web Client de Google. */
   GOOGLE_OAUTH_CLIENT_ID: string;
   /** Secreto del OAuth Web Client de Google. Siempre como secret. */

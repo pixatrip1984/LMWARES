@@ -244,6 +244,7 @@ export function PackageBuilderPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileAttempt, setTurnstileAttempt] = useState(0);
   const [locationStatus, setLocationStatus] = useState('');
+  const locationRequestRef = useRef(0);
 
   const selectedModules = useMemo(
     () => PACKAGE_MODULES.filter(({ id }) => draft.modules.includes(id)),
@@ -451,16 +452,39 @@ export function PackageBuilderPage() {
       setLocationStatus('Este navegador no ofrece ubicación.');
       return;
     }
+    const requestId = ++locationRequestRef.current;
     setLocationStatus('Esperando permiso del navegador…');
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
+      async ({ coords }) => {
+        const latitude = Number(coords.latitude.toFixed(6));
+        const longitude = Number(coords.longitude.toFixed(6));
         updateFreeForm({
-          locationLatitude: coords.latitude.toFixed(6),
-          locationLongitude: coords.longitude.toFixed(6),
+          locationAddress: '',
+          locationLatitude: latitude.toFixed(6),
+          locationLongitude: longitude.toFixed(6),
         });
-        setLocationStatus('Marcador actualizado con tu ubicación actual.');
+        setLocationStatus('Ubicación obtenida. Buscando la dirección cercana…');
+        try {
+          const response = await api.reverseMapLocation(latitude, longitude);
+          if (requestId !== locationRequestRef.current) return;
+          updateFreeForm({
+            locationAddress: response.result?.address
+              || `Ubicación actual (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`,
+          });
+          setLocationStatus(
+            response.result
+              ? 'Ubicación actual y dirección confirmadas.'
+              : 'Punto guardado. Puedes ajustar abajo el texto público de la dirección.',
+          );
+        } catch {
+          if (requestId !== locationRequestRef.current) return;
+          updateFreeForm({
+            locationAddress: `Ubicación actual (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`,
+          });
+          setLocationStatus('Punto guardado. Puedes ajustar abajo el texto público de la dirección.');
+        }
       },
-      () => setLocationStatus('No pudimos obtener la ubicación. Puedes escribir las coordenadas.'),
+      () => setLocationStatus('No pudimos obtener la ubicación. Puedes buscarla o marcarla directamente en el mapa.'),
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
     );
   };
@@ -1144,6 +1168,7 @@ export function PackageBuilderPage() {
                         longitude={locationCoordinates?.longitude ?? null}
                         onAddressChange={(locationAddress) => updateFreeForm({ locationAddress })}
                         onClear={() => {
+                          locationRequestRef.current += 1;
                           updateFreeForm({
                             locationAddress: '',
                             locationLatitude: '',
@@ -1152,6 +1177,7 @@ export function PackageBuilderPage() {
                           setLocationStatus('Ubicación eliminada.');
                         }}
                         onSelect={({ address, latitude, longitude }) => {
+                          locationRequestRef.current += 1;
                           updateFreeForm({
                             locationAddress: address,
                             locationLatitude: latitude.toFixed(6),

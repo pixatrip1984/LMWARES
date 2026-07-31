@@ -40,6 +40,12 @@ export interface MapSearchLocation {
 
 export interface MapSearchResult {
   results: MapSearchLocation[];
+  approximate?: boolean;
+  attribution: string;
+}
+
+export interface MapReverseResult {
+  result: MapSearchLocation | null;
   attribution: string;
 }
 
@@ -203,6 +209,26 @@ export function createPublicClient(baseUrl: string) {
     searchMapLocations(query: string) {
       const params = new URLSearchParams({ q: query.trim() });
       return http.get<MapSearchResult>(`/map/search?${params}`);
+    },
+
+    suggestMapLocations(
+      query: string,
+      bias?: { latitude: number; longitude: number },
+    ) {
+      const params = new URLSearchParams({ q: query.trim() });
+      if (bias) {
+        params.set('lat', bias.latitude.toFixed(6));
+        params.set('lon', bias.longitude.toFixed(6));
+      }
+      return http.get<MapSearchResult>(`/map/suggest?${params}`);
+    },
+
+    reverseMapLocation(latitude: number, longitude: number) {
+      const params = new URLSearchParams({
+        lat: latitude.toFixed(6),
+        lon: longitude.toFixed(6),
+      });
+      return http.get<MapReverseResult>(`/map/reverse?${params}`);
     },
 
     createFreeIntake(input: CreateFreeIntakeInput) {

@@ -42,20 +42,71 @@ export function OpenStreetMapPicker({
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<Marker | null>(null);
   const onSelectRef = useRef(onSelect);
-  const addressRef = useRef(address);
   const lastSearchAtRef = useRef(0);
+  const suggestionRequestRef = useRef(0);
+  const reverseRequestRef = useRef(0);
+  const suppressSuggestionsRef = useRef(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MapSearchLocation[]>([]);
   const [searching, setSearching] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [resolvingPoint, setResolvingPoint] = useState(false);
   const [searchMessage, setSearchMessage] = useState('');
 
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
-  useEffect(() => {
-    addressRef.current = address;
-  }, [address]);
+  const resolveMapPoint = async (rawLatitude: number, rawLongitude: number) => {
+    const nextLatitude = roundCoordinate(rawLatitude);
+    const nextLongitude = roundCoordinate(rawLongitude);
+    const requestId = ++reverseRequestRef.current;
+    suggestionRequestRef.current += 1;
+    setResults([]);
+    setResolvingPoint(true);
+    setSearchMessage('Buscando la dirección del punto seleccionado…');
+    onSelectRef.current({
+      address: '',
+      latitude: nextLatitude,
+      longitude: nextLongitude,
+    });
+
+    try {
+      const response = await api.reverseMapLocation(nextLatitude, nextLongitude);
+      if (requestId !== reverseRequestRef.current) return;
+      const resolvedAddress = response.result?.address
+        || `Punto seleccionado en el mapa (${nextLatitude.toFixed(6)}, ${nextLongitude.toFixed(6)})`;
+      suppressSuggestionsRef.current = true;
+      setQuery(resolvedAddress);
+      onSelectRef.current({
+        address: resolvedAddress,
+        latitude: nextLatitude,
+        longitude: nextLongitude,
+      });
+      setSearchMessage(
+        response.result
+          ? 'Dirección localizada. Arrastra el pin o haz clic en otro punto para afinarla.'
+          : 'No hay una dirección registrada en OpenStreetMap para ese punto. Puedes editar el texto de abajo.',
+      );
+    } catch (error) {
+      if (requestId !== reverseRequestRef.current) return;
+      const fallbackAddress = `Punto seleccionado en el mapa (${nextLatitude.toFixed(6)}, ${nextLongitude.toFixed(6)})`;
+      suppressSuggestionsRef.current = true;
+      setQuery(fallbackAddress);
+      onSelectRef.current({
+        address: fallbackAddress,
+        latitude: nextLatitude,
+        longitude: nextLongitude,
+      });
+      setSearchMessage(
+        error instanceof Error
+          ? `${error.message} Puedes editar manualmente la dirección de abajo.`
+          : 'No pudimos localizar la dirección. Puedes editar manualmente el texto de abajo.',
+      );
+    } finally {
+      if (requestId === reverseRequestRef.current) setResolvingPoint(false);
+    }
+  };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -75,18 +126,7 @@ export function OpenStreetMapPicker({
     }).addTo(map);
 
     const handleMapClick = ({ latlng }: LeafletMouseEvent) => {
-      const nextLatitude = roundCoordinate(latlng.lat);
-      const nextLongitude = roundCoordinate(latlng.lng);
-      onSelectRef.current({
-        address: addressRef.current,
-        latitude: nextLatitude,
-        longitude: nextLongitude,
-      });
-      setSearchMessage(
-        addressRef.current.trim()
-          ? 'Punto actualizado. Confirma debajo la dirección que se publicará.'
-          : 'Punto marcado. Escribe debajo la dirección que se publicará.',
-      );
+      void resolveMapPoint(latlng.lat, latlng.lng);
     };
 
     map.on('click', handleMapClick);
@@ -111,13 +151,62 @@ export function OpenStreetMapPicker({
     } else {
       markerRef.current = L.marker(position, {
         alt: 'Ubicación seleccionada',
+        draggable: true,
         icon: LOCATION_MARKER,
         keyboard: true,
         title: 'Ubicación seleccionada',
       }).addTo(map);
+      markerRef.current.on('dragend', () => {
+        const markerPosition = markerRef.current?.getLatLng();
+        if (markerPosition) void resolveMapPoint(markerPosition.lat, markerPosition.lng);
+      });
     }
     map.setView(position, Math.max(map.getZoom(), 16), { animate: true });
   }, [latitude, longitude]);
+
+  useEffect(() => {
+    const normalized = query.trim().replace(/\s+/g, ' ');
+    const requestId = ++suggestionRequestRef.current;
+    if (suppressSuggestionsRef.current) {
+      suppressSuggestionsRef.current = false;
+      return;
+    }
+    if (normalized.length < 3) {
+      setResults([]);
+      setSuggesting(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      if (requestId !== suggestionRequestRef.current) return;
+      setSuggesting(true);
+      setSearchMessage('Buscando sugerencias de ubicación…');
+      const center = mapRef.current?.getCenter();
+      try {
+        const response = await api.suggestMapLocations(
+          normalized,
+          center ? { latitude: center.lat, longitude: center.lng } : undefined,
+        );
+        if (requestId !== suggestionRequestRef.current) return;
+        setResults(response.results);
+        setSearchMessage(
+          response.results.length > 0
+            ? response.approximate
+              ? 'No aparece el número exacto en OpenStreetMap; mostramos coincidencias cercanas para que puedas ubicar la zona.'
+              : 'Selecciona una sugerencia; el mapa se moverá automáticamente.'
+            : 'Aún no hay coincidencias. Agrega ciudad o estado, o selecciona el punto directamente en el mapa.',
+        );
+      } catch (error) {
+        if (requestId !== suggestionRequestRef.current) return;
+        setResults([]);
+        setSearchMessage(error instanceof Error ? error.message : 'No fue posible cargar sugerencias.');
+      } finally {
+        if (requestId === suggestionRequestRef.current) setSuggesting(false);
+      }
+    }, 700);
+
+    return () => window.clearTimeout(timeout);
+  }, [query]);
 
   const search = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -132,17 +221,29 @@ export function OpenStreetMapPicker({
     }
 
     lastSearchAtRef.current = Date.now();
+    suggestionRequestRef.current += 1;
+    setSuggesting(false);
     setSearching(true);
     setSearchMessage('Buscando en OpenStreetMap…');
     setResults([]);
     try {
       const response = await api.searchMapLocations(normalized);
-      setResults(response.results);
-      setSearchMessage(
-        response.results.length > 0
-          ? 'Selecciona una coincidencia para colocar el marcador.'
-          : 'No encontramos coincidencias. Prueba agregando ciudad, estado o código postal.',
-      );
+      if (response.results.length > 0) {
+        setResults(response.results);
+        setSearchMessage('Selecciona una coincidencia para colocar el marcador.');
+      } else {
+        const center = mapRef.current?.getCenter();
+        const fallback = await api.suggestMapLocations(
+          normalized,
+          center ? { latitude: center.lat, longitude: center.lng } : undefined,
+        );
+        setResults(fallback.results);
+        setSearchMessage(
+          fallback.results.length > 0
+            ? 'No encontramos el número exacto; selecciona una coincidencia cercana y afina el punto en el mapa.'
+            : 'No encontramos coincidencias. Agrega ciudad o estado, o selecciona directamente la zona en el mapa.',
+        );
+      }
     } catch (error) {
       setSearchMessage(error instanceof Error ? error.message : 'No fue posible buscar esa ubicación.');
     } finally {
@@ -151,9 +252,12 @@ export function OpenStreetMapPicker({
   };
 
   const chooseResult = (result: MapSearchLocation) => {
+    suggestionRequestRef.current += 1;
+    reverseRequestRef.current += 1;
+    suppressSuggestionsRef.current = true;
     setQuery(result.address);
     setResults([]);
-    setSearchMessage('Ubicación seleccionada. Puedes afinarla haciendo clic en el mapa.');
+    setSearchMessage('Ubicación seleccionada. Puedes afinarla haciendo clic en el mapa o arrastrando el pin.');
     onSelect({
       address: result.address,
       latitude: result.latitude,
@@ -162,6 +266,8 @@ export function OpenStreetMapPicker({
   };
 
   const clearSelection = () => {
+    suggestionRequestRef.current += 1;
+    reverseRequestRef.current += 1;
     if (markerRef.current && mapRef.current) {
       mapRef.current.removeLayer(markerRef.current);
       markerRef.current = null;
@@ -169,6 +275,7 @@ export function OpenStreetMapPicker({
     }
     setQuery('');
     setResults([]);
+    setResolvingPoint(false);
     setSearchMessage('Ubicación eliminada.');
     onClear();
   };
@@ -182,26 +289,30 @@ export function OpenStreetMapPicker({
           <span>Buscar negocio o dirección</span>
           <input
             aria-describedby="lmw-map-search-help"
+            aria-expanded={results.length > 0}
+            aria-controls="lmw-map-search-results"
+            aria-autocomplete="list"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Ej. Museo MARCO, Monterrey o calle, número y ciudad"
             type="search"
             value={query}
           />
         </label>
-        <button disabled={searching} type="submit">
+        <button disabled={searching || resolvingPoint} type="submit">
           {searching ? 'Buscando…' : 'Buscar en el mapa'}
         </button>
       </form>
 
       <p className="lmw-map-picker__help" id="lmw-map-search-help">
-        La consulta se envía únicamente al pulsar Buscar. Selecciona un resultado o haz clic directamente sobre el mapa.
+        Las sugerencias aparecen al pausar mientras escribes. También puedes hacer clic en el mapa o arrastrar el pin para elegir la casa exacta.
       </p>
 
       {results.length > 0 ? (
-        <div className="lmw-map-picker__results" role="listbox" aria-label="Resultados de ubicación">
+        <div className="lmw-map-picker__results" id="lmw-map-search-results" role="listbox" aria-label="Resultados de ubicación">
           {results.map((result) => (
             <button
               key={result.id}
+              aria-selected="false"
               onClick={() => chooseResult(result)}
               role="option"
               type="button"
@@ -238,7 +349,10 @@ export function OpenStreetMapPicker({
       </div>
 
       <p className="lmw-map-picker__status" role="status" aria-live="polite">
-        {searchMessage || status || 'El mapa está listo para buscar o seleccionar un punto.'}
+        {searchMessage
+          || (suggesting ? 'Buscando sugerencias…' : '')
+          || status
+          || 'El mapa está listo para buscar o seleccionar un punto.'}
       </p>
     </div>
   );

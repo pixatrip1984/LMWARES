@@ -108,7 +108,10 @@
 .lmw-map-picker__marker {
   background: transparent;
   border: 0;
+  cursor: grab;
 }
+
+.lmw-map-picker__marker:active { cursor: grabbing; }
 
 .lmw-map-picker__marker span {
   background: #ff5138;
