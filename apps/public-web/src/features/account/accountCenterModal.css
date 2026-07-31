@@ -435,7 +435,18 @@
   margin: 18px 0 7px;
 }
 
-.lmw-account-sites article > p {
+.lmw-account-sites__card-body {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 112px;
+}
+
+.lmw-account-sites__details {
+  min-width: 0;
+}
+
+.lmw-account-sites__details > p {
   color: #6f8caf;
   font-size: 10px;
   margin: 0;
@@ -444,14 +455,14 @@
   white-space: nowrap;
 }
 
-.lmw-account-sites dl {
+.lmw-account-sites__details dl {
   display: grid;
   gap: 12px;
   grid-template-columns: 1fr 1fr;
   margin: 22px 0;
 }
 
-.lmw-account-sites dl div {
+.lmw-account-sites__details dl div {
   border-left: 1px solid rgba(90, 145, 221, 0.3);
   padding-left: 10px;
 }
@@ -472,6 +483,67 @@
 .lmw-account-sites article footer > span {
   color: #7891b2;
   font-size: 9px;
+}
+
+.lmw-account-site-qr {
+  display: grid;
+  gap: 7px;
+  justify-items: stretch;
+  margin-top: 18px;
+  width: 112px;
+}
+
+.lmw-account-site-qr > small {
+  color: #72acfa;
+  font-family: var(--builder-mono, monospace);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.lmw-account-site-qr > div {
+  align-items: center;
+  aspect-ratio: 1;
+  background: rgba(14, 37, 67, 0.9);
+  border: 1px solid rgba(91, 155, 244, 0.34);
+  display: flex;
+  justify-content: center;
+  padding: 7px;
+}
+
+.lmw-account-site-qr > div.is-ready {
+  background: #fff;
+  border-color: #fff;
+}
+
+.lmw-account-site-qr img {
+  display: block;
+  height: auto;
+  image-rendering: pixelated;
+  max-width: 100%;
+}
+
+.lmw-account-site-qr > div > span {
+  color: #7891b2;
+  font-family: var(--builder-mono, monospace);
+  font-size: 7px;
+  text-align: center;
+}
+
+.lmw-account-site-qr > a {
+  border: 1px solid rgba(91, 155, 244, 0.45);
+  color: #b9d7ff;
+  font-family: var(--builder-mono, monospace);
+  font-size: 7px;
+  padding: 7px 5px;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.lmw-account-site-qr > a:hover {
+  background: rgba(45, 128, 255, 0.16);
+  border-color: var(--account-blue);
 }
 
 .lmw-account-profile {
@@ -678,5 +750,7 @@
   .lmw-account-reader > footer { grid-template-columns: 1fr; }
   .lmw-account-sites { padding: 20px 14px; }
   .lmw-account-sites > header { align-items: flex-start; flex-direction: column; }
+  .lmw-account-sites__card-body { grid-template-columns: minmax(0, 1fr) 96px; }
+  .lmw-account-site-qr { width: 96px; }
   .lmw-account-footer { padding: 0 14px; }
 }

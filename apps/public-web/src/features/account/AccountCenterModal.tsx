@@ -313,12 +313,17 @@ function SitesPanel({
                 {SITE_STATUS_LABELS[site.status] ?? site.status}
               </i>
             </header>
-            <h4>{site.siteName}</h4>
-            <p>{site.publicUrl ?? `${site.slug}.lmwares.com`}</p>
-            <dl>
-              <div><dt>Creado</dt><dd>{formatDate(site.createdAt)}</dd></div>
-              <div><dt>Publicado</dt><dd>{site.publishedAt ? formatDate(site.publishedAt) : 'En proceso'}</dd></div>
-            </dl>
+            <div className="lmw-account-sites__card-body">
+              <div className="lmw-account-sites__details">
+                <h4>{site.siteName}</h4>
+                <p>{site.publicUrl ?? `${site.slug}.lmwares.com`}</p>
+                <dl>
+                  <div><dt>Creado</dt><dd>{formatDate(site.createdAt)}</dd></div>
+                  <div><dt>Publicado</dt><dd>{site.publishedAt ? formatDate(site.publishedAt) : 'En proceso'}</dd></div>
+                </dl>
+              </div>
+              {site.publicUrl ? <SiteQrCode site={site} /> : null}
+            </div>
             <footer>
               {site.publicUrl ? (
                 <>
@@ -335,6 +340,71 @@ function SitesPanel({
         ))}
       </div>
     </section>
+  );
+}
+
+function SiteQrCode({ site }: { site: AccountSite }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const publicUrl = site.publicUrl;
+    if (!publicUrl) return;
+    let cancelled = false;
+    setDataUrl(null);
+    setFailed(false);
+    void import('qrcode')
+      .then(({ default: QRCode }) =>
+        QRCode.toDataURL(publicUrl, {
+          color: {
+            dark: '#07182fff',
+            light: '#ffffffff',
+          },
+          errorCorrectionLevel: 'M',
+          margin: 4,
+          type: 'image/png',
+          width: 768,
+        }),
+      )
+      .then((url) => {
+        if (!cancelled) setDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [site.publicUrl]);
+
+  return (
+    <aside className="lmw-account-site-qr" aria-label={`Código QR de ${site.siteName}`}>
+      <small>QR DEL SITIO</small>
+      <div className={dataUrl ? 'is-ready' : ''}>
+        {dataUrl ? (
+          <img
+            alt={`Código QR para abrir ${site.siteName}`}
+            height="768"
+            src={dataUrl}
+            width="768"
+          />
+        ) : (
+          <span>{failed ? 'QR no disponible' : 'Generando…'}</span>
+        )}
+      </div>
+      {dataUrl ? (
+        <a download={`${safeDownloadName(site.slug)}-qr.png`} href={dataUrl}>
+          Descargar QR
+        </a>
+      ) : null}
+    </aside>
+  );
+}
+
+function safeDownloadName(slug: string): string {
+  return (
+    slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') ||
+    'sitio-lmwares'
   );
 }
 

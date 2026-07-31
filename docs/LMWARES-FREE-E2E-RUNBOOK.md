@@ -108,6 +108,8 @@ cuenta autenticada:
 - Turnstile completado en el formulario público;
 - URL final mostrada por el configurador;
 - sitio registrado en `Mis sitios`;
+- cada sitio publicado muestra en `Mis sitios` un QR local de su URL y permite
+  descargarlo como PNG de 768×768 para compartir o imprimir;
 - notificación interna disponible en el centro de cuenta;
 - correo transaccional recibido con enlace y datos de entrega;
 - sitio abierto correctamente desde el subdominio wildcard con HTTPS.
