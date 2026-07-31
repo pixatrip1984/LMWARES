@@ -34,7 +34,7 @@ export const createFreeIntakeSchema = z.object({
   businessDescription: z.string().trim().min(20).max(1600),
   audience: z.string().trim().min(6).max(500),
   sector: z.string().trim().max(120).optional(),
-  style: z.string().trim().min(2).max(80),
+  style: z.string().trim().min(2).max(160),
   primaryAction: z.string().trim().min(2).max(80).default('contactar'),
   freePage: freePageDetailsInputSchema.optional(),
   contacts: z.array(freeContactMethodInputSchema).min(1).max(12),

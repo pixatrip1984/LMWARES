@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { PublicUser } from '@starter/domain';
+import { createFreeIntakeSchema } from '@starter/validation';
 import { Turnstile } from '../components/Turnstile';
 import { PackagePreviewModal } from '../features/package-builder/PackagePreviewModal';
 import { api } from '../lib/api';
@@ -62,6 +63,46 @@ const CONTACT_PLATFORM_OPTIONS: Array<{ value: FreeContactDraft['platform']; lab
   { value: 'tiktok', label: 'TikTok' },
   { value: 'other', label: 'Otro' },
 ];
+
+const FREE_VALIDATION_LABELS: Record<string, string> = {
+  slug: 'Subdominio',
+  siteName: 'Nombre público',
+  contactName: 'Nombre de contacto',
+  contactEmail: 'Email de notificación',
+  businessDescription: 'Descripción del negocio',
+  audience: 'Audiencia o sector',
+  sector: 'Sector',
+  style: 'Estilo visual',
+  primaryAction: 'Acción principal',
+  'freePage.hours': 'Horario o disponibilidad',
+  'freePage.serviceArea': 'Zona de atención',
+  'freePage.trustLine': 'Frase de confianza',
+  'freePage.colorPreference': 'Preferencia de colores',
+};
+
+function formatFreeValidationIssue(issue: {
+  code: string;
+  message: string;
+  path: Array<string | number>;
+  maximum?: number | bigint;
+  type?: string;
+}) {
+  const path = issue.path.join('.');
+  const label = path.startsWith('freePage.services.')
+    ? 'Servicios, productos o capacidades'
+    : path.startsWith('contacts.')
+      ? 'Contactos visibles'
+      : (FREE_VALIDATION_LABELS[path] ?? (path || 'Solicitud Free'));
+
+  if (
+    issue.code === 'too_big'
+    && issue.type === 'string'
+    && (typeof issue.maximum === 'number' || typeof issue.maximum === 'bigint')
+  ) {
+    return `${label}: máximo ${String(issue.maximum)} caracteres.`;
+  }
+  return `${label}: ${issue.message}`;
+}
 
 const PLAN_COPY: Record<PlanId, { name: string; eyebrow: string; description: string }> = {
   free: {
@@ -502,32 +543,39 @@ export function PackageBuilderPage() {
       return;
     }
 
+    const freeIntakePayload = {
+      slug: normalizeFreeSlug(freeForm.slug),
+      siteName: freeForm.siteName.trim(),
+      contactName: freeForm.contactName.trim(),
+      contactEmail: freeForm.contactEmail.trim(),
+      businessDescription: freeForm.businessDescription.trim(),
+      audience: freeForm.audience.trim(),
+      sector: freeForm.sector.trim() || undefined,
+      style: freeForm.style.trim(),
+      primaryAction: freeForm.primaryAction.trim(),
+      freePage: {
+        services,
+        hours: freeForm.hours.trim(),
+        serviceArea: freeForm.serviceArea.trim(),
+        trustLine: freeForm.trustLine.trim() || undefined,
+        colorPreference: freeForm.colorPreference.trim() || undefined,
+      },
+      contacts: contacts.map(({ id: _id, ...contact }) => ({ ...contact, publicVisible: true })),
+      termsAccepted: true as const,
+      turnstileToken,
+    };
+    const validatedPayload = createFreeIntakeSchema.safeParse(freeIntakePayload);
+    if (!validatedPayload.success) {
+      setFileError(formatFreeValidationIssue(validatedPayload.error.issues[0]!));
+      return;
+    }
+
     setFileError('');
     setSubmitting(true);
     setFreeSubmit({ status: 'checking', message: 'Creando solicitud Free...' });
 
     try {
-      const created = await api.createFreeIntake({
-        slug: normalizeFreeSlug(freeForm.slug),
-        siteName: freeForm.siteName.trim(),
-        contactName: freeForm.contactName.trim(),
-        contactEmail: freeForm.contactEmail.trim(),
-        businessDescription: freeForm.businessDescription.trim(),
-        audience: freeForm.audience.trim(),
-        sector: freeForm.sector.trim() || undefined,
-        style: freeForm.style.trim(),
-        primaryAction: freeForm.primaryAction.trim(),
-        freePage: {
-          services,
-          hours: freeForm.hours.trim(),
-          serviceArea: freeForm.serviceArea.trim(),
-          trustLine: freeForm.trustLine.trim() || undefined,
-          colorPreference: freeForm.colorPreference.trim() || undefined,
-        },
-        contacts: contacts.map(({ id: _id, ...contact }) => ({ ...contact, publicVisible: true })),
-        termsAccepted: true,
-        turnstileToken,
-      });
+      const created = await api.createFreeIntake(validatedPayload.data);
       setTurnstileToken(null);
 
       setFreeSubmit({ status: 'uploading', intakeId: created.id, slug: created.slug, message: 'Subiendo imágenes...' });
@@ -759,6 +807,7 @@ export function PackageBuilderPage() {
                     <label>
                       <span>Estilo visual</span>
                       <input
+                        maxLength={160}
                         onChange={(event) => updateFreeForm({ style: event.target.value })}
                         placeholder="Minimalista, elegante, tecnológico..."
                         type="text"
