@@ -3,6 +3,10 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { PublicUser } from '@starter/domain';
 import { createFreeIntakeSchema } from '@starter/validation';
 import { Turnstile } from '../components/Turnstile';
+import {
+  FreePublicationModal,
+  type FreePublicationStatus,
+} from '../features/package-builder/FreePublicationModal';
 import { PackagePreviewModal } from '../features/package-builder/PackagePreviewModal';
 import { api } from '../lib/api';
 import { config } from '../lib/config';
@@ -43,7 +47,7 @@ type FreeImageFile = {
 };
 
 type FreeSubmitState = {
-  status: 'idle' | 'checking' | 'uploading' | 'queued' | 'published' | 'failed';
+  status: FreePublicationStatus;
   intakeId?: string;
   slug?: string;
   publicUrl?: string | null;
@@ -146,6 +150,7 @@ export function PackageBuilderPage() {
   const [fileError, setFileError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [publicationOpen, setPublicationOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [freeFiles, setFreeFiles] = useState<FreeImageFile[]>([]);
   const [freeSubmit, setFreeSubmit] = useState<FreeSubmitState>({ status: 'idle' });
@@ -242,6 +247,7 @@ export function PackageBuilderPage() {
               ? 'Tu página Free ya está publicada. También enviamos el enlace a tu email.'
               : 'Tu página Free ya está publicada. El enlace quedó programado para tu email.',
           }));
+          setPublicationOpen(true);
           return;
         }
         if (
@@ -253,6 +259,7 @@ export function PackageBuilderPage() {
             status: 'failed',
             message: result.job?.errorMessage ?? 'La generación requiere revisión.',
           }));
+          setPublicationOpen(true);
           return;
         }
       } catch {
@@ -573,6 +580,7 @@ export function PackageBuilderPage() {
     setFileError('');
     setSubmitting(true);
     setFreeSubmit({ status: 'checking', message: 'Creando solicitud Free...' });
+    setPublicationOpen(true);
 
     try {
       const created = await api.createFreeIntake(validatedPayload.data);
@@ -598,6 +606,7 @@ export function PackageBuilderPage() {
       setTurnstileToken(null);
       setTurnstileAttempt((current) => current + 1);
       setFreeSubmit({ status: 'failed', message });
+      setPublicationOpen(true);
       setFileError(message);
     } finally {
       setSubmitting(false);
@@ -932,14 +941,13 @@ export function PackageBuilderPage() {
                     <p className={`lmw-free-assets__status is-${freeSubmit.status}`}>{freeSubmit.message}</p>
                   ) : null}
                   {freeSubmit.publicUrl ? (
-                    <a
+                    <button
                       className="lmw-free-assets__status is-published"
-                      href={freeSubmit.publicUrl}
-                      rel="noreferrer"
-                      target="_blank"
+                      onClick={() => setPublicationOpen(true)}
+                      type="button"
                     >
-                      Abrir {freeSubmit.slug}.lmwares.com ↗
-                    </a>
+                      Ver publicación: {freeSubmit.slug}.lmwares.com ↗
+                    </button>
                   ) : null}
                   {draft.images.length > 0 ? (
                     <ul>
@@ -1061,14 +1069,13 @@ export function PackageBuilderPage() {
             ) : null}
 
             {draft.plan === 'free' && freeSubmit.publicUrl ? (
-              <a
+              <button
                 className="lmw-builder-primary"
-                href={freeSubmit.publicUrl}
-                rel="noreferrer"
-                target="_blank"
+                onClick={() => setPublicationOpen(true)}
+                type="button"
               >
-                Ver mi sitio <span>↗</span>
-              </a>
+                Ver sitio publicado <span>↗</span>
+              </button>
             ) : (
               <button className="lmw-builder-primary" onClick={() => setPreviewOpen(true)} type="button">
                 Ver ejemplo <span>↗</span>
@@ -1214,6 +1221,14 @@ export function PackageBuilderPage() {
           setView('summary');
         }}
         open={previewOpen}
+      />
+      <FreePublicationModal
+        message={freeSubmit.message}
+        onClose={() => setPublicationOpen(false)}
+        open={publicationOpen}
+        publicUrl={freeSubmit.publicUrl}
+        slug={freeSubmit.slug}
+        status={freeSubmit.status}
       />
     </div>
   );

@@ -1362,6 +1362,16 @@
 .lmw-free-assets__status.is-uploading,
 .lmw-free-assets__status.is-checking { color: #79b8ff; }
 
+button.lmw-free-assets__status.is-published {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .lmw-free-assets ul {
   display: grid;
   gap: 6px;
