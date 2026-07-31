@@ -52,7 +52,7 @@ export function FormsWorkspace({ projectId }: { projectId: string }) {
     setDetail(null);
 
     void formsApi
-      .getWorkspace(projectId)
+      .getOrInitializeWorkspace(projectId)
       .then((response) => {
         if (cancelled) return;
         setWorkspace(response);

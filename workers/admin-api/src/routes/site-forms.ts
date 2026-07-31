@@ -20,6 +20,20 @@ export const siteForms = new Hono<{ Bindings: Bindings; Variables: Variables }>(
 siteForms.get('/', async (c) => {
   const projectId = c.req.param('projectId')!;
   const repository = new SiteFormsRepository(c.env.DB);
+  if (!(await repository.projectExists(projectId))) throw AppError.notFound('Proyecto');
+  const form = await repository.getByProjectId(projectId);
+  if (!form) throw AppError.notFound('Formulario');
+
+  const requests = await repository.listRequests(projectId, {
+    page: 1,
+    pageSize: 50,
+  });
+  return c.json({ form, requests });
+});
+
+siteForms.post('/initialize', requireWrite, async (c) => {
+  const projectId = c.req.param('projectId')!;
+  const repository = new SiteFormsRepository(c.env.DB);
   const form = await repository.ensureForProject(projectId, c.get('admin').email);
   if (!form) throw AppError.notFound('Proyecto');
 

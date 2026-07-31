@@ -26,6 +26,14 @@ export function resolvePublicApiUrl(configuredValue: string | undefined, browser
   }
 }
 
+export function resolveTurnstileSiteKey(
+  configuredValue: string | undefined,
+  browserHostname: string,
+) {
+  if (isLocalHostname(browserHostname)) return '';
+  return configuredValue?.trim() ?? '';
+}
+
 const viteEnv = (import.meta as ImportMeta & {
   env?: { VITE_PUBLIC_API_URL?: string; VITE_TURNSTILE_SITE_KEY?: string };
 }).env;
@@ -33,5 +41,8 @@ const browserHostname = typeof window === 'undefined' ? 'localhost' : window.loc
 
 export const config = {
   apiUrl: resolvePublicApiUrl(viteEnv?.VITE_PUBLIC_API_URL, browserHostname),
-  turnstileSiteKey: viteEnv?.VITE_TURNSTILE_SITE_KEY ?? '',
+  turnstileSiteKey: resolveTurnstileSiteKey(
+    viteEnv?.VITE_TURNSTILE_SITE_KEY,
+    browserHostname,
+  ),
 };

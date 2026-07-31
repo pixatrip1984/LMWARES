@@ -7,6 +7,7 @@ import type {
   SiteFormRequestNote,
   SiteFormRequestStatus,
 } from '@starter/domain';
+import { AppError } from '@starter/domain';
 import { config } from '../../../lib/config';
 
 export interface SiteFormRequestsPage {
@@ -34,6 +35,15 @@ function modulePath(projectId: string): string {
 export const formsApi = {
   getWorkspace(projectId: string) {
     return http.get<FormsWorkspaceResponse>(modulePath(projectId));
+  },
+
+  async getOrInitializeWorkspace(projectId: string) {
+    try {
+      return await http.get<FormsWorkspaceResponse>(modulePath(projectId));
+    } catch (cause) {
+      if (!(cause instanceof AppError) || cause.code !== 'not_found') throw cause;
+      return http.post<FormsWorkspaceResponse>(`${modulePath(projectId)}/initialize`);
+    }
   },
 
   saveDefinition(projectId: string, definition: SiteFormDefinition) {

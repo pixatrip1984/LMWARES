@@ -23,11 +23,18 @@ La revisión Starter confirmó:
 - existe ahora un compositor explícito `moduleKey → public component`;
 - la ruta local `/sites/:projectId?modules=...` monta combinaciones reales de
   Blog, Galerías, Docs, Formulario y Eventos usando sus APIs públicas.
+- Formulario completó publicar → enviar desde el sitio → aparecer en inbox;
+- Turnstile deja de bloquear el desarrollo local cuando el Worker usa su
+  bypass local, pero continúa requerido en hosts públicos;
+- `GET /modules/forms` ya no crea registros: la inicialización idempotente usa
+  ahora `POST /modules/forms/initialize`.
 
 La prueba creó en el proyecto local `astraeus` el artículo
-`elegir-herramientas-primer-proyecto`. No se desplegaron módulos ni migraciones
-remotas. La siguiente prueba funcional debe publicar y enviar un Formulario,
-porque valida a la vez configuración, revisión publicada, Turnstile e inbox.
+`elegir-herramientas-primer-proyecto` y una solicitud pública con el folio corto
+`272ba7c7`. También comprobó la inicialización explícita de un formulario nuevo
+en `dharma-lab`. No se desplegaron módulos ni migraciones remotas. La siguiente
+prueba funcional recomendada es Galerías, incluida carga, orden, portada y
+eliminación de imágenes.
 
 ## 1. Resumen ejecutivo
 
