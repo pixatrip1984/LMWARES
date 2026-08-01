@@ -1,3 +1,10 @@
+import {
+  COMMERCIAL_PACKAGE_PRICING_CENTS,
+  estimateCommercialPackage,
+  type PaidPackageModuleId,
+  type PaidPackagePlan,
+} from '@starter/domain';
+
 export type PlanId = 'free' | 'starter' | 'pro';
 
 export type PackageModuleId =
@@ -126,17 +133,22 @@ export const FREE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const PACKAGE_PRICING = {
   implementation: {
     free: 0,
-    starterOneComplement: 7900,
-    starterTwoComplements: 10900,
-    proBase: 14900,
-    proWithCartOrOptimization: 19900,
-    proFull: 24900,
+    starterOneComplement:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.starterOneComplement / 100,
+    starterTwoComplements:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.starterTwoComplements / 100,
+    proBase: COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proBase / 100,
+    proWithCartOrOptimization:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proWithCartOrOptimization / 100,
+    proFull: COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proFull / 100,
   },
   monthly: {
-    maintenanceFrom: 900,
-    operationalMaintenanceFrom: 2900,
-    securityAddOnFrom: 1900,
-    astramusesStaticFrom: 100,
+    maintenanceFrom: COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.maintenanceFrom / 100,
+    operationalMaintenanceFrom:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.operationalMaintenanceFrom / 100,
+    securityAddOnFrom: COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.securityAddOnFrom / 100,
+    astramusesStaticFrom:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.astramusesStaticFrom / 100,
   },
 } as const;
 
@@ -186,10 +198,6 @@ export function formatMxPrice(amount: number) {
 }
 
 export function estimatePackagePrice(draft: Pick<PackageDraft, 'plan' | 'modules' | 'marketing'>): PackagePriceEstimate {
-  const complements = getSelectedComplements(draft.modules);
-  const hasCart = draft.modules.includes('cart');
-  const hasOptimization = draft.modules.includes('data');
-
   if (draft.plan === 'free') {
     return {
       implementation: PACKAGE_PRICING.implementation.free,
@@ -201,47 +209,20 @@ export function estimatePackagePrice(draft: Pick<PackageDraft, 'plan' | 'modules
       monthlyOptionalFrom: 0,
     };
   }
-
-  if (draft.plan === 'starter') {
-    const implementation = complements.length >= 2
-      ? PACKAGE_PRICING.implementation.starterTwoComplements
-      : PACKAGE_PRICING.implementation.starterOneComplement;
-
-    return {
-      implementation,
-      implementationLabel: complements.length >= 2
-        ? 'Starter · 2 complementos'
-        : complements.length === 1
-          ? 'Starter · 1 complemento'
-          : 'Starter · base mínima',
-      maintenanceFrom: PACKAGE_PRICING.monthly.maintenanceFrom,
-      operationalMaintenanceFrom: PACKAGE_PRICING.monthly.operationalMaintenanceFrom,
-      securityAddOnFrom: PACKAGE_PRICING.monthly.securityAddOnFrom,
-      astramusesMonthly: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
-      monthlyOptionalFrom: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
-    };
-  }
-
-  const implementation = hasCart && hasOptimization
-    ? PACKAGE_PRICING.implementation.proFull
-    : hasCart || hasOptimization
-      ? PACKAGE_PRICING.implementation.proWithCartOrOptimization
-      : PACKAGE_PRICING.implementation.proBase;
+  const estimate = estimateCommercialPackage({
+    plan: draft.plan as PaidPackagePlan,
+    modules: draft.modules as PaidPackageModuleId[],
+    marketing: draft.marketing,
+  });
 
   return {
-    implementation,
-    implementationLabel: hasCart && hasOptimization
-      ? 'Pro · comercio + optimización'
-      : hasCart
-        ? 'Pro · comercio'
-        : hasOptimization
-          ? 'Pro · optimización'
-          : 'Pro base',
-    maintenanceFrom: PACKAGE_PRICING.monthly.maintenanceFrom,
-    operationalMaintenanceFrom: PACKAGE_PRICING.monthly.operationalMaintenanceFrom,
-    securityAddOnFrom: PACKAGE_PRICING.monthly.securityAddOnFrom,
-    astramusesMonthly: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
-    monthlyOptionalFrom: draft.marketing ? PACKAGE_PRICING.monthly.astramusesStaticFrom : 0,
+    implementation: estimate.implementationAmountCents / 100,
+    implementationLabel: estimate.implementationLabel,
+    maintenanceFrom: estimate.maintenanceAmountCents / 100,
+    operationalMaintenanceFrom: estimate.operationalMaintenanceAmountCents / 100,
+    securityAddOnFrom: estimate.securityAddOnAmountCents / 100,
+    astramusesMonthly: estimate.astramusesAmountCents / 100,
+    monthlyOptionalFrom: estimate.astramusesAmountCents / 100,
   };
 }
 

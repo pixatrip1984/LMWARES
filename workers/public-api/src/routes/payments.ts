@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import {
   AppError,
   checkoutBlocked,
+  normalizePaidPackageModules,
   type PackageProposal,
   type PackageSubscription,
-  type PaidPackageModuleId,
 } from '@starter/domain';
 import { createRepositories } from '@starter/db';
 import { createTestPackageProposalSchema, parseInput } from '@starter/validation';
@@ -482,8 +482,9 @@ payments.post('/proposals', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
   assertTestPaymentConfiguration(c.env);
+  assertTechnicalCheckoutEnabled(c.env);
   const input = parseInput(createTestPackageProposalSchema, await readJson(c));
-  const modules = normalizeAndValidateModules(input.plan, input.modules);
+  const modules = normalizePaidPackageModules(input.plan, input.modules);
   const repos = createRepositories(c.env.DB);
 
   const proposal = await repos.lmwaresPayments.create({
@@ -520,6 +521,7 @@ payments.post('/proposals/:id/checkout', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
   assertTestPaymentConfiguration(c.env);
+  assertTechnicalCheckoutEnabled(c.env);
   const repos = createRepositories(c.env.DB);
   let proposal = await ownedProposal(c.env, c.req.param('id'), session.user.id);
 
@@ -663,29 +665,6 @@ async function tryExpirePaidPreference(env: Bindings, proposal: PackageProposal)
   }
 }
 
-function normalizeAndValidateModules(
-  plan: 'starter' | 'pro',
-  input: PaidPackageModuleId[],
-): PaidPackageModuleId[] {
-  const modules = [...new Set(input)];
-  if (!modules.includes('landing') || !modules.includes('panel')) {
-    throw new AppError(
-      'validation_error',
-      'Landing y Panel son obligatorios en los paquetes pagados.',
-    );
-  }
-  if (plan === 'starter') {
-    if (modules.includes('cart') || modules.includes('data')) {
-      throw new AppError('validation_error', 'Carrito y Optimization requieren el plan Pro.');
-    }
-    const complements = modules.filter((module) => module !== 'landing' && module !== 'panel');
-    if (complements.length > 2) {
-      throw new AppError('validation_error', 'Starter permite hasta dos complementos.');
-    }
-  }
-  return modules;
-}
-
 function assertPaymentMatchesProposal(
   payment: {
     externalReference: string;
@@ -786,6 +765,12 @@ function assertTestPaymentConfiguration(env: Bindings): void {
       'internal_error',
       'Falta configurar el Access Token de prueba de Mercado Pago.',
     );
+  }
+}
+
+function assertTechnicalCheckoutEnabled(env: Bindings): void {
+  if (env.MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED !== '1') {
+    throw new AppError('forbidden', 'La creación de checkouts técnicos está cerrada.');
   }
 }
 

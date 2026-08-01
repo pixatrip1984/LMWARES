@@ -58,6 +58,9 @@ TURNSTILE_DISABLED = "0"
 # Puerta temporal para validar credenciales y pagos TEST. Debe eliminarse o
 # cambiarse a "0" antes de aceptar cobros reales.
 MERCADO_PAGO_TEST_MODE = "1"
+# Conserva la verificación/reconciliación del ensayo existente, pero impide
+# crear nuevos cobros técnicos desde el API público.
+MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED = "0"
 
 [env.production.triggers]
 crons = ["17 * * * *"]

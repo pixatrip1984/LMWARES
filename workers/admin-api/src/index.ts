@@ -14,6 +14,7 @@ import { adminSiteGalleries } from './routes/site-gallery';
 import { siteDocsAdmin } from './routes/site-docs';
 import { siteForms } from './routes/site-forms';
 import { siteEvents } from './routes/site-events';
+import { commercialIntakesAdmin } from './routes/commercial-intakes';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -52,6 +53,7 @@ app.get('/admin/me', (c) => {
 app.route('/admin/publications', publications);
 app.route('/admin/requests', requests);
 app.route('/admin/audit', audit);
+app.route('/admin/commercial-intakes', commercialIntakesAdmin);
 app.route('/admin/projects/:projectId/modules/blog', siteBlogAdmin);
 app.route('/admin/projects/:projectId/modules/galleries', adminSiteGalleries);
 app.route('/admin/projects/:projectId/modules/docs', siteDocsAdmin);

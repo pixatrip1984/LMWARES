@@ -32,6 +32,7 @@ subscriptions.post('/proposals/:proposalId', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
   const accessToken = testSubscriptionAccessToken(c.env);
+  assertTechnicalCheckoutEnabled(c.env);
   const proposal = await ownedProposal(c.env, c.req.param('proposalId'), session.user.id);
   if (proposal.status !== 'paid' || proposal.paymentReviewRequired) {
     throw new AppError(
@@ -245,6 +246,12 @@ function testSubscriptionAccessToken(env: Bindings): string {
     );
   }
   return accessToken;
+}
+
+function assertTechnicalCheckoutEnabled(env: Bindings): void {
+  if (env.MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED !== '1') {
+    throw new AppError('forbidden', 'La creación de suscripciones técnicas está cerrada.');
+  }
 }
 
 function subscriptionPayerEmail(env: Bindings, sessionEmail: string): string {

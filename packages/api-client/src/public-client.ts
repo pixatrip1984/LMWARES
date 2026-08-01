@@ -1,6 +1,7 @@
 import type { Paginated, PublicAuthSession, Publication, PublicUser } from '@starter/domain';
 import type {
   CreateFreeIntakeInput,
+  CreatePackageIntakeInput,
   CreateRequestInput,
   SubmitFreeIntakeInput,
 } from '@starter/validation';
@@ -111,6 +112,7 @@ export interface AccountOverview {
   unreadCount: number;
   notifications: AccountNotification[];
   sites: AccountSite[];
+  commercialIntakes: PublicPackageIntake[];
 }
 
 export interface PublicPackageProposal {
@@ -134,6 +136,22 @@ export interface PublicPackageProposal {
   paymentReviewRequired: boolean;
   paidAt: string | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicPackageIntake {
+  id: string;
+  plan: 'starter' | 'pro';
+  modules: string[];
+  marketing: boolean;
+  status: 'submitted' | 'scope_review' | 'offer_ready' | 'declined' | 'converted';
+  estimatedImplementationCents: number;
+  estimatedMonthlyCents: number;
+  currency: 'MXN';
+  pricingVersion: string;
+  maintenanceStartPolicy: 'on_go_live';
+  proposalId: string | null;
+  submittedAt: string;
   updatedAt: string;
 }
 
@@ -268,6 +286,16 @@ export function createPublicClient(baseUrl: string) {
 
     createTestPackageProposal(input: CreateTestPackageProposalInput) {
       return http.post<{ proposal: PublicPackageProposal }>('/payments/proposals', input);
+    },
+
+    createCommercialPackageIntake(input: CreatePackageIntakeInput, submissionKey: string) {
+      return http.post<{ intake: PublicPackageIntake }>('/commercial-intakes', input, {
+        headers: { 'Idempotency-Key': submissionKey },
+      });
+    },
+
+    listCommercialPackageIntakes() {
+      return http.get<{ intakes: PublicPackageIntake[] }>('/commercial-intakes');
     },
 
     getPackageProposal(proposalId: string) {

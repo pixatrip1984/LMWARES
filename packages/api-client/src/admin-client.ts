@@ -7,6 +7,8 @@ import type {
   LmwaresProject,
   LmwaresProjectSnapshot,
   LmwaresValidationResult,
+  PackageIntake,
+  PackageIntakeStatus,
   Request,
   RequestNote,
   RequestStatus,
@@ -91,6 +93,31 @@ export function createAdminClient(baseUrl: string) {
     createLmwaresProjectApproval(id: string, input: CreateLmwaresApprovalInput) {
       return http.post<LmwaresApproval>(
         `/admin/projects/${encodeURIComponent(id)}/approvals`,
+        input,
+      );
+    },
+
+    // ── Solicitudes comerciales LMWares ─────────────────────
+    listCommercialPackageIntakes(
+      params: { status?: PackageIntakeStatus; limit?: number } = {},
+    ) {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set('status', params.status);
+      if (params.limit) qs.set('limit', String(params.limit));
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return http.get<{ intakes: PackageIntake[] }>(`/admin/commercial-intakes${suffix}`);
+    },
+    getCommercialPackageIntake(id: string) {
+      return http.get<{ intake: PackageIntake }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}`,
+      );
+    },
+    reviewCommercialPackageIntake(
+      id: string,
+      input: { status: 'scope_review' | 'declined'; notes?: string | null },
+    ) {
+      return http.patch<{ intake: PackageIntake }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/review`,
         input,
       );
     },

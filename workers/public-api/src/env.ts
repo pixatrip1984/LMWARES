@@ -42,6 +42,8 @@ export interface Bindings {
   MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET?: string;
   /** Debe ser "1" para habilitar el checkout técnico con credenciales de prueba. */
   MERCADO_PAGO_TEST_MODE: string;
+  /** Puerta independiente para crear nuevos checkouts/suscripciones técnicas. */
+  MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED?: string;
   /** Binding tipado generado por `wrangler types`. */
   EMAIL: Env['EMAIL'];
   /** Despierta al runner Free asíncrono después de enviar una solicitud. */

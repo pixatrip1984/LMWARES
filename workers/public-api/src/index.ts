@@ -20,6 +20,7 @@ import { subscriptions } from './routes/subscriptions';
 import { account } from './routes/account';
 import { mapLocations } from './routes/map-locations';
 import { reconcileSubscriptionsOnSchedule } from './lib/subscription-reconciliation';
+import { commercialIntakes } from './routes/commercial-intakes';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -35,7 +36,7 @@ app.use('*', (c, next) => {
   return cors({
     origin: (origin) => (allowed.includes(origin) ? origin : null),
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
-    allowHeaders: ['Content-Type'],
+    allowHeaders: ['Content-Type', 'Idempotency-Key'],
     credentials: true,
     maxAge: 86400,
   })(c, next);
@@ -55,6 +56,7 @@ app.route('/auth', authRoutes);
 app.route('/account', account);
 app.route('/payments', payments);
 app.route('/subscriptions', subscriptions);
+app.route('/commercial-intakes', commercialIntakes);
 app.route('/publications', publications);
 app.route('/requests', requests);
 app.route('/free', freeIntakes);

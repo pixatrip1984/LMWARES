@@ -3,6 +3,7 @@ import type {
   AccountNotification,
   AccountOverview,
   AccountSite,
+  PublicPackageIntake,
 } from '@starter/api-client';
 import './accountCenterModal.css';
 
@@ -137,7 +138,7 @@ export function AccountCenterModal({
             onClick={() => setTab('sites')}
             type="button"
           >
-            Mis sitios <i>{overview?.sites.length ?? 0}</i>
+            Mis sitios <i>{(overview?.sites.length ?? 0) + (overview?.commercialIntakes.length ?? 0)}</i>
           </button>
           <button
             className={tab === 'account' ? 'is-active' : ''}
@@ -165,7 +166,12 @@ export function AccountCenterModal({
               selected={selectedNotification}
             />
           ) : tab === 'sites' ? (
-            <SitesPanel copyState={copyState} onCopy={copyUrl} sites={overview?.sites ?? []} />
+            <SitesPanel
+              copyState={copyState}
+              intakes={overview?.commercialIntakes ?? []}
+              onCopy={copyUrl}
+              sites={overview?.sites ?? []}
+            />
           ) : (
             <ProfilePanel
               onSignOut={onSignOut}
@@ -282,14 +288,16 @@ function NotificationReader({ notification }: { notification: AccountNotificatio
 
 function SitesPanel({
   copyState,
+  intakes,
   onCopy,
   sites,
 }: {
   copyState: string | null;
+  intakes: PublicPackageIntake[];
   onCopy: (site: AccountSite) => Promise<void>;
   sites: AccountSite[];
 }) {
-  if (!sites.length) {
+  if (!sites.length && !intakes.length) {
     return (
       <AccountState
         copy="Cuando envíes una solicitud Free, su progreso y URL aparecerán en este espacio."
@@ -302,8 +310,41 @@ function SitesPanel({
     <section className="lmw-account-sites">
       <header>
         <div><small>PROYECTOS DE TU CUENTA</small><h3>Mis sitios</h3></div>
-        <p>{sites.length} {sites.length === 1 ? 'sitio registrado' : 'sitios registrados'}</p>
+        <p>{sites.length + intakes.length} proyectos registrados</p>
       </header>
+      {intakes.length ? (
+        <section className="lmw-account-intakes" aria-label="Solicitudes comerciales">
+          <header>
+            <small>STARTER / PRO · REVISIÓN HUMANA</small>
+            <h4>Solicitudes comerciales</h4>
+          </header>
+          <div>
+            {intakes.map((intake) => (
+              <article key={intake.id}>
+                <header>
+                  <span>{intake.plan.toUpperCase()}</span>
+                  <i>{commercialIntakeStatus(intake.status)}</i>
+                </header>
+                <h4>{intake.modules.length} capacidades seleccionadas</h4>
+                <p>{intake.modules.join(' · ')}</p>
+                <dl>
+                  <div>
+                    <dt>Implementación estimada</dt>
+                    <dd>{formatMoney(intake.estimatedImplementationCents, intake.currency)}</dd>
+                  </div>
+                  <div>
+                    <dt>Mensualidad estimada</dt>
+                    <dd>{formatMoney(intake.estimatedMonthlyCents, intake.currency)}/mes</dd>
+                  </div>
+                </dl>
+                <footer>
+                  <span>Mensualidad desde la publicación · Ref. {intake.id.slice(0, 8)}</span>
+                </footer>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <div className="lmw-account-sites__grid">
         {sites.map((site) => (
           <article key={site.id}>
@@ -408,6 +449,25 @@ function safeDownloadName(slug: string): string {
   );
 }
 
+function commercialIntakeStatus(status: PublicPackageIntake['status']): string {
+  const labels: Record<PublicPackageIntake['status'], string> = {
+    submitted: 'Recibida',
+    scope_review: 'En revisión',
+    offer_ready: 'Propuesta lista',
+    declined: 'No aprobada',
+    converted: 'Aceptada',
+  };
+  return labels[status];
+}
+
+function formatMoney(amountCents: number, currency: string): string {
+  return new Intl.NumberFormat('es-MX', {
+    currency,
+    maximumFractionDigits: 0,
+    style: 'currency',
+  }).format(amountCents / 100);
+}
+
 function ProfilePanel({
   onSignOut,
   overview,
@@ -426,7 +486,7 @@ function ProfilePanel({
         </div>
       </div>
       <div className="lmw-account-profile__metrics">
-        <article><small>SITIOS</small><strong>{overview?.sites.length ?? 0}</strong><p>Solicitudes asociadas a tu cuenta.</p></article>
+        <article><small>PROYECTOS</small><strong>{(overview?.sites.length ?? 0) + (overview?.commercialIntakes.length ?? 0)}</strong><p>Sitios y solicitudes asociados a tu cuenta.</p></article>
         <article><small>MENSAJES</small><strong>{overview?.notifications.length ?? 0}</strong><p>Confirmaciones e información operativa.</p></article>
         <article><small>PENDIENTES</small><strong>{overview?.unreadCount ?? 0}</strong><p>Notificaciones aún no leídas.</p></article>
       </div>

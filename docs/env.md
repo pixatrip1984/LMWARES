@@ -32,6 +32,7 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET` | **secreto** | `.dev.vars` / `wrangler secret` | Firma HMAC productiva de la aplicación Suscripciones. |
 | `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET` | **secreto de prueba** | `.dev.vars` / `wrangler secret` | Firma HMAC de prueba de la aplicación Suscripciones. |
 | `MERCADO_PAGO_TEST_MODE` | var temporal | `.dev.vars` / ambiente remoto de prueba | `1` habilita el checkout y la suscripción técnica de Mercado Pago. Debe ser `0` para cobros reales. |
+| `MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED` | var temporal | `.dev.vars` / ambiente remoto de prueba | `1` permite crear nuevos checkouts técnicos. En producción debe permanecer `0` salvo una prueba controlada. |
 | `PUBLIC_WEB_URL`      | var             | wrangler.toml                 | Origen canónico del frontend.                        |
 | `PUBLIC_API_URL`      | var             | wrangler.toml                 | Origen canónico del Public API y callback OAuth.     |
 | `FREE_SITE_BASE_DOMAIN` | var           | wrangler.toml                 | Dominio wildcard de las páginas Free.                |

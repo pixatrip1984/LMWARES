@@ -17,9 +17,10 @@ account.use('*', async (c, next) => {
 account.get('/', async (c) => {
   const user = c.get('publicUser');
   const repos = createRepositories(c.env.DB);
-  const [notifications, intakes] = await Promise.all([
+  const [notifications, intakes, commercialIntakes] = await Promise.all([
     repos.lmwaresNotifications.listForUser(user.id),
     repos.lmwaresFreeIntakes.listForUser(user.id),
+    repos.lmwaresPackageIntakes.listForUser(user.id),
   ]);
 
   return c.json({
@@ -27,6 +28,20 @@ account.get('/', async (c) => {
     unreadCount: notifications.filter(({ readAt }) => !readAt).length,
     notifications: notifications.map(toAccountNotification),
     sites: intakes.map(toAccountSite),
+    commercialIntakes: commercialIntakes.map((intake) => ({
+      id: intake.id,
+      plan: intake.plan,
+      modules: intake.modules,
+      marketing: intake.marketing,
+      status: intake.status,
+      estimatedImplementationCents: intake.estimatedImplementationCents,
+      estimatedMonthlyCents: intake.estimatedMonthlyCents,
+      currency: intake.currency,
+      maintenanceStartPolicy: intake.maintenanceStartPolicy,
+      proposalId: intake.proposalId,
+      submittedAt: intake.submittedAt,
+      updatedAt: intake.updatedAt,
+    })),
   });
 });
 

@@ -9,6 +9,7 @@ const NAV = [
   { to: '/operations', label: 'Operación' },
   { to: '/publications', label: 'Publicaciones' },
   { to: '/requests', label: 'Solicitudes' },
+  { to: '/commercial-intakes', label: 'Paquetes' },
 ];
 
 export function AdminLayout() {

@@ -135,6 +135,8 @@ const FREE_PALETTE_OPTIONS: Array<{
   { id: 'night-fire', label: 'Noche y fuego', colors: ['#05162c', '#f04a2b', '#f6f0e7'] },
 ];
 
+const COMMERCIAL_SUBMISSION_KEY_STORAGE = 'lmwares.commercial-submission-key.v1';
+
 function formatFreeValidationIssue(issue: {
   code: string;
   message: string;
@@ -200,6 +202,9 @@ export function PackageBuilderPage() {
   const [notice, setNotice] = useState('');
   const [fileError, setFileError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [commercialSubmissionKey, setCommercialSubmissionKey] = useState(() =>
+    loadCommercialSubmissionKey(),
+  );
   const [previewOpen, setPreviewOpen] = useState(false);
   const [publicationOpen, setPublicationOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -412,6 +417,9 @@ export function PackageBuilderPage() {
   const updateDraft = (changes: Partial<PackageDraft>) => {
     setDraft((current) => ({ ...current, ...changes, updatedAt: new Date().toISOString() }));
     setSubmitted(false);
+    const nextKey = crypto.randomUUID();
+    localStorage.setItem(COMMERCIAL_SUBMISSION_KEY_STORAGE, nextKey);
+    setCommercialSubmissionKey(nextKey);
   };
 
   const updateFreeForm = (changes: Partial<typeof freeForm>) => {
@@ -657,15 +665,15 @@ export function PackageBuilderPage() {
       setFileError('');
       setSubmitting(true);
       try {
-        const result = await api.createTestPackageProposal({
+        const result = await api.createCommercialPackageIntake({
           plan: draft.plan,
           modules: draft.modules,
           marketing: draft.marketing,
-        });
+        }, commercialSubmissionKey);
         setSubmitted(true);
-        navigate(`/pago/${result.proposal.id}`);
+        flashNotice(`Solicitud ${result.intake.id.slice(0, 8)} enviada para revisión.`);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'No se pudo crear la propuesta.';
+        const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud.';
         setFileError(message);
       } finally {
         setSubmitting(false);
@@ -1487,10 +1495,10 @@ export function PackageBuilderPage() {
 
             <div className="lmw-summary-actions">
               <button onClick={() => setView('package')} type="button">← Volver a configurar</button>
-              <button className="lmw-builder-primary" disabled={submitting} onClick={submitDraft} type="button">
+              <button className="lmw-builder-primary" disabled={submitting || submitted} onClick={submitDraft} type="button">
                 {submitted
-                  ? draft.plan === 'free' ? 'Solicitud enviada' : 'Propuesta creada'
-                  : submitting ? 'Enviando...' : draft.plan === 'free' ? 'Enviar solicitud Free' : 'Continuar al pago de prueba'} <span>{submitted ? '✓' : '→'}</span>
+                  ? 'Solicitud enviada'
+                  : submitting ? 'Enviando...' : draft.plan === 'free' ? 'Enviar solicitud Free' : 'Enviar para revisión'} <span>{submitted ? '✓' : '→'}</span>
               </button>
             </div>
           </section>
@@ -1502,7 +1510,7 @@ export function PackageBuilderPage() {
               <li><span>02</span><div><b>Fijamos el alcance</b><p>Contenido, límites, dominio, tiempos y acompañamiento.</p></div></li>
               <li><span>03</span><div><b>Preparamos la propuesta</b><p>Separando implementación, licencia, alojamiento y mantenimiento.</p></div></li>
             </ol>
-            <div><i />{draft.plan === 'free' ? 'Free envía una solicitud real a la cola automatizada.' : 'La prueba congela la propuesta en servidor y usa el monto mínimo compatible con tarjetas.'}</div>
+            <div><i />{draft.plan === 'free' ? 'Free envía una solicitud real a la cola automatizada.' : 'El alcance original queda congelado para revisión humana. No se habilita ningún cobro todavía.'}</div>
           </aside>
         </main>
       )}
@@ -1538,6 +1546,16 @@ export function PackageBuilderPage() {
       />
     </div>
   );
+}
+
+function loadCommercialSubmissionKey(): string {
+  const stored = localStorage.getItem(COMMERCIAL_SUBMISSION_KEY_STORAGE);
+  if (stored && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(stored)) {
+    return stored;
+  }
+  const created = crypto.randomUUID();
+  localStorage.setItem(COMMERCIAL_SUBMISSION_KEY_STORAGE, created);
+  return created;
 }
 
 function normalizeFreeSlug(value: string) {
