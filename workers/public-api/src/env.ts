@@ -44,6 +44,16 @@ export interface Bindings {
   MERCADO_PAGO_TEST_MODE: string;
   /** Puerta independiente para crear nuevos checkouts/suscripciones técnicas. */
   MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED?: string;
+  /** Access Token exclusivo de Checkout Pro comercial. Siempre como secret. */
+  MERCADO_PAGO_COMMERCIAL_ACCESS_TOKEN?: string;
+  /** Firma productiva del Webhook de Checkout Pro comercial. */
+  MERCADO_PAGO_COMMERCIAL_WEBHOOK_SECRET?: string;
+  /** Firma de prueba del Webhook comercial, únicamente durante validación. */
+  MERCADO_PAGO_COMMERCIAL_WEBHOOK_TEST_SECRET?: string;
+  /** "1" habilita la creación de cobros comerciales; cerrado por defecto. */
+  MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED?: string;
+  /** "1" usa sandbox_init_point para la validación comercial controlada. */
+  MERCADO_PAGO_COMMERCIAL_TEST_MODE?: string;
   /** Binding tipado generado por `wrangler types`. */
   EMAIL: Env['EMAIL'];
   /** Despierta al runner Free asíncrono después de enviar una solicitud. */

@@ -24,14 +24,39 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
   reemplaza la versión visible sin borrar el historial anterior.
 - El cliente debe revisar alcance, importes y términos y aceptar explícitamente
   la versión vigente desde su centro de cuenta.
-- La aceptación es idempotente, queda auditada una sola vez y todavía no crea
-  ningún cobro.
+- La aceptación es idempotente, queda auditada una sola vez y crea una orden
+  interna congelada; el cobro sólo se crea cuando el cliente pulsa continuar.
+- La orden toma el importe de la oferta aceptada en D1. El navegador nunca
+  envía ni puede sustituir el total.
+- Checkout Pro comercial usa una referencia `lmw-implementation:<orderId>`,
+  una clave de idempotencia estable y su propio Access Token y firma Webhook.
+- La conciliación exige coincidencia exacta de referencia, moneda e importe.
+  El primer pago aprobado queda canónico y un segundo aprobado bloquea la orden
+  para revisión.
+- Al confirmarse el pago, la solicitud cambia a `converted` y se crea una sola
+  notificación interna aunque Mercado Pago reintente el evento.
 - Los checkouts técnicos de sandbox permanecen cerrados en producción mediante una puerta independiente.
 - La reconciliación del ensayo existente sigue activa para observar sus cobros programados.
 
+## Compuerta productiva del pago de implementación
+
+- La implementación está desplegable con
+  `MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "0"`; así no puede cobrar por
+  accidente.
+- Antes de abrirla se cargan como secretos, sin comillas y sin registrarlos en
+  el repositorio:
+  - `MERCADO_PAGO_COMMERCIAL_ACCESS_TOKEN`
+  - `MERCADO_PAGO_COMMERCIAL_WEBHOOK_SECRET`
+- El Webhook comercial canónico es
+  `https://api.lmwares.com/payments/webhooks/mercado-pago?scope=commercial`.
+- La primera apertura requiere un cobro real controlado de MXN $1 mediante una
+  oferta privada, comprobar `paid` en D1, la solicitud `converted`, el evento
+  Webhook `processed` y luego reembolsar desde Mercado Pago si corresponde.
+- Sólo después de esa evidencia se mantiene la puerta en `"1"` para clientes.
+
 ## Lo que falta después de esta fase
 
-- cobro real de implementación;
+- cargar las credenciales comerciales y validar el cobro real controlado;
 - compuerta de publicación que exija una suscripción activa;
 - pruebas comerciales controladas de punta a punta.
 

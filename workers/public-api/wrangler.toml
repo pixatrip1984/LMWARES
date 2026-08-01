@@ -61,6 +61,10 @@ MERCADO_PAGO_TEST_MODE = "1"
 # Conserva la verificación/reconciliación del ensayo existente, pero impide
 # crear nuevos cobros técnicos desde el API público.
 MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED = "0"
+# El código comercial se despliega cerrado. Se habilita sólo después de cargar
+# credenciales productivas separadas y validar un cobro real controlado.
+MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "0"
+MERCADO_PAGO_COMMERCIAL_TEST_MODE = "0"
 
 [env.production.triggers]
 crons = ["17 * * * *"]

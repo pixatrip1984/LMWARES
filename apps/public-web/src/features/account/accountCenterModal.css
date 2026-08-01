@@ -505,13 +505,16 @@
   line-height: 1.5;
 }
 
-.lmw-account-offer__accept button {
+.lmw-account-offer__accept button,
+.lmw-account-offer__accept > a {
   background: var(--account-blue);
   border: 0;
   color: #fff;
   font-size: 9px;
   font-weight: 800;
   padding: 11px 14px;
+  text-align: center;
+  text-decoration: none;
   text-transform: uppercase;
 }
 
@@ -920,7 +923,13 @@
     flex-direction: column;
     gap: 7px;
   }
-  .lmw-account-offer__accept button { min-height: 44px; }
+  .lmw-account-offer__accept button,
+  .lmw-account-offer__accept > a {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-height: 44px;
+  }
   .lmw-account-sites article footer { flex-wrap: wrap; }
   .lmw-account-sites article footer button,
   .lmw-account-sites article footer a {

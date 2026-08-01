@@ -14,6 +14,7 @@ import {
 import type { Bindings, Variables } from '../env';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
 import { publicCommercialOffer } from '../lib/commercial-offer-public';
+import { publicBillingOrder } from '../lib/billing-order-public';
 
 export const commercialIntakes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -104,6 +105,11 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
     userId: session.user.id,
     termsVersion: input.termsVersion,
   });
+  const billingOrder = await repos.lmwaresBillingOrders.ensureImplementationOrder({
+    offerId: result.offer.id,
+    intakeId: intake.id,
+    userId: session.user.id,
+  });
   if (result.changed) {
     await repos.audit.record({
       actorType: 'public',
@@ -122,7 +128,10 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
       userAgent: c.req.header('User-Agent') ?? null,
     });
   }
-  return c.json({ offer: publicCommercialOffer(result.offer) });
+  return c.json({
+    offer: publicCommercialOffer(result.offer),
+    billingOrder: publicBillingOrder(billingOrder),
+  });
 });
 
 function publicIntake(intake: PackageIntake) {

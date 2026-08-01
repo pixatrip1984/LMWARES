@@ -3,6 +3,7 @@ import { AppError, type FreeIntake, type Metadata } from '@starter/domain';
 import { createRepositories, type LmwaresNotification } from '@starter/db';
 import type { Bindings, Variables } from '../env';
 import { publicCommercialOffer } from '../lib/commercial-offer-public';
+import { publicBillingOrder } from '../lib/billing-order-public';
 import {
   assertTrustedPublicOrigin,
   requirePublicSession,
@@ -18,13 +19,19 @@ account.use('*', async (c, next) => {
 account.get('/', async (c) => {
   const user = c.get('publicUser');
   const repos = createRepositories(c.env.DB);
-  const [notifications, intakes, commercialIntakes, currentOffers] = await Promise.all([
+  const [notifications, intakes, commercialIntakes, currentOffers, billingOrders] = await Promise.all([
     repos.lmwaresNotifications.listForUser(user.id),
     repos.lmwaresFreeIntakes.listForUser(user.id),
     repos.lmwaresPackageIntakes.listForUser(user.id),
     repos.lmwaresCommercialOffers.listCurrentForUser(user.id),
+    repos.lmwaresBillingOrders.listForUser(user.id),
   ]);
   const offersByIntake = new Map(currentOffers.map((offer) => [offer.intakeId, offer]));
+  const ordersByOffer = new Map(
+    billingOrders
+      .filter((order) => order.commercialOfferId)
+      .map((order) => [order.commercialOfferId!, order]),
+  );
 
   return c.json({
     user,
@@ -46,6 +53,10 @@ account.get('/', async (c) => {
       currentOffer: offersByIntake.has(intake.id)
         ? publicCommercialOffer(offersByIntake.get(intake.id)!)
         : null,
+      implementationPayment:
+        offersByIntake.has(intake.id) && ordersByOffer.has(offersByIntake.get(intake.id)!.id)
+          ? publicBillingOrder(ordersByOffer.get(offersByIntake.get(intake.id)!.id)!)
+          : null,
       submittedAt: intake.submittedAt,
       updatedAt: intake.updatedAt,
     })),
@@ -72,6 +83,29 @@ account.patch('/notifications/:id/read', async (c) => {
 });
 
 function toAccountNotification(notification: LmwaresNotification) {
+  if (notification.template === 'implementation-payment-confirmed') {
+    const amount = metadataNumber(notification.payload, 'amountCents');
+    return {
+      id: notification.id,
+      kind: notification.template,
+      title: 'Pago de implementación confirmado',
+      summary: amount == null ? 'Tu proyecto ya puede comenzar.' : `${formatMoney(amount)} recibidos.`,
+      body: [
+        'Mercado Pago confirmó tu pago de implementación.',
+        'Tu solicitud ya quedó registrada como trabajo contratado y comenzaremos la preparación del proyecto.',
+        'La mensualidad se autorizará por separado cuando el sitio esté listo para publicarse.',
+      ],
+      plan: 'starter',
+      siteName: 'Implementación LMWares',
+      referenceId: metadataString(notification.payload, 'billingOrderId'),
+      actionUrl: null,
+      actionLabel: null,
+      deliveryStatus: notification.status,
+      readAt: notification.readAt,
+      sentAt: notification.sentAt,
+      createdAt: notification.createdAt,
+    };
+  }
   if (notification.template === 'commercial-offer-issued') {
     const plan = metadataString(notification.payload, 'plan') ?? 'starter';
     const version = metadataNumber(notification.payload, 'version');

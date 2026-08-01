@@ -3,6 +3,7 @@ import {
   AppError,
   checkoutBlocked,
   normalizePaidPackageModules,
+  type BillingOrder,
   type PackageProposal,
   type PackageSubscription,
 } from '@starter/domain';
@@ -11,6 +12,7 @@ import { createTestPackageProposalSchema, parseInput } from '@starter/validation
 import type { Bindings, Variables } from '../env';
 import {
   createMercadoPagoPreference,
+  createMercadoPagoBillingPreference,
   expireMercadoPagoPreference,
   getMercadoPagoAuthorizedPayment,
   getMercadoPagoPayment,
@@ -22,6 +24,7 @@ import {
   verifyMercadoPagoWebhookSignature,
 } from '../lib/mercado-pago';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
+import { publicBillingOrder } from '../lib/billing-order-public';
 
 const TEST_AMOUNT_CENTS = 500;
 const TEST_PRICING_VERSION = 'technical-mxn-5-v1';
@@ -29,15 +32,21 @@ const TEST_PRICING_VERSION = 'technical-mxn-5-v1';
 export const payments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 payments.post('/webhooks/mercado-pago', async (c) => {
+  const commercialScope = c.req.query('scope') === 'commercial';
   const webhookTopic = c.req.query('type') ?? '';
   const ipnTopic = c.req.query('topic') ?? '';
   const topic = webhookTopic || ipnTopic;
   const webhookSecrets = mercadoPagoWebhookSecrets(
     c.env,
-    topic === 'subscription_preapproval' || topic === 'subscription_authorized_payment'
+    commercialScope
+      ? 'commercial'
+      : topic === 'subscription_preapproval' || topic === 'subscription_authorized_payment'
       ? 'subscriptions'
       : 'checkout',
   );
+  const webhookTestMode = commercialScope
+    ? c.env.MERCADO_PAGO_COMMERCIAL_TEST_MODE === '1'
+    : c.env.MERCADO_PAGO_TEST_MODE === '1';
   if (topic === 'subscription_preapproval') {
     return handleSubscriptionPreapprovalWebhook(c, webhookSecrets);
   }
@@ -78,7 +87,7 @@ payments.post('/webhooks/mercado-pago', async (c) => {
       ),
     );
     signatureValidated = signatureChecks.some(Boolean);
-    if (!signatureValidated && c.env.MERCADO_PAGO_TEST_MODE !== '1') {
+    if (!signatureValidated && !webhookTestMode) {
       throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
     }
     if (!signatureValidated) {
@@ -100,7 +109,9 @@ payments.post('/webhooks/mercado-pago', async (c) => {
   const providerVerifiedPayment =
     isLegacyIpn || providerVerifiedTestWebhook
       ? await getMercadoPagoPayment({
-          accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+          accessToken: commercialScope
+            ? mercadoPagoCommercialAccessToken(c.env)
+            : c.env.MERCADO_PAGO_ACCESS_TOKEN,
           paymentId,
         })
       : null;
@@ -133,9 +144,62 @@ payments.post('/webhooks/mercado-pago', async (c) => {
     const payment =
       providerVerifiedPayment ??
       (await getMercadoPagoPayment({
-        accessToken: c.env.MERCADO_PAGO_ACCESS_TOKEN,
+        accessToken: commercialScope
+          ? mercadoPagoCommercialAccessToken(c.env)
+          : c.env.MERCADO_PAGO_ACCESS_TOKEN,
         paymentId,
       }));
+    if (payment.externalReference.startsWith('lmw-implementation:')) {
+      if (!commercialScope) {
+        throw new AppError('unauthorized', 'El pago comercial llegó por un canal incorrecto.');
+      }
+      const order = await repos.lmwaresBillingOrders.getByExternalReference(payment.externalReference);
+      if (!order) {
+        await repos.lmwaresPayments.completeWebhookEvent({
+          id: eventId,
+          status: 'ignored',
+          proposalId: null,
+        });
+        return c.json({ received: true, ignored: true });
+      }
+      assertPaymentMatchesBillingOrder(payment, order);
+      const reconciliation = await repos.lmwaresBillingOrders.reconcilePayment({
+        id: order.id,
+        paymentId: payment.id,
+        providerStatus: payment.status,
+        amountCents: Math.round(payment.amount * 100),
+        currency: payment.currency,
+        providerCreatedAt: payment.dateCreated,
+      });
+      await repos.lmwaresPayments.completeWebhookEvent({
+        id: eventId,
+        status: 'processed',
+        proposalId: null,
+        billingOrderId: order.id,
+      });
+      await repos.audit.record({
+        actorType: 'system',
+        actorId: 'mercado_pago',
+        action: reconciliation.duplicatePayment
+          ? 'lmwares.billing_order.duplicate_payment_detected'
+          : 'lmwares.billing_order.webhook_reconciled',
+        entityType: 'lmwares_billing_order',
+        entityId: order.id,
+        metadata: {
+          providerPaymentId: payment.id,
+          providerStatus: payment.status,
+          orderStatus: reconciliation.order.status,
+          disposition: reconciliation.disposition,
+          duplicatePayment: reconciliation.duplicatePayment,
+          providerRequestId,
+          transport,
+          signatureValidated,
+        },
+        ip: c.req.header('CF-Connecting-IP') ?? null,
+        userAgent: c.req.header('User-Agent') ?? null,
+      });
+      return c.json({ received: true, commercialPayment: true, duplicatePayment: reconciliation.duplicatePayment });
+    }
     const proposal = await repos.lmwaresPayments.getById(payment.externalReference);
     if (!proposal) {
       const subscription = await repos.lmwaresSubscriptions.getByExternalReference(
@@ -625,6 +689,88 @@ payments.post('/proposals/:id/reconcile', async (c) => {
   return c.json({ found: true, proposal: publicProposal(proposal) });
 });
 
+payments.get('/orders/:id', async (c) => {
+  const session = await requirePublicSession(c);
+  const order = await ownedBillingOrder(c.env, c.req.param('id'), session.user.id);
+  c.header('Cache-Control', 'no-store');
+  return c.json({ order: publicBillingOrder(order) });
+});
+
+payments.post('/orders/:id/checkout', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
+  assertCommercialPaymentConfiguration(c.env);
+  const repos = createRepositories(c.env.DB);
+  let order = await ownedBillingOrder(c.env, c.req.param('id'), session.user.id);
+  if (checkoutBlocked(order)) throw new AppError('conflict', 'Esta orden ya no admite otro pago.');
+  if (order.checkoutUrl && order.providerPreferenceId) {
+    if (billingCheckoutExpired(order)) {
+      throw new AppError('conflict', 'Este checkout venció. Contacta a soporte para renovarlo.');
+    }
+    return c.json({ order: publicBillingOrder(order) });
+  }
+  if (!(await repos.lmwaresBillingOrders.claimCheckout(order.id))) {
+    order = (await repos.lmwaresBillingOrders.getById(order.id))!;
+    if (order.checkoutUrl && !billingCheckoutExpired(order)) {
+      return c.json({ order: publicBillingOrder(order) });
+    }
+    throw new AppError('conflict', 'El checkout se está preparando. Intenta nuevamente en unos segundos.');
+  }
+  try {
+    const preference = await createMercadoPagoBillingPreference({
+      accessToken: mercadoPagoCommercialAccessToken(c.env),
+      order,
+      payerEmail: session.user.email,
+      testMode: c.env.MERCADO_PAGO_COMMERCIAL_TEST_MODE === '1',
+      publicApiUrl: c.env.PUBLIC_API_URL,
+      publicWebUrl: c.env.PUBLIC_WEB_URL,
+    });
+    order = await repos.lmwaresBillingOrders.saveCheckout({
+      id: order.id,
+      preferenceId: preference.id,
+      checkoutUrl: preference.checkoutUrl,
+      checkoutExpiresAt: preference.expiresAt,
+    });
+  } catch (error) {
+    await repos.lmwaresBillingOrders.markCheckoutFailed(order.id);
+    throw error;
+  }
+  await auditBillingOrder(c, session.user.id, 'lmwares.billing_order.checkout_created', order, {
+    providerPreferenceId: order.providerPreferenceId,
+  });
+  return c.json({ order: publicBillingOrder(order) });
+});
+
+payments.post('/orders/:id/reconcile', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
+  assertCommercialPaymentConfiguration(c.env);
+  const repos = createRepositories(c.env.DB);
+  let order = await ownedBillingOrder(c.env, c.req.param('id'), session.user.id);
+  if (!order.providerPreferenceId) throw new AppError('conflict', 'Primero debes preparar el checkout.');
+  const found = await searchMercadoPagoPayments({
+    accessToken: mercadoPagoCommercialAccessToken(c.env),
+    externalReference: order.externalReference,
+  });
+  for (const payment of [...found].sort((a, b) => paymentTimestamp(a.dateCreated) - paymentTimestamp(b.dateCreated))) {
+    assertPaymentMatchesBillingOrder(payment, order);
+    order = (await repos.lmwaresBillingOrders.reconcilePayment({
+      id: order.id,
+      paymentId: payment.id,
+      providerStatus: payment.status,
+      amountCents: Math.round(payment.amount * 100),
+      currency: payment.currency,
+      providerCreatedAt: payment.dateCreated,
+    })).order;
+  }
+  await auditBillingOrder(c, session.user.id, 'lmwares.billing_order.reconciled', order, {
+    paymentsFound: found.length,
+    providerPaymentId: order.providerPaymentId,
+    providerStatus: order.lastProviderStatus,
+  });
+  return c.json({ found: found.length > 0, order: publicBillingOrder(order) });
+});
+
 function checkoutExpired(proposal: PackageProposal): boolean {
   if (!proposal.checkoutExpiresAt) return false;
   const expiresAt = Date.parse(proposal.checkoutExpiresAt);
@@ -692,6 +838,19 @@ function assertPaymentMatchesProposal(
       'internal_error',
       'El pago encontrado no coincide con la propuesta congelada.',
     );
+  }
+}
+
+function assertPaymentMatchesBillingOrder(
+  payment: { externalReference: string; currency: string; amount: number },
+  order: BillingOrder,
+): void {
+  if (
+    payment.externalReference !== order.externalReference ||
+    payment.currency !== order.currency ||
+    Math.round(payment.amount * 100) !== order.amountCents
+  ) {
+    throw new AppError('internal_error', 'El pago no coincide con la orden comercial congelada.');
   }
 }
 
@@ -787,29 +946,78 @@ function mercadoPagoSubscriptionsAccessToken(env: Bindings): string {
 
 function mercadoPagoWebhookSecrets(
   env: Bindings,
-  application: 'checkout' | 'subscriptions',
+  application: 'checkout' | 'subscriptions' | 'commercial',
 ): string[] {
-  if (application === 'subscriptions') {
+  if (application === 'commercial') {
+    mercadoPagoCommercialAccessToken(env);
+  } else if (application === 'subscriptions') {
     mercadoPagoSubscriptionsAccessToken(env);
   } else if (!env.MERCADO_PAGO_ACCESS_TOKEN?.trim()) {
     throw new AppError('internal_error', 'Falta configurar el Access Token de Checkout Pro.');
   }
   const productionSecret =
-    application === 'subscriptions'
+    application === 'commercial'
+      ? env.MERCADO_PAGO_COMMERCIAL_WEBHOOK_SECRET?.trim()
+      : application === 'subscriptions'
       ? env.MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET?.trim()
       : env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();
+  const testMode = application === 'commercial'
+    ? env.MERCADO_PAGO_COMMERCIAL_TEST_MODE === '1'
+    : env.MERCADO_PAGO_TEST_MODE === '1';
   const testSecret =
-    env.MERCADO_PAGO_TEST_MODE === '1'
-      ? application === 'subscriptions'
+    testMode
+      ? application === 'commercial'
+        ? env.MERCADO_PAGO_COMMERCIAL_WEBHOOK_TEST_SECRET?.trim()
+        : application === 'subscriptions'
         ? env.MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET?.trim()
         : env.MERCADO_PAGO_WEBHOOK_TEST_SECRET?.trim()
       : undefined;
   const secrets = [...new Set([productionSecret, testSecret].filter(Boolean) as string[])];
   if (secrets.length > 0) return secrets;
-  if (env.MERCADO_PAGO_TEST_MODE !== '1') {
+  if (!testMode) {
     throw new AppError('internal_error', 'Falta configurar la firma secreta de Webhooks.');
   }
   return [];
+}
+
+function mercadoPagoCommercialAccessToken(env: Bindings): string {
+  const token = env.MERCADO_PAGO_COMMERCIAL_ACCESS_TOKEN?.trim();
+  if (!token) throw new AppError('internal_error', 'Falta configurar el Access Token comercial de Mercado Pago.');
+  return token;
+}
+
+function assertCommercialPaymentConfiguration(env: Bindings): void {
+  if (env.MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED !== '1') {
+    throw new AppError('forbidden', 'Los pagos comerciales aún no están habilitados.');
+  }
+  mercadoPagoCommercialAccessToken(env);
+}
+
+async function ownedBillingOrder(env: Bindings, id: string, userId: string): Promise<BillingOrder> {
+  const order = await createRepositories(env.DB).lmwaresBillingOrders.getById(id);
+  if (!order || order.userId !== userId) throw AppError.notFound('Orden de pago');
+  return order;
+}
+
+function billingCheckoutExpired(order: BillingOrder): boolean {
+  if (!order.checkoutExpiresAt) return false;
+  const timestamp = Date.parse(order.checkoutExpiresAt);
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
+
+async function auditBillingOrder(
+  c: Parameters<typeof requirePublicSession>[0],
+  actorId: string,
+  action: string,
+  order: BillingOrder,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await createRepositories(c.env.DB).audit.record({
+    actorType: 'public', actorId, action,
+    entityType: 'lmwares_billing_order', entityId: order.id, metadata,
+    ip: c.req.header('CF-Connecting-IP') ?? null,
+    userAgent: c.req.header('User-Agent') ?? null,
+  });
 }
 
 function publicProposal(proposal: PackageProposal) {

@@ -415,7 +415,20 @@ function SitesPanel({
                         </button>
                       </div>
                     ) : (
-                      <strong className="lmw-account-offer__accepted">Oferta aceptada. El siguiente paso será el pago de implementación.</strong>
+                      <div className="lmw-account-offer__accept">
+                        <strong className="lmw-account-offer__accepted">
+                          {intake.implementationPayment?.status === 'paid'
+                            ? 'Pago de implementación confirmado.'
+                            : 'Oferta aceptada. El siguiente paso es el pago de implementación.'}
+                        </strong>
+                        {intake.implementationPayment ? (
+                          <a href={`/pago/implementacion/${encodeURIComponent(intake.implementationPayment.id)}`}>
+                            {intake.implementationPayment.status === 'paid'
+                              ? 'Ver comprobación del pago'
+                              : 'Continuar al pago'}
+                          </a>
+                        ) : null}
+                      </div>
                     )}
                   </section>
                 ) : null}

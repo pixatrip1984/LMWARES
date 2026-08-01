@@ -1,4 +1,4 @@
-import { AppError, type PackageProposal } from '@starter/domain';
+import { AppError, type BillingOrder, type PackageProposal } from '@starter/domain';
 
 const MERCADO_PAGO_API = 'https://api.mercadopago.com';
 const MAX_PROVIDER_RESPONSE_BYTES = 256 * 1024;
@@ -121,6 +121,84 @@ export async function createMercadoPagoPreference(input: {
   const payload = await readProviderJson(response);
   if (!response.ok) throw providerError('crear la preferencia', response.status, payload);
 
+  const id = stringField(payload, 'id');
+  const checkoutUrl = input.testMode
+    ? (optionalStringField(payload, 'sandbox_init_point') ?? stringField(payload, 'init_point'))
+    : stringField(payload, 'init_point');
+  assertMercadoPagoCheckoutUrl(checkoutUrl);
+  return { id, checkoutUrl, expiresAt };
+}
+
+export async function createMercadoPagoBillingPreference(input: {
+  accessToken: string;
+  order: BillingOrder;
+  payerEmail: string;
+  testMode: boolean;
+  publicApiUrl: string;
+  publicWebUrl: string;
+}): Promise<MercadoPagoPreference> {
+  const validFrom = new Date();
+  const expiresAt = new Date(validFrom.getTime() + CHECKOUT_TTL_MS).toISOString();
+  const notificationUrl = publicHttpsUrl(
+    input.publicApiUrl,
+    '/payments/webhooks/mercado-pago?scope=commercial',
+  );
+  const paymentReturnUrl = publicHttpsUrl(
+    input.publicWebUrl,
+    `/pago/implementacion/${encodeURIComponent(input.order.id)}`,
+  );
+  if (!notificationUrl || !paymentReturnUrl) {
+    throw new AppError('internal_error', 'Las URLs públicas de LMWares no permiten crear el cobro.');
+  }
+  const snapshot = input.order.orderSnapshot;
+  const plan = typeof snapshot.plan === 'string' ? capitalize(snapshot.plan) : 'Starter';
+  const response = await fetch(`${MERCADO_PAGO_API}/checkout/preferences`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${input.accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': `lmwares-billing-${input.order.id}`,
+    },
+    body: JSON.stringify({
+      items: [
+        {
+          id: `lmwares-implementation-${input.order.id}`,
+          title: `Implementación LMWares · ${plan}`,
+          description: 'Implementación acordada en la oferta comercial aceptada',
+          quantity: 1,
+          currency_id: input.order.currency,
+          unit_price: input.order.amountCents / 100,
+        },
+      ],
+      payer: { email: input.payerEmail },
+      external_reference: input.order.externalReference,
+      metadata: {
+        billing_order_id: input.order.id,
+        commercial_offer_id: input.order.commercialOfferId,
+        intake_id: input.order.intakeId,
+        purpose: input.order.purpose,
+      },
+      statement_descriptor: 'LMWARES',
+      binary_mode: true,
+      expires: true,
+      expiration_date_from: validFrom.toISOString(),
+      expiration_date_to: expiresAt,
+      payment_methods: {
+        excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }],
+        installments: 1,
+      },
+      notification_url: notificationUrl,
+      back_urls: {
+        success: paymentReturnUrl,
+        pending: paymentReturnUrl,
+        failure: paymentReturnUrl,
+      },
+      auto_return: 'approved',
+    }),
+  });
+  const payload = await readProviderJson(response);
+  if (!response.ok) throw providerError('crear el cobro de implementación', response.status, payload);
   const id = stringField(payload, 'id');
   const checkoutUrl = input.testMode
     ? (optionalStringField(payload, 'sandbox_init_point') ?? stringField(payload, 'init_point'))
@@ -620,7 +698,7 @@ function providerError(action: string, status: number, payload: unknown): AppErr
   const providerMessageDiagnostic = safeProviderMessageDiagnostic(safeProviderMessage);
   return new AppError(
     'internal_error',
-    `No fue posible ${action} en Mercado Pago. Revisa las credenciales de prueba.`,
+    `No fue posible ${action} en Mercado Pago. Revisa la configuración de la integración.`,
     { providerDiagnostic: [providerDiagnostic, providerMessageDiagnostic] },
   );
 }

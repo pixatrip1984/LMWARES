@@ -324,15 +324,25 @@ export class LmwaresPaymentsRepository {
     status: 'processed' | 'ignored';
     proposalId: string | null;
     subscriptionId?: string | null;
+    billingOrderId?: string | null;
   }): Promise<void> {
     const now = nowIso();
     await this.db
       .prepare(
         `UPDATE lmw_payment_webhook_events
-         SET status = ?, proposal_id = ?, subscription_id = ?, processed_at = ?, updated_at = ?
+         SET status = ?, proposal_id = ?, subscription_id = ?, billing_order_id = ?,
+             processed_at = ?, updated_at = ?
          WHERE id = ? AND status = 'processing'`,
       )
-      .bind(input.status, input.proposalId, input.subscriptionId ?? null, now, now, input.id)
+      .bind(
+        input.status,
+        input.proposalId,
+        input.subscriptionId ?? null,
+        input.billingOrderId ?? null,
+        now,
+        now,
+        input.id,
+      )
       .run();
   }
 

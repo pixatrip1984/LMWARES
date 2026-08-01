@@ -152,7 +152,34 @@ export interface PublicPackageIntake {
   maintenanceStartPolicy: 'on_go_live';
   proposalId: string | null;
   currentOffer: PublicCommercialOffer | null;
+  implementationPayment: PublicBillingOrder | null;
   submittedAt: string;
+  updatedAt: string;
+}
+
+export interface PublicBillingOrder {
+  id: string;
+  purpose: 'implementation' | 'cart';
+  commercialOfferId: string | null;
+  intakeId: string | null;
+  status:
+    | 'ready'
+    | 'checkout_creating'
+    | 'checkout_failed'
+    | 'payment_pending'
+    | 'payment_failed'
+    | 'paid'
+    | 'refunded'
+    | 'charged_back'
+    | 'canceled';
+  amountCents: number;
+  currency: 'MXN';
+  checkoutUrl: string | null;
+  checkoutExpiresAt: string | null;
+  lastProviderStatus: string | null;
+  paymentReviewRequired: boolean;
+  paidAt: string | null;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -329,9 +356,27 @@ export function createPublicClient(baseUrl: string) {
     },
 
     acceptCommercialOffer(intakeId: string, offerId: string, termsVersion: string) {
-      return http.post<{ offer: PublicCommercialOffer }>(
+      return http.post<{ offer: PublicCommercialOffer; billingOrder: PublicBillingOrder }>(
         `/commercial-intakes/${encodeURIComponent(intakeId)}/offers/${encodeURIComponent(offerId)}/accept`,
         { accepted: true, termsVersion },
+      );
+    },
+
+    getBillingOrder(orderId: string) {
+      return http.get<{ order: PublicBillingOrder }>(
+        `/payments/orders/${encodeURIComponent(orderId)}`,
+      );
+    },
+
+    createBillingCheckout(orderId: string) {
+      return http.post<{ order: PublicBillingOrder }>(
+        `/payments/orders/${encodeURIComponent(orderId)}/checkout`,
+      );
+    },
+
+    reconcileBillingOrder(orderId: string) {
+      return http.post<{ found: boolean; order: PublicBillingOrder }>(
+        `/payments/orders/${encodeURIComponent(orderId)}/reconcile`,
       );
     },
 

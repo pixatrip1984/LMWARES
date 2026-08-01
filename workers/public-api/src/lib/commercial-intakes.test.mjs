@@ -9,6 +9,11 @@ const workerSource = readFileSync(new URL('../index.ts', import.meta.url), 'utf8
 const wranglerSource = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 const accountSource = readFileSync(new URL('../routes/account.ts', import.meta.url), 'utf8');
 const offersSource = readFileSync(new URL('../lib/commercial-offer-public.ts', import.meta.url), 'utf8');
+const mercadoPagoSource = readFileSync(new URL('./mercado-pago.ts', import.meta.url), 'utf8');
+const billingRepositorySource = readFileSync(
+  new URL('../../../../packages/db/src/repositories/lmwares-billing-orders.ts', import.meta.url),
+  'utf8',
+);
 
 test('commercial intake requires a UUID idempotency key and computes prices on the server', () => {
   assert.match(intakeSource, /c\.req\.header\('Idempotency-Key'\)/);
@@ -55,4 +60,35 @@ test('account returns only the sanitized current offer and an in-app notice', ()
   assert.match(offersSource, /termsVersion: offer\.termsVersion/);
   assert.doesNotMatch(offersSource, /issuedBy/);
   assert.doesNotMatch(offersSource, /userId/);
+});
+
+test('accepted offers create one server-priced implementation order', () => {
+  assert.match(intakeSource, /ensureImplementationOrder/);
+  assert.match(billingRepositorySource, /INSERT OR IGNORE INTO lmw_billing_orders/);
+  assert.match(billingRepositorySource, /o\.implementation_amount_cents/);
+  assert.match(billingRepositorySource, /o\.status = 'accepted'/);
+  assert.match(billingRepositorySource, /lmw-implementation:\$\{id\}/);
+  assert.doesNotMatch(intakeSource, /amountCents: input\./);
+});
+
+test('commercial checkout is gated and uses a separate Mercado Pago contract', () => {
+  assert.match(paymentsSource, /payments\.post\('\/orders\/:id\/checkout'/);
+  assert.match(paymentsSource, /assertCommercialPaymentConfiguration\(c\.env\)/);
+  assert.match(paymentsSource, /MERCADO_PAGO_COMMERCIAL_ACCESS_TOKEN/);
+  assert.match(wranglerSource, /MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "0"/);
+  assert.match(mercadoPagoSource, /X-Idempotency-Key': `lmwares-billing-\$\{input\.order\.id\}`/);
+  assert.match(mercadoPagoSource, /scope=commercial/);
+  assert.match(mercadoPagoSource, /external_reference: input\.order\.externalReference/);
+});
+
+test('commercial reconciliation verifies frozen reference, currency and amount', () => {
+  assert.match(paymentsSource, /assertPaymentMatchesBillingOrder\(payment, order\)/);
+  assert.match(paymentsSource, /payment\.externalReference !== order\.externalReference/);
+  assert.match(paymentsSource, /payment\.currency !== order\.currency/);
+  assert.match(paymentsSource, /Math\.round\(payment\.amount \* 100\) !== order\.amountCents/);
+  assert.match(billingRepositorySource, /payment_review_required = 1/);
+  assert.match(billingRepositorySource, /ON CONFLICT\(provider_payment_id\) DO UPDATE/);
+  assert.match(billingRepositorySource, /SET status = 'converted'/);
+  assert.match(billingRepositorySource, /implementation-payment-confirmed:\$\{paidOrder\.id\}/);
+  assert.match(billingRepositorySource, /INSERT OR IGNORE INTO lmw_notifications/);
 });
