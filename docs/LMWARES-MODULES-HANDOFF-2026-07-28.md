@@ -142,9 +142,41 @@ desplegadas las versiones:
 - Admin API `bc9daef0-b070-4b99-9953-11e07e13cb90`;
 - Admin Pages `c79a4d8c.lmwares-admin.pages.dev`.
 
-La prueba anónima continúa redirigiendo a Cloudflare Access. El proyecto local
-`astraeus` no existe en producción; se debe crear o seleccionar un proyecto
-desde una sesión Access antes de ejecutar la compuerta remota.
+La prueba anónima continúa redirigiendo a Cloudflare Access. En este corte,
+`astraeus` todavía no existía en producción y quedaba pendiente ejecutar la
+compuerta desde una sesión Access.
+
+### Validación autenticada en producción: 2026-08-01
+
+La brecha anterior ya no aplica. El panel incorpora una importación explícita
+de `.lmwares/cache/dev-projects.json` (archivo o texto pegado), valida el mismo
+contrato Zod que el endpoint de sincronización y no envía nada a D1 hasta que el
+operador pulsa `Sincronizar escaneo con D1`. Se importó únicamente `astraeus` y
+el registro reapareció desde `D1 privado` después de una recarga completa.
+
+Con la sesión de Cloudflare Access `owner` se verificó en producción:
+
+- Blog: borrador ausente en la API pública, publicación visible por listado y
+  detalle, y edición posterior aislada mientras la revisión anterior sigue
+  sirviéndose;
+- Formularios: revisión publicada, envío real desde el compositor público con
+  Turnstile, aparición en Inbox, transición a `En proceso`, historial y nota
+  privada; una revisión de borrador posterior no cambió el formulario público;
+- Eventos: publicación visible, dos inscripciones confirmadas para un cupo de
+  dos, tercera inscripción rechazada con `409`, conteo `2/2` reflejado en el
+  administrador y edición posterior aislada de la revisión pública.
+
+Galerías conserva en D1 un álbum remoto en borrador y rechazó correctamente la
+publicación sin imágenes. Docs abrió correctamente el workspace protegido, pero
+la automatización de Chrome no tiene permiso para entregar rutas locales al
+selector de archivos. Por eso quedan dos gestos manuales antes de declarar la
+compuerta remota completa: cargar y publicar una imagen en Galerías, y cargar,
+publicar y descargar un documento en Docs.
+
+El panel se volvió a construir después de hacer adaptable a móvil el importador
+del registro y se desplegó como `a037e122.lmwares-admin.pages.dev`. La compuerta
+de esta entrega pasó `npm run typecheck` (17/17), el build de producción de
+`@apps/admin-web` y `git diff --check`.
 
 ## 1. Resumen ejecutivo
 

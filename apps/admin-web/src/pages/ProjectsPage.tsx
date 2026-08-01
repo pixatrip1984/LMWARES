@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type {
   LmwaresProject,
@@ -42,6 +42,9 @@ export function ProjectsPage() {
   const [snapshots, setSnapshots] = useState<LmwaresProjectSnapshot[]>([]);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [snapshotSaving, setSnapshotSaving] = useState(false);
+  const scanFileRef = useRef<HTMLInputElement>(null);
+  const [showScanPaste, setShowScanPaste] = useState(false);
+  const [scanJson, setScanJson] = useState('');
 
   const orderedProjects = useMemo(() => sortProjects(projects), [projects]);
   const selectedProject =
@@ -162,6 +165,41 @@ export function ProjectsPage() {
     }
   }
 
+  async function importScanFile(file: File | null) {
+    if (!file) return;
+    try {
+      importScanText(await file.text());
+    } catch (error) {
+      setFeedback(errorMessage(error, 'No se pudo leer el archivo de escaneo.'));
+    } finally {
+      if (scanFileRef.current) scanFileRef.current.value = '';
+    }
+  }
+
+  function importScanText(text: string) {
+    setFeedback(null);
+    try {
+      const raw = JSON.parse(text) as unknown;
+      const result = syncLmwaresProjectsSchema.safeParse(raw);
+      if (!result.success) {
+        throw new Error('El contenido no cumple el contrato del escaneo LMWARES.');
+      }
+      const scan = result.data;
+      setLocalScan(scan);
+      setProjects(scan.projects.map((project) => projectFromScan(project, scan)));
+      setRegistryMode('local-scan');
+      setDetailTab('registry');
+      setScanMeta({ generatedAt: scan.generatedAt, root: scan.root, source: scan.source });
+      setFeedback(
+        `${scan.projects.length} proyectos listos para revisar y sincronizar con D1.`,
+      );
+      setShowScanPaste(false);
+      setScanJson('');
+    } catch (error) {
+      setFeedback(errorMessage(error, 'No se pudo importar el escaneo.'));
+    }
+  }
+
   async function saveCurrentSnapshot() {
     if (!selectedProject || registryMode !== 'registry') return;
     setSnapshotSaving(true);
@@ -201,8 +239,70 @@ export function ProjectsPage() {
           </p>
           <h1 className="text-lg font-black">Registro privado de proyectos</h1>
         </div>
-        <RegistryBadge mode={registryMode} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <input
+            ref={scanFileRef}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            aria-label="Importar escaneo LMWARES"
+            onChange={(event) => void importScanFile(event.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => scanFileRef.current?.click()}
+            className="rounded-md border border-black/15 bg-white px-3 py-2 text-xs font-black text-[#26332b] transition hover:bg-[#eef2ec]"
+          >
+            Importar escaneo JSON
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowScanPaste((current) => !current)}
+            className="rounded-md border border-black/15 bg-white px-3 py-2 text-xs font-black text-[#26332b] transition hover:bg-[#eef2ec]"
+          >
+            Pegar JSON
+          </button>
+          <RegistryBadge mode={registryMode} />
+        </div>
       </div>
+
+      {showScanPaste ? (
+        <section className="flex flex-none flex-col gap-3 border-b border-black/10 bg-[#eef2ec] px-4 py-3 sm:flex-row sm:items-end lg:px-6">
+          <label className="min-w-0 flex-1">
+            <span className="mb-1 block text-xs font-black uppercase tracking-[0.1em] text-[#526158]">
+              Contenido de dev-projects.json
+            </span>
+            <textarea
+              value={scanJson}
+              onChange={(event) => setScanJson(event.target.value)}
+              rows={4}
+              spellCheck={false}
+              className="w-full resize-y rounded-md border border-black/15 bg-white p-2 font-mono text-xs"
+              placeholder='{"schemaVersion":1,"generatedAt":"…","projects":[…]}'
+            />
+          </label>
+          <div className="flex gap-2 sm:flex-col">
+            <button
+              type="button"
+              disabled={!scanJson.trim()}
+              onClick={() => importScanText(scanJson)}
+              className="flex-1 rounded-md bg-[#0f6f50] px-4 py-2 text-xs font-black text-white disabled:opacity-45"
+            >
+              Validar escaneo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowScanPaste(false);
+                setScanJson('');
+              }}
+              className="flex-1 rounded-md border border-black/15 bg-white px-4 py-2 text-xs font-black"
+            >
+              Cancelar
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <main className="mx-auto grid min-h-0 w-full max-w-7xl flex-1 gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_410px] lg:px-6">
         <section className="min-h-0 min-w-0 overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
@@ -228,7 +328,7 @@ export function ProjectsPage() {
               ) : orderedProjects.length === 0 ? (
                 <EmptyState
                   title="Aún no hay proyectos registrados"
-                  detail="Ejecuta npm run lmwares:scan y vuelve a abrir el panel. El escaneo se podrá sincronizar con D1 desde aquí."
+                  detail="Ejecuta npm run lmwares:scan e importa .lmwares/cache/dev-projects.json para revisarlo y sincronizarlo con D1."
                 />
               ) : (
                 <div className="grid grid-cols-1 gap-4">
