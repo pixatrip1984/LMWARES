@@ -178,6 +178,44 @@ del registro y se desplegó como `a037e122.lmwares-admin.pages.dev`. La compuert
 de esta entrega pasó `npm run typecheck` (17/17), el build de producción de
 `@apps/admin-web` y `git diff --check`.
 
+### Vista pública exacta de Eventos y build productivo: 2026-08-01
+
+El editor de Eventos ya no infiere la columna `AGENDA PÚBLICA` desde la fila
+editable. Admin API expone `GET
+/admin/projects/:projectId/modules/events/published`, respaldado por
+`lmwares_event_publications`, y el panel consulta esa fotografía exacta. Un
+evento publicado puede conservar simultáneamente un borrador distinto sin que
+el preview administrativo o el sitio público anticipen esos cambios.
+
+La prueba productiva dejó evidencia simultánea en `astraeus`:
+
+- editor y listado: `BORRADOR EVENTO NO PUBLICADO`, con el indicador
+  `Publicado · cambios sin publicar`;
+- agenda pública del panel y Public API: `Evento remoto Starter 2026-08-01`;
+- dos asistentes confirmados de dos y `0 lugares disponibles` en la revisión
+  pública.
+
+Durante el despliegue se detectó además que un build de Vite sin variables
+podía incrustar `http://127.0.0.1:8888`. `resolveAdminApiUrl` ahora conserva el
+Worker local únicamente en hostnames locales y usa
+`https://admin.lmwares.com` en cualquier host público; cinco pruebas cubren el
+fallback, una configuración explícita y valores inválidos. Admin Pages debe
+desplegarse con `--branch main`: usar la rama Git actual crea solamente un
+Preview y no actualiza `admin.lmwares.com`.
+
+Versiones verificadas:
+
+- Admin API `e454e556-eec9-4689-ae7b-620e849e9877`;
+- Admin Pages Production `325d1805.lmwares-admin.pages.dev`;
+- Admin Pages Preview intermedio `c746e2c5.lmwares-admin.pages.dev` (no es la
+  versión enlazada al dominio personalizado).
+
+Pasaron `npm run typecheck` (17/17), `npm run test`, `npm run check:workers`, el
+build del administrador, `git diff --check` y
+`scripts/validate-starter-events.ps1`, incluida la carrera concurrente por el
+último cupo. Continúan pendientes únicamente los gestos con archivos reales de
+Galerías y Docs descritos arriba.
+
 ## 1. Resumen ejecutivo
 
 Se implementaron cinco verticales iniciales de módulos LMWares:

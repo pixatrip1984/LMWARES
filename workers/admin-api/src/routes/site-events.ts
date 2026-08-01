@@ -31,6 +31,13 @@ siteEvents.get('/', async (c) => {
   return c.json({ events: events.map((event) => adminEvent(c.env, event)) });
 });
 
+siteEvents.get('/published', async (c) => {
+  const { projectId } = parseInput(siteEventProjectParamsSchema, c.req.param());
+  const repository = await projectRepository(c.env.DB, projectId);
+  const events = await repository.listPublic(projectId);
+  return c.json({ events: events.map((event) => adminEvent(c.env, event)) });
+});
+
 siteEvents.get('/:eventId', async (c) => {
   const { projectId, eventId } = parseInput(siteEventParamsSchema, c.req.param());
   const repository = await projectRepository(c.env.DB, projectId);

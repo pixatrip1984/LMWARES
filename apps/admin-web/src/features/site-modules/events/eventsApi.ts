@@ -76,6 +76,13 @@ export const eventsApi = {
     return response.events;
   },
 
+  async listPublished(projectId: string): Promise<EventRecord[]> {
+    const response = await http.get<{ events: EventRecord[] }>(
+      `${modulePath(projectId)}/published`,
+    );
+    return response.events;
+  },
+
   get(projectId: string, eventId: string) {
     return http.get<{ event: EventRecord; registrations: EventRegistration[] }>(
       `${modulePath(projectId)}/${encodeURIComponent(eventId)}`,

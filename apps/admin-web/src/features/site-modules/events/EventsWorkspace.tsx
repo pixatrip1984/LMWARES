@@ -38,6 +38,7 @@ const STATUS_LABELS: Record<EventStatus, string> = {
 
 export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
   const [events, setEvents] = useState<EventRecord[]>([]);
+  const [publishedEvents, setPublishedEvents] = useState<EventRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<EventFormState>(() => emptyForm());
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
@@ -58,11 +59,11 @@ export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
     setLoading(true);
     setError(null);
 
-    eventsApi
-      .list(projectId)
-      .then(async (items) => {
+    Promise.all([eventsApi.list(projectId), eventsApi.listPublished(projectId)])
+      .then(async ([items, published]) => {
         if (cancelled) return;
         setEvents(items);
+        setPublishedEvents(published);
         const first = items[0] ?? null;
         setSelectedId(first?.id ?? null);
         setForm(first ? formFromEvent(first) : emptyForm());
@@ -87,11 +88,10 @@ export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
   }, [projectId]);
 
   const publicAgenda = useMemo(() => {
-    const visible = events.filter((event) => event.status !== 'draft');
-    if (!previewEvent) return visible;
-    const withoutPreviewed = visible.filter((event) => event.id !== previewEvent.id);
+    if (!previewEvent) return publishedEvents;
+    const withoutPreviewed = publishedEvents.filter((event) => event.id !== previewEvent.id);
     return [previewEvent, ...withoutPreviewed];
-  }, [events, previewEvent]);
+  }, [publishedEvents, previewEvent]);
 
   async function selectEvent(event: EventRecord) {
     setSelectedId(event.id);
@@ -226,7 +226,9 @@ export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
       const detail = await eventsApi.listRegistrations(projectId, form.id);
+      const published = await eventsApi.listPublished(projectId);
       setEvents((current) => upsertEvent(current, detail.event));
+      setPublishedEvents(published);
       setRegistrations(detail.registrations);
     } catch (cause) {
       setError(errorMessage(cause, 'No se pudo actualizar la inscripción.'));
@@ -238,8 +240,12 @@ export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
     setForm(formFromEvent(event));
     setSelectedId(event.id);
     setPreviewEvent(null);
-    const detail = await eventsApi.get(projectId, event.id);
+    const [detail, published] = await Promise.all([
+      eventsApi.get(projectId, event.id),
+      eventsApi.listPublished(projectId),
+    ]);
     setEvents((current) => upsertEvent(current, detail.event));
+    setPublishedEvents(published);
     setRegistrations(detail.registrations);
   }
 

@@ -112,6 +112,18 @@ if (-not $savedDraft.hasUnpublishedChanges -or [string]::IsNullOrWhiteSpace($sav
   throw 'The admin did not preserve or identify the public event revision.'
 }
 
+$publishedPreviewResponse = Invoke-ApiRequest GET "$adminBase/published" $adminHeaders
+Assert-Status $publishedPreviewResponse 200 'Read exact admin public preview'
+$publishedPreview = (Read-Json $publishedPreviewResponse).events |
+  Where-Object id -EQ $eventId |
+  Select-Object -First 1
+if (-not $publishedPreview -or
+    $publishedPreview.title -ne 'Validación E2E de Eventos Starter' -or
+    $publishedPreview.slug -ne $eventSlug -or
+    $publishedPreview.venueName -ne 'LMWares Lab') {
+  throw 'The admin public preview did not preserve the exact published event snapshot.'
+}
+
 $unchangedEventResponse = Invoke-ApiRequest GET "$PublicApiUrl/sites/$ProjectId/events/$eventId" $publicHeaders
 Assert-Status $unchangedEventResponse 200 'Read unchanged event publication'
 $unchangedEvent = (Read-Json $unchangedEventResponse).event
