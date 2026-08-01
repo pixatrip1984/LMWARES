@@ -750,7 +750,35 @@
   .lmw-account-reader > footer { grid-template-columns: 1fr; }
   .lmw-account-sites { padding: 20px 14px; }
   .lmw-account-sites > header { align-items: flex-start; flex-direction: column; }
-  .lmw-account-sites__card-body { grid-template-columns: minmax(0, 1fr) 96px; }
-  .lmw-account-site-qr { width: 96px; }
+  .lmw-account-sites article { padding: 16px; }
+  .lmw-account-sites article > header { align-items: flex-start; gap: 8px; }
+  .lmw-account-sites__card-body { grid-template-columns: 1fr; }
+  .lmw-account-sites__details > p {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .lmw-account-sites__details dl { grid-template-columns: 1fr; }
+  .lmw-account-sites article footer { flex-wrap: wrap; }
+  .lmw-account-sites article footer button,
+  .lmw-account-sites article footer a {
+    align-items: center;
+    display: inline-flex;
+    flex: 1 1 120px;
+    justify-content: center;
+    min-height: 44px;
+    text-align: center;
+  }
+  .lmw-account-site-qr {
+    justify-self: center;
+    margin-top: 2px;
+    max-width: 180px;
+    width: 100%;
+  }
+  .lmw-account-site-qr > a {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-height: 44px;
+  }
   .lmw-account-footer { padding: 0 14px; }
 }

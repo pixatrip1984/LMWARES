@@ -1,10 +1,162 @@
+export const FREE_SITE_RESPONSIVE_STYLE_ID = 'lmwares-free-responsive-v1';
+
+export const FREE_SITE_RESPONSIVE_CSS = `
+html,
+body,
+.shell {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+img,
+iframe {
+  max-width: 100%;
+}
+.hero > *,
+.quick-facts > *,
+.services-grid > *,
+.gallery > *,
+.contact > *,
+.location > * {
+  min-width: 0;
+}
+.brand,
+.summary,
+.trust,
+.fact strong,
+.section h2,
+.section > p,
+.location h2,
+.location p,
+.footer {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .topbar {
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .brand {
+    font-size: 22px;
+  }
+  .top-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .top-actions .pill,
+  .top-actions .button {
+    flex: 1 1 130px;
+    justify-content: center;
+    min-width: 0;
+    padding-inline: 12px;
+    text-align: center;
+  }
+  .hero {
+    min-height: 0;
+  }
+  .hero-copy {
+    padding: 40px 18px 46px;
+  }
+  h1,
+  .layout-minimal h1 {
+    font-size: clamp(38px, 13vw, 58px);
+    letter-spacing: -0.055em;
+    line-height: .94;
+  }
+  .layout-impact h1 {
+    font-size: clamp(46px, 15vw, 68px);
+    line-height: .88;
+  }
+  .summary {
+    font-size: 15px;
+  }
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    margin-top: 26px;
+  }
+  .actions .button {
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+  }
+  .hero-image {
+    min-height: 300px;
+  }
+  .quick-facts {
+    padding-inline: 0;
+  }
+  .fact {
+    min-height: 88px;
+    padding: 20px 18px;
+  }
+  .section,
+  .contact,
+  .location {
+    padding: 42px 18px;
+  }
+  .section h2,
+  .location h2 {
+    font-size: clamp(34px, 11vw, 48px);
+  }
+  .service-card {
+    min-height: 132px;
+    padding: 19px;
+  }
+  .gallery figure,
+  .gallery figure:first-child,
+  .layout-showcase .gallery figure,
+  .layout-showcase .gallery figure:first-child {
+    min-height: 260px;
+  }
+  .contact-actions a,
+  .contact-actions button {
+    align-items: center;
+    display: inline-flex;
+    flex: 1 1 140px;
+    justify-content: center;
+    min-height: 44px;
+    text-align: center;
+  }
+  .location-map,
+  .location-map iframe {
+    min-height: 300px;
+  }
+  .layout-minimal .hero-image {
+    min-height: 300px;
+  }
+  .layout-showcase .hero,
+  .layout-showcase .hero-copy {
+    min-height: max(640px, 100svh);
+  }
+  .layout-showcase .hero-copy {
+    justify-content: flex-end;
+  }
+  .footer {
+    line-height: 1.6;
+    padding: 22px 18px;
+  }
+}
+@media (max-width: 390px) {
+  h1,
+  .layout-minimal h1 {
+    font-size: 36px;
+  }
+  .layout-impact h1 {
+    font-size: 43px;
+  }
+  .top-actions .pill,
+  .top-actions .button {
+    flex-basis: 100%;
+  }
+}`;
+
 export function buildManifest({ job, intake, contacts, assets }) {
   const freePage = normalizeFreePage(intake.metadata?.freePage);
   const theme = resolveTheme({ intake, freePage });
   return {
     schema: 'lmwares.free-site.v1',
     generatedAt: new Date().toISOString(),
-    generator: 'lmwares-free-site-runner/static-v3',
+    generator: 'lmwares-free-site-runner/static-v4',
     job: {
       id: job.id,
       attempt: job.attempt,
@@ -76,7 +228,7 @@ export function renderSite({ intake, contacts, assets, manifest, apiUrl }) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="${escapeAttr(shorten(intake.businessDescription, 150))}" />
   <title>${escapeHtml(intake.siteName)} · Página informativa</title>
-  <style>
+  <style id="${FREE_SITE_RESPONSIVE_STYLE_ID}">
     :root {
       color-scheme: light;
       --ink: ${theme.ink};
@@ -532,6 +684,7 @@ export function renderSite({ intake, contacts, assets, manifest, apiUrl }) {
       .layout-showcase .gallery { grid-template-columns: 1fr; }
       .layout-showcase .gallery figure:first-child { min-height: 360px; }
     }
+    ${FREE_SITE_RESPONSIVE_CSS}
   </style>
 </head>
 <body class="layout-${escapeAttr(layoutPreset)}">

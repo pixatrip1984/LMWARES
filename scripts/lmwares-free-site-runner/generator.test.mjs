@@ -57,7 +57,7 @@ test('genera el mismo sitio estático desde un runner local o de Cloudflare', ()
     apiUrl: 'https://api.lmwares.com',
   });
 
-  assert.equal(manifest.generator, 'lmwares-free-site-runner/static-v3');
+  assert.equal(manifest.generator, 'lmwares-free-site-runner/static-v4');
   assert.deepEqual(manifest.layout, { name: 'showcase', source: 'customer' });
   assert.deepEqual(manifest.theme, { name: 'professional', source: 'palettePreset' });
   assert.match(html, /<title>Negocio Demo · Página informativa<\/title>/);
@@ -67,6 +67,12 @@ test('genera el mismo sitio estático desde un runner local o de Cloudflare', ()
   assert.match(html, /openstreetmap\.org\/export\/embed\.html/);
   assert.match(html, /Centro, Monterrey, Nuevo León/);
   assert.match(html, /google\.com\/maps\/search\/\?api=1&amp;query=25\.686614%2C-100\.316113/);
+  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
+  assert.match(html, /id="lmwares-free-responsive-v1"/);
+  assert.match(html, /@media \(max-width: 640px\)/);
+  assert.match(html, /@media \(max-width: 390px\)/);
+  assert.match(html, /\.actions \.button \{[\s\S]*?width: 100%/);
+  assert.match(html, /\.location-map,[\s\S]*?min-height: 300px/);
   assert.doesNotMatch(html, /\bundefined\b/);
 });
 

@@ -19,6 +19,9 @@ export interface FreeSiteGeneratorInput {
   assets: GeneratedFreeAsset[];
 }
 
+export const FREE_SITE_RESPONSIVE_STYLE_ID: string;
+export const FREE_SITE_RESPONSIVE_CSS: string;
+
 export function buildManifest(input: FreeSiteGeneratorInput): Record<string, unknown>;
 
 export function renderSite(
