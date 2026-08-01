@@ -18,6 +18,7 @@ export * from './models/package-payment';
 export * from './models/payment-policy';
 export * from './models/package-intake';
 export * from './models/package-pricing';
+export * from './models/commercial-offer';
 export * from './models/package-subscription';
 export * from './models/subscription-policy';
 export * from './models/site-blog';

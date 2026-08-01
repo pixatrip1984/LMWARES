@@ -14,6 +14,7 @@ type AccountCenterModalProps = {
   initialTab: AccountCenterTab;
   loading: boolean;
   onClose: () => void;
+  onAcceptOffer: (intakeId: string, offerId: string, termsVersion: string) => Promise<void>;
   onMarkAllRead: () => Promise<void>;
   onMarkRead: (notificationId: string) => Promise<void>;
   onReload: () => Promise<void>;
@@ -41,6 +42,7 @@ export function AccountCenterModal({
   initialTab,
   loading,
   onClose,
+  onAcceptOffer,
   onMarkAllRead,
   onMarkRead,
   onReload,
@@ -169,6 +171,7 @@ export function AccountCenterModal({
             <SitesPanel
               copyState={copyState}
               intakes={overview?.commercialIntakes ?? []}
+              onAcceptOffer={onAcceptOffer}
               onCopy={copyUrl}
               sites={overview?.sites ?? []}
             />
@@ -257,7 +260,10 @@ function NotificationReader({ notification }: { notification: AccountNotificatio
   return (
     <article className="lmw-account-reader">
       <header>
-        <small>PUBLICACIÓN · {notification.plan.toUpperCase()}</small>
+        <small>
+          {notification.kind === 'commercial-offer-issued' ? 'OFERTA COMERCIAL' : 'PUBLICACIÓN'}
+          {' · '}{notification.plan.toUpperCase()}
+        </small>
         <h3>{notification.title}</h3>
         <p>{formatDateTime(notification.createdAt)}</p>
       </header>
@@ -278,8 +284,12 @@ function NotificationReader({ notification }: { notification: AccountNotificatio
       <footer>
         <div><small>REFERENCIA</small><b>{notification.referenceId ?? 'No disponible'}</b></div>
         <div>
-          <small>EMAIL</small>
-          <b>{deliveryLabel(notification.deliveryStatus)}</b>
+          <small>{notification.kind === 'commercial-offer-issued' ? 'CANAL' : 'EMAIL'}</small>
+          <b>
+            {notification.kind === 'commercial-offer-issued'
+              ? 'En tu cuenta'
+              : deliveryLabel(notification.deliveryStatus)}
+          </b>
         </div>
       </footer>
     </article>
@@ -289,14 +299,34 @@ function NotificationReader({ notification }: { notification: AccountNotificatio
 function SitesPanel({
   copyState,
   intakes,
+  onAcceptOffer,
   onCopy,
   sites,
 }: {
   copyState: string | null;
   intakes: PublicPackageIntake[];
+  onAcceptOffer: (intakeId: string, offerId: string, termsVersion: string) => Promise<void>;
   onCopy: (site: AccountSite) => Promise<void>;
   sites: AccountSite[];
 }) {
+  const [acceptedTerms, setAcceptedTerms] = useState<Record<string, boolean>>({});
+  const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
+  const [offerError, setOfferError] = useState<string | null>(null);
+
+  const acceptOffer = async (intake: PublicPackageIntake) => {
+    const offer = intake.currentOffer;
+    if (!offer || !acceptedTerms[offer.id]) return;
+    setAcceptingOfferId(offer.id);
+    setOfferError(null);
+    try {
+      await onAcceptOffer(intake.id, offer.id, offer.termsVersion);
+    } catch (error) {
+      setOfferError(error instanceof Error ? error.message : 'No pudimos aceptar la oferta.');
+    } finally {
+      setAcceptingOfferId(null);
+    }
+  };
+
   if (!sites.length && !intakes.length) {
     return (
       <AccountState
@@ -337,12 +367,65 @@ function SitesPanel({
                     <dd>{formatMoney(intake.estimatedMonthlyCents, intake.currency)}/mes</dd>
                   </div>
                 </dl>
+                {intake.currentOffer ? (
+                  <section className="lmw-account-offer">
+                    <header>
+                      <small>OFERTA FINAL · V{intake.currentOffer.version}</small>
+                      <b>{intake.currentOffer.status === 'accepted' ? 'Aceptada' : 'Lista para revisar'}</b>
+                    </header>
+                    <h5>{intake.currentOffer.scopeSummary}</h5>
+                    <dl>
+                      <div>
+                        <dt>Implementación final</dt>
+                        <dd>{formatMoney(intake.currentOffer.implementationAmountCents, intake.currentOffer.currency)}</dd>
+                      </div>
+                      <div>
+                        <dt>Mensualidad al publicar</dt>
+                        <dd>{formatMoney(intake.currentOffer.monthlyAmountCents, intake.currentOffer.currency)}/mes</dd>
+                      </div>
+                    </dl>
+                    <p>{intake.currentOffer.implementationDescription}</p>
+                    <p>{intake.currentOffer.recurringDescription}</p>
+                    <ul>
+                      <li>{intake.currentOffer.terms.implementationPayment}</li>
+                      <li>{intake.currentOffer.terms.recurringStart}</li>
+                      <li>{intake.currentOffer.terms.initialHosting}</li>
+                      <li>{intake.currentOffer.terms.cancellation}</li>
+                    </ul>
+                    <small>Válida hasta {formatDate(intake.currentOffer.validUntil)}</small>
+                    {intake.currentOffer.status === 'issued' ? (
+                      <div className="lmw-account-offer__accept">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(acceptedTerms[intake.currentOffer.id])}
+                            onChange={(event) => setAcceptedTerms((current) => ({
+                              ...current,
+                              [intake.currentOffer!.id]: event.target.checked,
+                            }))}
+                          />
+                          Revisé el alcance, los importes y acepto esta versión de los términos.
+                        </label>
+                        <button
+                          disabled={!acceptedTerms[intake.currentOffer.id] || acceptingOfferId === intake.currentOffer.id}
+                          onClick={() => void acceptOffer(intake)}
+                          type="button"
+                        >
+                          {acceptingOfferId === intake.currentOffer.id ? 'Aceptando…' : 'Aceptar oferta'}
+                        </button>
+                      </div>
+                    ) : (
+                      <strong className="lmw-account-offer__accepted">Oferta aceptada. El siguiente paso será el pago de implementación.</strong>
+                    )}
+                  </section>
+                ) : null}
                 <footer>
                   <span>Mensualidad desde la publicación · Ref. {intake.id.slice(0, 8)}</span>
                 </footer>
               </article>
             ))}
           </div>
+          {offerError ? <p className="lmw-account-offer-error">{offerError}</p> : null}
         </section>
       ) : null}
       <div className="lmw-account-sites__grid">

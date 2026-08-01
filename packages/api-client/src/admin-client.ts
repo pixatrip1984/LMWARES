@@ -1,5 +1,6 @@
 import type {
   AuditEvent,
+  CommercialOffer,
   Paginated,
   Publication,
   PublicationImage,
@@ -15,6 +16,7 @@ import type {
   StatusHistory,
 } from '@starter/domain';
 import type {
+  IssueCommercialOfferInput,
   CreatePublicationInput,
   CreateRequestNoteInput,
   UpdatePublicationInput,
@@ -108,8 +110,14 @@ export function createAdminClient(baseUrl: string) {
       return http.get<{ intakes: PackageIntake[] }>(`/admin/commercial-intakes${suffix}`);
     },
     getCommercialPackageIntake(id: string) {
-      return http.get<{ intake: PackageIntake }>(
+      return http.get<{ intake: PackageIntake; offers: CommercialOffer[] }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}`,
+      );
+    },
+    issueCommercialOffer(id: string, input: IssueCommercialOfferInput) {
+      return http.post<{ offer: CommercialOffer }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/offers`,
+        input,
       );
     },
     reviewCommercialPackageIntake(

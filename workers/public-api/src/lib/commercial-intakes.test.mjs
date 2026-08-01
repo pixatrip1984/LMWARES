@@ -7,6 +7,8 @@ const paymentsSource = readFileSync(new URL('../routes/payments.ts', import.meta
 const subscriptionsSource = readFileSync(new URL('../routes/subscriptions.ts', import.meta.url), 'utf8');
 const workerSource = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
 const wranglerSource = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
+const accountSource = readFileSync(new URL('../routes/account.ts', import.meta.url), 'utf8');
+const offersSource = readFileSync(new URL('../lib/commercial-offer-public.ts', import.meta.url), 'utf8');
 
 test('commercial intake requires a UUID idempotency key and computes prices on the server', () => {
   assert.match(intakeSource, /c\.req\.header\('Idempotency-Key'\)/);
@@ -34,4 +36,23 @@ test('technical billing creation is closed independently in production', () => {
 test('commercial intake route is exposed through the public worker', () => {
   assert.match(workerSource, /app\.route\('\/commercial-intakes', commercialIntakes\)/);
   assert.match(workerSource, /allowHeaders: \['Content-Type', 'Idempotency-Key'\]/);
+});
+
+test('offer acceptance is owner-scoped, terms-versioned and audited idempotently', () => {
+  assert.match(intakeSource, /assertTrustedPublicOrigin\(c\)/);
+  assert.match(intakeSource, /acceptCommercialOfferSchema/);
+  assert.match(intakeSource, /intake\.userId !== session\.user\.id/);
+  assert.match(intakeSource, /intakeId: intake\.id/);
+  assert.match(intakeSource, /termsVersion: input\.termsVersion/);
+  assert.match(intakeSource, /if \(result\.changed\) \{/);
+  assert.match(intakeSource, /lmwares\.commercial_offer\.accept/);
+});
+
+test('account returns only the sanitized current offer and an in-app notice', () => {
+  assert.match(accountSource, /listCurrentForUser\(user\.id\)/);
+  assert.match(accountSource, /currentOffer: offersByIntake\.has\(intake\.id\)/);
+  assert.match(accountSource, /commercial-offer-issued/);
+  assert.match(offersSource, /termsVersion: offer\.termsVersion/);
+  assert.doesNotMatch(offersSource, /issuedBy/);
+  assert.doesNotMatch(offersSource, /userId/);
 });

@@ -1,7 +1,12 @@
 import { Hono } from 'hono';
-import { AppError } from '@starter/domain';
+import { AppError, normalizePaidPackageModules } from '@starter/domain';
 import { createRepositories } from '@starter/db';
-import { listPackageIntakesSchema, parseInput, reviewPackageIntakeSchema } from '@starter/validation';
+import {
+  issueCommercialOfferSchema,
+  listPackageIntakesSchema,
+  parseInput,
+  reviewPackageIntakeSchema,
+} from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { requireWrite } from '../middleware/auth';
 
@@ -20,9 +25,11 @@ commercialIntakesAdmin.get('/', async (c) => {
 });
 
 commercialIntakesAdmin.get('/:id', async (c) => {
-  const intake = await createRepositories(c.env.DB).lmwaresPackageIntakes.getById(c.req.param('id'));
+  const repos = createRepositories(c.env.DB);
+  const intake = await repos.lmwaresPackageIntakes.getById(c.req.param('id'));
   if (!intake) throw AppError.notFound('Solicitud comercial');
-  return c.json({ intake });
+  const offers = await repos.lmwaresCommercialOffers.listForIntake(intake.id);
+  return c.json({ intake, offers });
 });
 
 commercialIntakesAdmin.patch('/:id/review', requireWrite, async (c) => {
@@ -43,6 +50,55 @@ commercialIntakesAdmin.patch('/:id/review', requireWrite, async (c) => {
     metadata: { status: intake.status, maintenanceStartPolicy: intake.maintenanceStartPolicy },
   });
   return c.json({ intake });
+});
+
+commercialIntakesAdmin.post('/:id/offers', requireWrite, async (c) => {
+  const input = parseInput(issueCommercialOfferSchema, await readJson(c));
+  const validUntilMs = Date.parse(input.validUntil);
+  const nowMs = Date.now();
+  if (validUntilMs < nowMs + 60 * 60 * 1000 || validUntilMs > nowMs + 90 * 24 * 60 * 60 * 1000) {
+    throw new AppError('validation_error', 'La oferta debe vencer entre una hora y 90 días.');
+  }
+  const modules = normalizePaidPackageModules(input.plan, input.modules);
+  const repos = createRepositories(c.env.DB);
+  const offer = await repos.lmwaresCommercialOffers.issue({
+    intakeId: c.req.param('id')!,
+    plan: input.plan,
+    modules,
+    marketing: input.marketing,
+    implementationAmountCents: input.implementationAmountCents,
+    monthlyAmountCents: input.monthlyAmountCents,
+    scopeSummary: input.scopeSummary,
+    implementationDescription: input.implementationDescription,
+    recurringDescription: input.recurringDescription,
+    termsVersion: 'lmwares-commercial-terms-2026-07-v1',
+    termsSnapshot: {
+      schema: 'lmwares.commercial-terms.v1',
+      maintenanceStartPolicy: 'on_go_live',
+      implementationPayment: 'La implementación se cobra después de aceptar esta oferta.',
+      recurringStart: 'La mensualidad comienza al publicar el proyecto, no durante la construcción.',
+      initialHosting: 'El proyecto inicia en un subdominio LMWares y puede migrar después a un dominio personalizado.',
+      cancellation: 'La cancelación de la mensualidad detiene el mantenimiento futuro; no revierte trabajo de implementación ya entregado.',
+      support: 'soporte@lmwares.com',
+    },
+    validUntil: input.validUntil,
+    issuedBy: c.get('admin').email,
+  });
+  await repos.audit.record({
+    actorType: 'admin',
+    actorId: c.get('admin').email,
+    action: 'lmwares.commercial_offer.issue',
+    entityType: 'lmwares_commercial_offer',
+    entityId: offer.id,
+    metadata: {
+      intakeId: offer.intakeId,
+      version: offer.version,
+      implementationAmountCents: offer.implementationAmountCents,
+      monthlyAmountCents: offer.monthlyAmountCents,
+      termsVersion: offer.termsVersion,
+    },
+  });
+  return c.json({ offer }, 201);
 });
 
 async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<unknown> {

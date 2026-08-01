@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { AppError, type FreeIntake, type Metadata } from '@starter/domain';
 import { createRepositories, type LmwaresNotification } from '@starter/db';
 import type { Bindings, Variables } from '../env';
+import { publicCommercialOffer } from '../lib/commercial-offer-public';
 import {
   assertTrustedPublicOrigin,
   requirePublicSession,
@@ -17,11 +18,13 @@ account.use('*', async (c, next) => {
 account.get('/', async (c) => {
   const user = c.get('publicUser');
   const repos = createRepositories(c.env.DB);
-  const [notifications, intakes, commercialIntakes] = await Promise.all([
+  const [notifications, intakes, commercialIntakes, currentOffers] = await Promise.all([
     repos.lmwaresNotifications.listForUser(user.id),
     repos.lmwaresFreeIntakes.listForUser(user.id),
     repos.lmwaresPackageIntakes.listForUser(user.id),
+    repos.lmwaresCommercialOffers.listCurrentForUser(user.id),
   ]);
+  const offersByIntake = new Map(currentOffers.map((offer) => [offer.intakeId, offer]));
 
   return c.json({
     user,
@@ -37,8 +40,12 @@ account.get('/', async (c) => {
       estimatedImplementationCents: intake.estimatedImplementationCents,
       estimatedMonthlyCents: intake.estimatedMonthlyCents,
       currency: intake.currency,
+      pricingVersion: intake.pricingVersion,
       maintenanceStartPolicy: intake.maintenanceStartPolicy,
       proposalId: intake.proposalId,
+      currentOffer: offersByIntake.has(intake.id)
+        ? publicCommercialOffer(offersByIntake.get(intake.id)!)
+        : null,
       submittedAt: intake.submittedAt,
       updatedAt: intake.updatedAt,
     })),
@@ -65,6 +72,34 @@ account.patch('/notifications/:id/read', async (c) => {
 });
 
 function toAccountNotification(notification: LmwaresNotification) {
+  if (notification.template === 'commercial-offer-issued') {
+    const plan = metadataString(notification.payload, 'plan') ?? 'starter';
+    const version = metadataNumber(notification.payload, 'version');
+    const implementation = metadataNumber(notification.payload, 'implementationAmountCents');
+    const monthly = metadataNumber(notification.payload, 'monthlyAmountCents');
+    return {
+      id: notification.id,
+      kind: notification.template,
+      title: 'Tu oferta LMWares está lista',
+      summary: `Oferta ${plan} v${version ?? 1} lista para revisar.`,
+      body: [
+        `Preparamos la versión ${version ?? 1} de tu oferta ${plan}.`,
+        implementation == null
+          ? 'Los importes finales están disponibles en Mis sitios.'
+          : `Implementación: ${formatMoney(implementation)}. Mensualidad al publicar: ${formatMoney(monthly ?? 0)}.`,
+        'Revísala en Mis sitios. No realizaremos ningún cobro hasta que la aceptes.',
+      ],
+      plan,
+      siteName: `Oferta ${plan}`,
+      referenceId: metadataString(notification.payload, 'offerId'),
+      actionUrl: null,
+      actionLabel: null,
+      deliveryStatus: notification.status,
+      readAt: notification.readAt,
+      sentAt: notification.sentAt,
+      createdAt: notification.createdAt,
+    };
+  }
   const siteName = metadataString(notification.payload, 'siteName') ?? 'Tu página';
   const publicUrl = safePublishedUrl(metadataString(notification.payload, 'publicUrl'));
   const plan = metadataString(notification.payload, 'plan') ?? 'free';
@@ -96,6 +131,19 @@ function toAccountNotification(notification: LmwaresNotification) {
     sentAt: notification.sentAt,
     createdAt: notification.createdAt,
   };
+}
+
+function metadataNumber(payload: Metadata, key: string): number | null {
+  const value = payload[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function formatMoney(cents: number): string {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
 }
 
 function toAccountSite(intake: FreeIntake) {

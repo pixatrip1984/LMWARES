@@ -20,13 +20,27 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 - Los importes se recalculan en el servidor; nunca se confía en un precio enviado por el navegador.
 - Los reintentos usan una clave idempotente para no duplicar solicitudes.
 - La revisión humana puede tomar la solicitud o rechazarla con notas.
+- Cada oferta final se conserva como una versión inmutable; emitir una revisión
+  reemplaza la versión visible sin borrar el historial anterior.
+- El cliente debe revisar alcance, importes y términos y aceptar explícitamente
+  la versión vigente desde su centro de cuenta.
+- La aceptación es idempotente, queda auditada una sola vez y todavía no crea
+  ningún cobro.
 - Los checkouts técnicos de sandbox permanecen cerrados en producción mediante una puerta independiente.
 - La reconciliación del ensayo existente sigue activa para observar sus cobros programados.
 
 ## Lo que falta después de esta fase
 
-- convertir una solicitud revisada en oferta versionada;
-- aceptación explícita de la oferta;
 - cobro real de implementación;
 - compuerta de publicación que exija una suscripción activa;
 - pruebas comerciales controladas de punta a punta.
+
+## Validación técnica de la oferta
+
+- La primera oferta queda `superseded` al emitir una segunda versión.
+- Sólo una versión puede permanecer `issued` por solicitud.
+- Cada versión genera una notificación independiente dentro de la cuenta.
+- Aceptar dos veces devuelve la misma aceptación y crea un solo evento de
+  auditoría.
+- La oferta no expone identificadores internos del operador y sólo puede ser
+  consultada o aceptada por el usuario propietario de la solicitud.

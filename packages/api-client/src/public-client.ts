@@ -151,7 +151,37 @@ export interface PublicPackageIntake {
   pricingVersion: string;
   maintenanceStartPolicy: 'on_go_live';
   proposalId: string | null;
+  currentOffer: PublicCommercialOffer | null;
   submittedAt: string;
+  updatedAt: string;
+}
+
+export interface PublicCommercialOffer {
+  id: string;
+  intakeId: string;
+  version: number;
+  status: 'issued' | 'accepted' | 'superseded' | 'declined' | 'expired';
+  plan: 'starter' | 'pro';
+  modules: string[];
+  marketing: boolean;
+  implementationAmountCents: number;
+  monthlyAmountCents: number;
+  currency: 'MXN';
+  scopeSummary: string;
+  implementationDescription: string;
+  recurringDescription: string;
+  maintenanceStartPolicy: 'on_go_live';
+  termsVersion: string;
+  terms: {
+    implementationPayment: string;
+    recurringStart: string;
+    initialHosting: string;
+    cancellation: string;
+    support: string;
+  };
+  validUntil: string;
+  issuedAt: string;
+  acceptedAt: string | null;
   updatedAt: string;
 }
 
@@ -296,6 +326,13 @@ export function createPublicClient(baseUrl: string) {
 
     listCommercialPackageIntakes() {
       return http.get<{ intakes: PublicPackageIntake[] }>('/commercial-intakes');
+    },
+
+    acceptCommercialOffer(intakeId: string, offerId: string, termsVersion: string) {
+      return http.post<{ offer: PublicCommercialOffer }>(
+        `/commercial-intakes/${encodeURIComponent(intakeId)}/offers/${encodeURIComponent(offerId)}/accept`,
+        { accepted: true, termsVersion },
+      );
     },
 
     getPackageProposal(proposalId: string) {

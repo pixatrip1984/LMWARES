@@ -6,9 +6,14 @@ import {
   type PackageIntake,
 } from '@starter/domain';
 import { createRepositories } from '@starter/db';
-import { createPackageIntakeSchema, parseInput } from '@starter/validation';
+import {
+  acceptCommercialOfferSchema,
+  createPackageIntakeSchema,
+  parseInput,
+} from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
+import { publicCommercialOffer } from '../lib/commercial-offer-public';
 
 export const commercialIntakes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -79,7 +84,45 @@ commercialIntakes.get('/:id', async (c) => {
     throw AppError.notFound('Solicitud comercial');
   }
   c.header('Cache-Control', 'no-store');
-  return c.json({ intake: publicIntake(intake) });
+  const offers = await createRepositories(c.env.DB).lmwaresCommercialOffers.listForIntake(intake.id);
+  return c.json({
+    intake: publicIntake(intake),
+    offers: offers.map(publicCommercialOffer),
+  });
+});
+
+commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
+  const input = parseInput(acceptCommercialOfferSchema, await readJson(c));
+  const repos = createRepositories(c.env.DB);
+  const intake = await repos.lmwaresPackageIntakes.getById(c.req.param('id'));
+  if (!intake || intake.userId !== session.user.id) throw AppError.notFound('Solicitud comercial');
+  const result = await repos.lmwaresCommercialOffers.accept({
+    id: c.req.param('offerId')!,
+    intakeId: intake.id,
+    userId: session.user.id,
+    termsVersion: input.termsVersion,
+  });
+  if (result.changed) {
+    await repos.audit.record({
+      actorType: 'public',
+      actorId: session.user.id,
+      action: 'lmwares.commercial_offer.accept',
+      entityType: 'lmwares_commercial_offer',
+      entityId: result.offer.id,
+      metadata: {
+        intakeId: intake.id,
+        version: result.offer.version,
+        termsVersion: result.offer.termsVersion,
+        implementationAmountCents: result.offer.implementationAmountCents,
+        monthlyAmountCents: result.offer.monthlyAmountCents,
+      },
+      ip: c.req.header('CF-Connecting-IP') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+    });
+  }
+  return c.json({ offer: publicCommercialOffer(result.offer) });
 });
 
 function publicIntake(intake: PackageIntake) {
@@ -95,6 +138,7 @@ function publicIntake(intake: PackageIntake) {
     pricingVersion: intake.pricingVersion,
     maintenanceStartPolicy: intake.maintenanceStartPolicy,
     proposalId: intake.proposalId,
+    currentOffer: null,
     submittedAt: intake.submittedAt,
     updatedAt: intake.updatedAt,
   };

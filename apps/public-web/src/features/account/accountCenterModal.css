@@ -5,6 +5,11 @@
   inset: 0;
   justify-content: center;
   padding: 24px;
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
   position: fixed;
   z-index: 1000;
 }
@@ -147,6 +152,7 @@
 
 .lmw-account-content {
   min-height: 0;
+  overscroll-behavior: contain;
   overflow: auto;
 }
 
@@ -442,6 +448,87 @@
 .lmw-account-intakes article footer {
   border-top: 1px solid rgba(100, 148, 215, 0.14);
   padding-top: 13px;
+}
+
+.lmw-account-offer {
+  background: rgba(10, 36, 72, 0.72);
+  border: 1px solid rgba(73, 145, 244, 0.42);
+  margin: 18px -8px 4px;
+  padding: 16px;
+}
+
+.lmw-account-offer > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.lmw-account-offer > header b,
+.lmw-account-offer__accepted {
+  color: var(--account-green);
+  font-size: 9px;
+}
+
+.lmw-account-offer h5 {
+  font-size: 15px;
+  line-height: 1.45;
+  margin: 14px 0;
+}
+
+.lmw-account-offer > p,
+.lmw-account-offer li,
+.lmw-account-offer > small {
+  color: #91a9c8;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.lmw-account-offer ul {
+  margin: 12px 0;
+  padding-left: 17px;
+}
+
+.lmw-account-offer__accept {
+  border-top: 1px solid rgba(100, 148, 215, 0.2);
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.lmw-account-offer__accept label {
+  align-items: flex-start;
+  color: #b8cae2;
+  display: flex;
+  font-size: 9px;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.lmw-account-offer__accept button {
+  background: var(--account-blue);
+  border: 0;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 11px 14px;
+  text-transform: uppercase;
+}
+
+.lmw-account-offer__accept button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lmw-account-offer__accepted {
+  display: block;
+  margin-top: 15px;
+}
+
+.lmw-account-offer-error {
+  color: #ff8c8c;
+  font-size: 10px;
+  margin: 12px 0 0;
 }
 
 .lmw-account-sites article {
@@ -764,9 +851,17 @@
 }
 
 @media (max-width: 820px) {
-  .lmw-account-backdrop { padding: 0; }
+  .lmw-account-backdrop {
+    padding: 0;
+    padding:
+      env(safe-area-inset-top)
+      env(safe-area-inset-right)
+      env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
   .lmw-account-dialog {
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
   }
   .lmw-account-notifications { grid-template-columns: 1fr; }
@@ -793,6 +888,18 @@
   .lmw-account-tabs button { font-size: 8px; padding: 0 9px; }
   .lmw-account-reader h3 { font-size: 30px; }
   .lmw-account-reader > footer { grid-template-columns: 1fr; }
+  .lmw-account-reader__url > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .lmw-account-reader__url button,
+  .lmw-account-reader__url a {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-height: 44px;
+    text-align: center;
+  }
   .lmw-account-sites { padding: 20px 14px; }
   .lmw-account-sites > header { align-items: flex-start; flex-direction: column; }
   .lmw-account-sites article { padding: 16px; }
@@ -804,6 +911,16 @@
   }
   .lmw-account-sites__details dl { grid-template-columns: 1fr; }
   .lmw-account-intakes article dl { grid-template-columns: 1fr; }
+  .lmw-account-offer {
+    margin-inline: 0;
+    padding: 14px;
+  }
+  .lmw-account-offer > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .lmw-account-offer__accept button { min-height: 44px; }
   .lmw-account-sites article footer { flex-wrap: wrap; }
   .lmw-account-sites article footer button,
   .lmw-account-sites article footer a {
@@ -827,4 +944,21 @@
     min-height: 44px;
   }
   .lmw-account-footer { padding: 0 14px; }
+}
+
+@media (max-width: 360px) {
+  .lmw-account-header { gap: 8px; }
+  .lmw-account-identity { gap: 9px; }
+  .lmw-account-identity > span { height: 36px; width: 36px; }
+  .lmw-account-identity p { max-width: 145px; }
+  .lmw-account-tabs button { gap: 5px; padding-inline: 7px; }
+  .lmw-account-reader { padding: 20px 14px; }
+  .lmw-account-reader h3 { font-size: 27px; }
+  .lmw-account-sites > header h3 { font-size: 34px; }
+  .lmw-account-site-qr { max-width: 170px; }
+  .lmw-account-footer > span { font-size: 0; }
+  .lmw-account-footer > span::after {
+    content: 'Cuenta sincronizada';
+    font-size: 8px;
+  }
 }

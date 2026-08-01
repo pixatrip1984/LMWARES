@@ -307,6 +307,15 @@ export function PackageBuilderPage() {
     );
   }, []);
 
+  const acceptCommercialOffer = useCallback(async (
+    intakeId: string,
+    offerId: string,
+    termsVersion: string,
+  ) => {
+    await api.acceptCommercialOffer(intakeId, offerId, termsVersion);
+    await loadAccount();
+  }, [loadAccount]);
+
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     const previousTitle = document.title;
@@ -1537,6 +1546,7 @@ export function PackageBuilderPage() {
         initialTab={accountTab}
         loading={accountLoading}
         onClose={() => setAccountOpen(false)}
+        onAcceptOffer={acceptCommercialOffer}
         onMarkAllRead={markAllAccountNotificationsRead}
         onMarkRead={markAccountNotificationRead}
         onReload={loadAccount}
