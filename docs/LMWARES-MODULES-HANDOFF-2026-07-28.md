@@ -216,6 +216,32 @@ build del administrador, `git diff --check` y
 último cupo. Continúan pendientes únicamente los gestos con archivos reales de
 Galerías y Docs descritos arriba.
 
+### Revalidación posterior al checkout comercial: 2026-08-01
+
+Después de desplegar la orden de pago de implementación (`12689ae`) se volvió a
+ejecutar `scripts/validate-starter-modules.ps1 -Mode local -ProjectId astraeus`.
+Los cinco validadores pasaron: Blog, Galerías, Docs, Formularios y Eventos. La
+ejecución volvió a cubrir snapshots públicos inmutables, republicación, limpieza
+R2, respuestas congeladas de formularios y la carrera concurrente por el último
+cupo de Eventos.
+
+La lectura anónima de las APIs productivas de `astraeus` confirmó:
+
+| Módulo | HTTP | Evidencia pública |
+| --- | ---: | --- |
+| Blog | 200 | artículo `validacion-remota-starter-20260801` |
+| Galerías | 200 | contrato operativo, `albums: []` |
+| Docs | 200 | contrato operativo, categorías y documentos vacíos |
+| Formularios | 200 | revisión publicada 2 |
+| Eventos | 200 | evento `evento-remoto-starter-20260801` |
+
+Chrome abrió Module Studio en producción con la sesión Cloudflare Access del
+operador, pero el puente de automatización rechazó `fileChooser.setFiles` con
+`Not allowed`. No se insertaron filas ni objetos directamente para evitar un
+falso positivo. Permanecen como única evidencia faltante los dos gestos humanos:
+cargar/publicar una imagen en Galerías y cargar/publicar/descargar un documento
+en Docs.
+
 ## 1. Resumen ejecutivo
 
 Se implementaron cinco verticales iniciales de módulos LMWares:
