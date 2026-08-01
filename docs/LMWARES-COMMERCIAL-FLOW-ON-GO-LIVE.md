@@ -62,6 +62,17 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 
 ## Compuerta productiva del pago de implementación
 
+Antes de habilitar una compuerta se ejecuta el preflight de sólo lectura. No
+lee ni imprime valores secretos:
+
+```powershell
+pwsh -NoProfile -File scripts/lmwares-commercial-preflight.ps1 -RequireReady All
+```
+
+El comando termina con código `2` si faltan credenciales, migraciones, salud de
+la API o integridad referencial. `-RequireReady Report` permite revisar el
+estado general aunque todavía no se hayan cargado los secretos.
+
 - La implementación está desplegable con
   `MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "0"`; así no puede cobrar por
   accidente.
