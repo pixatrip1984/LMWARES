@@ -20,6 +20,7 @@ import { LmwaresPackageIntakesRepository } from './repositories/lmwares-package-
 import { LmwaresCommercialOffersRepository } from './repositories/lmwares-commercial-offers';
 import { LmwaresBillingOrdersRepository } from './repositories/lmwares-billing-orders';
 import { LmwaresStarterWorkOrdersRepository } from './repositories/lmwares-starter-work-orders';
+import { LmwaresMaintenanceSubscriptionsRepository } from './repositories/lmwares-maintenance-subscriptions';
 import { LmwaresSubscriptionsRepository } from './repositories/lmwares-subscriptions';
 import { SiteBlogRepository } from './repositories/site-blog';
 import { SiteGalleryRepository } from './repositories/site-gallery';
@@ -43,6 +44,7 @@ export * from './repositories/lmwares-package-intakes';
 export * from './repositories/lmwares-commercial-offers';
 export * from './repositories/lmwares-billing-orders';
 export * from './repositories/lmwares-starter-work-orders';
+export * from './repositories/lmwares-maintenance-subscriptions';
 export * from './repositories/lmwares-subscriptions';
 export * from './repositories/site-blog';
 export * from './repositories/site-gallery';
@@ -70,6 +72,7 @@ export interface Repositories {
   lmwaresCommercialOffers: LmwaresCommercialOffersRepository;
   lmwaresBillingOrders: LmwaresBillingOrdersRepository;
   lmwaresStarterWorkOrders: LmwaresStarterWorkOrdersRepository;
+  lmwaresMaintenanceSubscriptions: LmwaresMaintenanceSubscriptionsRepository;
   lmwaresSubscriptions: LmwaresSubscriptionsRepository;
   siteBlog: SiteBlogRepository;
   siteGalleries: SiteGalleryRepository;
@@ -102,6 +105,7 @@ export function createRepositories(db: D1Database): Repositories {
     lmwaresCommercialOffers: new LmwaresCommercialOffersRepository(db),
     lmwaresBillingOrders: new LmwaresBillingOrdersRepository(db),
     lmwaresStarterWorkOrders: new LmwaresStarterWorkOrdersRepository(db),
+    lmwaresMaintenanceSubscriptions: new LmwaresMaintenanceSubscriptionsRepository(db),
     lmwaresSubscriptions: new LmwaresSubscriptionsRepository(db),
     siteBlog: new SiteBlogRepository(db),
     siteGalleries: new SiteGalleryRepository(db),

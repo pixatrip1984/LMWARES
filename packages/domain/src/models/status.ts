@@ -24,6 +24,7 @@ export const ENTITY_TYPES = [
   'lmwares_commercial_offer',
   'lmwares_billing_order',
   'lmwares_starter_work_order',
+  'lmwares_maintenance_subscription',
   'lmwares_package_proposal',
   'lmwares_subscription',
 ] as const;

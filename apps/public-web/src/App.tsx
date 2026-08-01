@@ -7,6 +7,7 @@ import { PackageBuilderPage } from './pages/PackageBuilderPage';
 import { PaymentPage } from './pages/PaymentPage';
 import { ImplementationPaymentPage } from './pages/ImplementationPaymentPage';
 import { StarterSitePreviewPage } from './pages/StarterSitePreviewPage';
+import { MaintenanceSubscriptionPage } from './pages/MaintenanceSubscriptionPage';
 
 export function App() {
   return (
@@ -19,6 +20,7 @@ export function App() {
         <Route path="/configurar" element={<PackageBuilderPage />} />
         <Route path="/pago/:proposalId" element={<PaymentPage />} />
         <Route path="/pago/implementacion/:orderId" element={<ImplementationPaymentPage />} />
+        <Route path="/suscripcion/:workOrderId" element={<MaintenanceSubscriptionPage />} />
         <Route path="/contacto" element={<ContactPage />} />
         <Route path="*" element={<ContractPage />} />
       </Route>

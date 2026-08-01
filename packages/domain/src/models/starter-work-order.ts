@@ -22,4 +22,6 @@ export interface StarterWorkOrder extends Timestamps {
   workSnapshot: Metadata;
   assignedBy: string | null;
   assignedAt: IsoDateTime | null;
+  publishedUrl: string | null;
+  publishedAt: IsoDateTime | null;
 }

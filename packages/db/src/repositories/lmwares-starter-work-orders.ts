@@ -18,6 +18,8 @@ interface StarterWorkOrderRow {
   work_snapshot: string;
   assigned_by: string | null;
   assigned_at: string | null;
+  published_url: string | null;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,6 +89,14 @@ export class LmwaresStarterWorkOrdersRepository {
     return result.results.map(mapWorkOrder);
   }
 
+  async listForUser(userId: string): Promise<StarterWorkOrder[]> {
+    const result = await this.db
+      .prepare(`SELECT * FROM lmw_starter_work_orders WHERE user_id = ? ORDER BY created_at DESC`)
+      .bind(userId)
+      .all<StarterWorkOrderRow>();
+    return result.results.map(mapWorkOrder);
+  }
+
   async assignProject(input: {
     id: string;
     projectId: string;
@@ -141,6 +151,87 @@ export class LmwaresStarterWorkOrdersRepository {
     }
     return (await this.getById(input.id))!;
   }
+
+  async publish(input: { id: string; publicUrl: string }): Promise<StarterWorkOrder> {
+    const current = await this.getById(input.id);
+    if (!current) throw AppError.notFound('Orden de trabajo');
+    if (current.status === 'live') {
+      if (current.publishedUrl !== input.publicUrl) {
+        throw new AppError('conflict', 'La orden ya fue publicada con otra URL.');
+      }
+      await this.ensurePublishedNotification(current);
+      return current;
+    }
+    if (current.status !== 'ready_to_publish' || !current.projectId) {
+      throw new AppError('conflict', 'El proyecto todavía no está listo para publicar.');
+    }
+    const subscription = await this.db
+      .prepare(
+        `SELECT id FROM lmw_maintenance_subscriptions
+         WHERE work_order_id = ? AND status = 'active' LIMIT 1`,
+      )
+      .bind(current.id)
+      .first<{ id: string }>();
+    if (!subscription) {
+      throw new AppError('conflict', 'La publicación requiere una mensualidad activa.');
+    }
+    const now = nowIso();
+    const result = await this.db
+      .prepare(
+        `UPDATE lmw_starter_work_orders
+         SET status = 'live', published_url = ?, published_at = ?, updated_at = ?
+         WHERE id = ? AND status = 'ready_to_publish' AND project_id IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM lmw_maintenance_subscriptions s
+             WHERE s.work_order_id = lmw_starter_work_orders.id AND s.status = 'active'
+           )`,
+      )
+      .bind(input.publicUrl, now, now, current.id)
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      throw new AppError('conflict', 'La compuerta de publicación cambió mientras se procesaba.');
+    }
+    const published = (await this.getById(current.id))!;
+    await this.ensurePublishedNotification(published);
+    return published;
+  }
+
+  private async ensurePublishedNotification(workOrder: StarterWorkOrder): Promise<void> {
+    if (!workOrder.publishedUrl || !workOrder.publishedAt) return;
+    const now = nowIso();
+    await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO lmw_notifications
+          (id, user_id, intake_id, channel, template, to_address, dedupe_key,
+           status, attempt, max_attempts, payload, sent_at, created_at, updated_at)
+         SELECT ?, w.user_id, NULL, 'in_app', 'starter-site-published', u.email, ?,
+                'sent', 0, 1,
+                json_object(
+                  'kind', 'starter-site-published',
+                  'workOrderId', w.id,
+                  'intakeId', w.intake_id,
+                  'projectId', w.project_id,
+                  'siteName', COALESCE(p.name, 'Tu sitio Starter'),
+                  'plan', json_extract(w.work_snapshot, '$.plan'),
+                  'publicUrl', w.published_url,
+                  'publishedAt', w.published_at
+                ),
+                ?, ?, ?
+         FROM lmw_starter_work_orders w
+         JOIN lmw_users u ON u.id = w.user_id
+         LEFT JOIN lmwares_projects p ON p.id = w.project_id
+         WHERE w.id = ? AND w.status = 'live'`,
+      )
+      .bind(
+        newId(),
+        `starter-site-published:${workOrder.id}`,
+        workOrder.publishedAt,
+        now,
+        now,
+        workOrder.id,
+      )
+      .run();
+  }
 }
 
 function allowedTransition(from: StarterWorkOrderStatus, to: StarterWorkOrderStatus): boolean {
@@ -163,6 +254,8 @@ function mapWorkOrder(row: StarterWorkOrderRow): StarterWorkOrder {
     workSnapshot: parseJson<Metadata>(row.work_snapshot, {}),
     assignedBy: row.assigned_by,
     assignedAt: row.assigned_at,
+    publishedUrl: row.published_url,
+    publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

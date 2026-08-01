@@ -2,6 +2,7 @@ import type {
   AuditEvent,
   CommercialOffer,
   BillingOrder,
+  MaintenanceSubscription,
   Paginated,
   Publication,
   PublicationImage,
@@ -117,6 +118,7 @@ export function createAdminClient(baseUrl: string) {
         offers: CommercialOffer[];
         billingOrder: BillingOrder | null;
         workOrder: StarterWorkOrder | null;
+        maintenanceSubscription: MaintenanceSubscription | null;
       }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}`,
       );
@@ -134,6 +136,12 @@ export function createAdminClient(baseUrl: string) {
       return http.patch<{ workOrder: StarterWorkOrder }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}/work-order/status`,
         { status },
+      );
+    },
+    publishStarterWorkOrder(id: string, publicUrl: string) {
+      return http.post<{ workOrder: StarterWorkOrder }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/work-order/go-live`,
+        { publicUrl },
       );
     },
     issueCommercialOffer(id: string, input: IssueCommercialOfferInput) {

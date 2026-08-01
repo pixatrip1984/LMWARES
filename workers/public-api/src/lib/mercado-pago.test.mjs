@@ -24,7 +24,7 @@ test('subscription creation embeds the canonical webhook URL', () => {
   assert.match(preapprovalSource, /publicApiUrl: string/);
   assert.match(
     preapprovalSource,
-    /publicHttpsUrl\(\s*input\.publicApiUrl,\s*'\/payments\/webhooks\/mercado-pago'/,
+    /input\.webhookScope === 'maintenance'[\s\S]*?'\/payments\/webhooks\/mercado-pago\?scope=maintenance'[\s\S]*?'\/payments\/webhooks\/mercado-pago'/,
   );
   assert.match(preapprovalSource, /notification_url: notificationUrl/);
   assert.match(routeSource, /publicApiUrl: c\.env\.PUBLIC_API_URL/);
@@ -40,14 +40,14 @@ test('subscription simulator probes require a valid signature and never become b
   const handlerSource = paymentsRouteSource.slice(handlerStart, handlerEnd);
 
   assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
-  assert.match(handlerSource, /MERCADO_PAGO_TEST_MODE === '1'/);
+  assert.match(handlerSource, /testMode &&/);
   assert.match(
     handlerSource,
     /const probeDataId = await readMercadoPagoSubscriptionProbeDataId\(c\)/,
   );
   assert.match(
     handlerSource,
-    /const probeSignature = await validateSignedWebhook\(c, webhookSecrets, probeDataId\)/,
+    /const probeSignature = await validateSignedWebhook\(c, webhookSecrets, probeDataId, testMode\)/,
   );
   assert.match(handlerSource, /if \(probeSignature\.validated\)/);
   assert.match(handlerSource, /return c\.json\(\{ received: true, testProbe: true \}\)/);

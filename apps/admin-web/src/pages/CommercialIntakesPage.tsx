@@ -3,6 +3,7 @@ import {
   AppError,
   type BillingOrder,
   type LmwaresProject,
+  type MaintenanceSubscription,
   PACKAGE_MODULE_IDS,
   PACKAGE_INTAKE_STATUSES,
   type CommercialOffer,
@@ -29,8 +30,10 @@ export function CommercialIntakesPage() {
   const [offers, setOffers] = useState<CommercialOffer[]>([]);
   const [billingOrder, setBillingOrder] = useState<BillingOrder | null>(null);
   const [workOrder, setWorkOrder] = useState<StarterWorkOrder | null>(null);
+  const [maintenanceSubscription, setMaintenanceSubscription] = useState<MaintenanceSubscription | null>(null);
   const [projects, setProjects] = useState<LmwaresProject[]>([]);
   const [projectId, setProjectId] = useState('');
+  const [publicUrl, setPublicUrl] = useState('');
   const [offerForm, setOfferForm] = useState({
     implementationPesos: '',
     monthlyPesos: '',
@@ -73,6 +76,7 @@ export function CommercialIntakesPage() {
       setOffers([]);
       setBillingOrder(null);
       setWorkOrder(null);
+      setMaintenanceSubscription(null);
       return;
     }
     setOfferForm({
@@ -92,13 +96,16 @@ export function CommercialIntakesPage() {
         setOffers(result.offers);
         setBillingOrder(result.billingOrder);
         setWorkOrder(result.workOrder);
+        setMaintenanceSubscription(result.maintenanceSubscription);
         setProjects(registry?.projects ?? []);
         setProjectId(result.workOrder?.projectId ?? '');
+        setPublicUrl(result.workOrder?.publishedUrl ?? '');
       })
       .catch(() => {
         setOffers([]);
         setBillingOrder(null);
         setWorkOrder(null);
+        setMaintenanceSubscription(null);
       });
   }, [selected?.id, selected?.reviewNotes, selected?.status]);
 
@@ -146,6 +153,20 @@ export function CommercialIntakesPage() {
       setWorkOrder(result.workOrder);
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'No se pudo avanzar la orden de trabajo.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function publishWorkOrder() {
+    if (!selected || !publicUrl) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await api.publishStarterWorkOrder(selected.id, publicUrl);
+      setWorkOrder(result.workOrder);
+    } catch (err) {
+      setError(err instanceof AppError ? err.message : 'No se pudo abrir la compuerta de publicación.');
     } finally {
       setSaving(false);
     }
@@ -349,6 +370,8 @@ export function CommercialIntakesPage() {
                         <Info label="Trabajo" value={workOrder ? workOrderStatusLabel(workOrder.status) : 'Preparando orden'} />
                         <Info label="Proyecto Oracle" value={workOrder?.projectId ?? 'Sin enlazar'} />
                         <Info label="Asignado por" value={workOrder?.assignedBy ?? 'Pendiente'} />
+                        <Info label="Mensualidad" value={maintenanceSubscription ? subscriptionStatusLabel(maintenanceSubscription.status) : 'Sin autorizar'} />
+                        <Info label="URL pública" value={workOrder?.publishedUrl ?? 'Sin publicar'} />
                       </dl>
                       {workOrder && !workOrder.projectId ? (
                         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -378,8 +401,24 @@ export function CommercialIntakesPage() {
                           {workOrder.status === 'ready_to_publish' ? (
                             <>
                               <Button variant="secondary" onClick={() => changeWorkStatus('client_review')} disabled={saving}>Volver a revisión</Button>
-                              <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">Publicación bloqueada hasta autorizar la suscripción.</span>
+                              {maintenanceSubscription?.status === 'active' ? (
+                                <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                  <input
+                                    aria-label="URL pública inicial"
+                                    className="rounded-lg border border-surface-border px-3 py-2 text-sm"
+                                    placeholder="https://cliente.lmwares.com"
+                                    value={publicUrl}
+                                    onChange={(event) => setPublicUrl(event.target.value)}
+                                  />
+                                  <Button onClick={publishWorkOrder} disabled={saving || !publicUrl}>Confirmar publicación</Button>
+                                </div>
+                              ) : (
+                                <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">Publicación bloqueada hasta autorizar la suscripción.</span>
+                              )}
                             </>
+                          ) : null}
+                          {workOrder.status === 'live' && workOrder.publishedUrl ? (
+                            <a className="text-sm font-semibold text-blue-700" href={workOrder.publishedUrl} rel="noreferrer" target="_blank">Abrir sitio publicado ↗</a>
                           ) : null}
                         </div>
                       ) : null}
@@ -444,6 +483,20 @@ function workOrderStatusLabel(status: StarterWorkOrder['status']): string {
     ready_to_publish: 'Lista para suscripción',
     live: 'Publicada',
     canceled: 'Cancelada',
+  };
+  return labels[status];
+}
+
+function subscriptionStatusLabel(status: MaintenanceSubscription['status']): string {
+  const labels: Record<MaintenanceSubscription['status'], string> = {
+    creating: 'Preparando',
+    creation_failed: 'Falló la creación',
+    pending_authorization: 'Pendiente de autorización',
+    active: 'Activa',
+    payment_attention: 'Requiere atención',
+    paused: 'Pausada',
+    canceled: 'Cancelada',
+    disputed: 'En disputa',
   };
   return labels[status];
 }

@@ -153,7 +153,24 @@ export interface PublicPackageIntake {
   proposalId: string | null;
   currentOffer: PublicCommercialOffer | null;
   implementationPayment: PublicBillingOrder | null;
+  workOrder: PublicStarterWorkOrder | null;
+  maintenanceSubscription: PublicMaintenanceSubscription | null;
   submittedAt: string;
+  updatedAt: string;
+}
+
+export interface PublicStarterWorkOrder {
+  id: string;
+  status:
+    | 'awaiting_provisioning'
+    | 'in_build'
+    | 'client_review'
+    | 'ready_to_publish'
+    | 'live'
+    | 'canceled';
+  publishedUrl: string | null;
+  publishedAt: string | null;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -227,6 +244,26 @@ export interface PublicPackageSubscription {
   amountCents: number;
   currency: 'MXN';
   frequency: number;
+  frequencyType: 'months';
+  pricingVersion: string;
+  authorizationUrl: string | null;
+  providerStatus: string | null;
+  nextPaymentDate: string | null;
+  lastAuthorizedPaymentId: string | null;
+  lastAuthorizedPaymentStatus: string | null;
+  authorizedAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicMaintenanceSubscription {
+  id: string;
+  workOrderId: string;
+  status: PublicPackageSubscription['status'];
+  amountCents: number;
+  currency: 'MXN';
+  frequency: 1;
   frequencyType: 'months';
   pricingVersion: string;
   authorizationUrl: string | null;
@@ -419,6 +456,30 @@ export function createPublicClient(baseUrl: string) {
     cancelPackageSubscription(subscriptionId: string) {
       return http.post<{ subscription: PublicPackageSubscription }>(
         `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
+      );
+    },
+
+    getMaintenanceSubscription(workOrderId: string) {
+      return http.get<{ subscription: PublicMaintenanceSubscription | null }>(
+        `/maintenance-subscriptions/work-orders/${encodeURIComponent(workOrderId)}`,
+      );
+    },
+
+    createMaintenanceSubscription(workOrderId: string) {
+      return http.post<{ subscription: PublicMaintenanceSubscription }>(
+        `/maintenance-subscriptions/work-orders/${encodeURIComponent(workOrderId)}`,
+      );
+    },
+
+    reconcileMaintenanceSubscription(subscriptionId: string) {
+      return http.post<{ found: boolean; subscription: PublicMaintenanceSubscription }>(
+        `/maintenance-subscriptions/${encodeURIComponent(subscriptionId)}/reconcile`,
+      );
+    },
+
+    cancelMaintenanceSubscription(subscriptionId: string) {
+      return http.post<{ subscription: PublicMaintenanceSubscription }>(
+        `/maintenance-subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
       );
     },
   };

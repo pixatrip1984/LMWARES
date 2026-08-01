@@ -65,6 +65,8 @@ MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED = "0"
 # credenciales productivas separadas y validar un cobro real controlado.
 MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "0"
 MERCADO_PAGO_COMMERCIAL_TEST_MODE = "0"
+MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED = "0"
+MERCADO_PAGO_MAINTENANCE_TEST_MODE = "0"
 
 [env.production.triggers]
 crons = ["17 * * * *"]

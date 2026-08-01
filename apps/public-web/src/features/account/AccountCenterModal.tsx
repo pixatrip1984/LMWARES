@@ -428,6 +428,18 @@ function SitesPanel({
                               : 'Continuar al pago'}
                           </a>
                         ) : null}
+                        {intake.workOrder?.status === 'ready_to_publish' ? (
+                          <a href={`/suscripcion/${encodeURIComponent(intake.workOrder.id)}`}>
+                            {intake.maintenanceSubscription?.status === 'active'
+                              ? 'Ver mensualidad autorizada'
+                              : 'Autorizar mensualidad para publicar'}
+                          </a>
+                        ) : null}
+                        {intake.workOrder?.status === 'live' && intake.workOrder.publishedUrl ? (
+                          <a href={intake.workOrder.publishedUrl} rel="noreferrer" target="_blank">
+                            Abrir sitio publicado ↗
+                          </a>
+                        ) : null}
                       </div>
                     )}
                   </section>

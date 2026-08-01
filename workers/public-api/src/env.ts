@@ -54,6 +54,18 @@ export interface Bindings {
   MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED?: string;
   /** "1" usa sandbox_init_point para la validación comercial controlada. */
   MERCADO_PAGO_COMMERCIAL_TEST_MODE?: string;
+  /** Access Token productivo exclusivo de mensualidades comerciales. */
+  MERCADO_PAGO_MAINTENANCE_ACCESS_TOKEN?: string;
+  /** Firma productiva del Webhook de mensualidades comerciales. */
+  MERCADO_PAGO_MAINTENANCE_WEBHOOK_SECRET?: string;
+  /** Firma de prueba del Webhook mensual, sólo para validación privada. */
+  MERCADO_PAGO_MAINTENANCE_WEBHOOK_TEST_SECRET?: string;
+  /** "1" abre la autorización de mensualidades comerciales. */
+  MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED?: string;
+  /** "1" permite identidades de prueba en el ensayo mensual controlado. */
+  MERCADO_PAGO_MAINTENANCE_TEST_MODE?: string;
+  /** Correo Buyer TEST emparejado con la aplicación mensual de prueba. */
+  MERCADO_PAGO_MAINTENANCE_TEST_PAYER_EMAIL?: string;
   /** Binding tipado generado por `wrangler types`. */
   EMAIL: Env['EMAIL'];
   /** Despierta al runner Free asíncrono después de enviar una solicitud. */

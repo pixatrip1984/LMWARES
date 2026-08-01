@@ -44,7 +44,15 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
   administrador puede enlazarla a un proyecto existente de Oracle y moverla
   por construcción, revisión del cliente y lista para publicar.
 - `ready_to_publish` no es `live`: el panel no expone ninguna transición de
-  publicación hasta que la compuerta de suscripción esté implementada.
+  publicación hasta que Mercado Pago confirme una mensualidad `active`.
+- La mensualidad comercial vive en `lmw_maintenance_subscriptions`; no se
+  mezcla con `lmw_subscriptions`, que conserva únicamente el ensayo técnico.
+- El importe mensual se copia de la oferta aceptada y sólo puede reservarse
+  para una implementación pagada, sin revisión de pago y en
+  `ready_to_publish`.
+- La primera publicación exige una URL HTTPS bajo `*.lmwares.com`. El panel
+  vuelve idempotente la confirmación, registra auditoría y crea el aviso de
+  publicación para la cuenta del cliente.
 - Los checkouts técnicos de sandbox permanecen cerrados en producción mediante una puerta independiente.
 - La reconciliación del ensayo existente sigue activa para observar sus cobros programados.
 
@@ -67,8 +75,23 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 ## Lo que falta después de esta fase
 
 - cargar las credenciales comerciales y validar el cobro real controlado;
-- compuerta de publicación que exija una suscripción activa;
 - pruebas comerciales controladas de punta a punta.
+
+## Compuerta productiva de la mensualidad
+
+- La autorización permanece desplegable y cerrada con
+  `MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED = "0"`.
+- Usa una integración y canal separados del sandbox técnico:
+  - `MERCADO_PAGO_MAINTENANCE_ACCESS_TOKEN`
+  - `MERCADO_PAGO_MAINTENANCE_WEBHOOK_SECRET`
+- El Webhook canónico de Planes y suscripciones es
+  `https://api.lmwares.com/payments/webhooks/mercado-pago?scope=maintenance`.
+- Webhook y cron consultan nuevamente Mercado Pago, exigen coincidencia exacta
+  de referencia, importe, moneda y frecuencia, y guardan cada cargo por su ID
+  autorizado único.
+- Sólo una mensualidad activa permite cambiar la orden de
+  `ready_to_publish` a `live`; ninguna respuesta del navegador puede saltarse
+  esa verificación en D1.
 
 ## Validación técnica de la oferta
 

@@ -217,11 +217,19 @@ export async function createMercadoPagoPreapproval(input: {
   publicApiUrl: string;
   publicWebUrl: string;
   proposalId: string;
+  reason?: string;
+  returnPath?: string;
+  webhookScope?: 'maintenance';
 }): Promise<MercadoPagoPreapproval> {
-  const notificationUrl = publicHttpsUrl(input.publicApiUrl, '/payments/webhooks/mercado-pago');
+  const notificationUrl = publicHttpsUrl(
+    input.publicApiUrl,
+    input.webhookScope === 'maintenance'
+      ? '/payments/webhooks/mercado-pago?scope=maintenance'
+      : '/payments/webhooks/mercado-pago',
+  );
   const backUrl = publicHttpsUrl(
     input.publicWebUrl,
-    `/pago/${encodeURIComponent(input.proposalId)}`,
+    input.returnPath ?? `/pago/${encodeURIComponent(input.proposalId)}`,
   );
   if (!notificationUrl || !backUrl) {
     throw new AppError(
@@ -238,7 +246,7 @@ export async function createMercadoPagoPreapproval(input: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      reason: `Prueba técnica LMWares · ${capitalize(input.plan)} mensual`,
+      reason: input.reason ?? `Prueba técnica LMWares · ${capitalize(input.plan)} mensual`,
       external_reference: input.subscriptionId,
       payer_email: input.payerEmail,
       auto_recurring: {

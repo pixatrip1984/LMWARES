@@ -22,6 +22,18 @@ const workOrderMigrationSource = readFileSync(
   new URL('../../../../infra/d1/migrations/0025_lmwares_starter_work_orders.sql', import.meta.url),
   'utf8',
 );
+const maintenanceRepositorySource = readFileSync(
+  new URL('../../../../packages/db/src/repositories/lmwares-maintenance-subscriptions.ts', import.meta.url),
+  'utf8',
+);
+const maintenanceRouteSource = readFileSync(
+  new URL('../routes/maintenance-subscriptions.ts', import.meta.url),
+  'utf8',
+);
+const adminCommercialSource = readFileSync(
+  new URL('../../../admin-api/src/routes/commercial-intakes.ts', import.meta.url),
+  'utf8',
+);
 
 test('commercial intake requires a UUID idempotency key and computes prices on the server', () => {
   assert.match(intakeSource, /c\.req\.header\('Idempotency-Key'\)/);
@@ -110,9 +122,27 @@ test('a confirmed implementation payment creates one supervised Starter work ord
   assert.match(workOrderMigrationSource, /intake_id[\s\S]*?UNIQUE/);
 });
 
-test('Starter work cannot go live before the future subscription gate', () => {
+test('Starter work cannot go live before the subscription gate', () => {
   assert.match(workOrderRepositorySource, /Primero enlaza un proyecto real de Oracle/);
   assert.match(workOrderRepositorySource, /if \(from === 'in_build'\) return to === 'client_review'/);
   assert.match(workOrderRepositorySource, /if \(from === 'client_review'\) return to === 'in_build' \|\| to === 'ready_to_publish'/);
-  assert.doesNotMatch(workOrderRepositorySource, /status: 'live'/);
+  assert.match(workOrderRepositorySource, /WHERE work_order_id = \? AND status = 'active'/);
+  assert.match(workOrderRepositorySource, /SET status = 'live', published_url = \?/);
+  assert.match(adminCommercialSource, /publishStarterWorkOrderSchema/);
+  assert.match(adminCommercialSource, /lmwares\.starter_work_order\.go_live/);
+});
+
+test('commercial maintenance is frozen from the accepted offer and owner gated', () => {
+  assert.match(maintenanceRepositorySource, /o\.monthly_amount_cents/);
+  assert.match(maintenanceRepositorySource, /w\.status = 'ready_to_publish'/);
+  assert.match(maintenanceRepositorySource, /b\.status = 'paid' AND b\.payment_review_required = 0/);
+  assert.match(maintenanceRepositorySource, /o\.status = 'accepted'/);
+  assert.match(maintenanceRouteSource, /workOrder\.userId !== userId/);
+  assert.match(maintenanceRouteSource, /assertTrustedPublicOrigin\(c\)/);
+  assert.match(maintenanceRouteSource, /webhookScope: 'maintenance'/);
+  assert.match(paymentsSource, /MERCADO_PAGO_MAINTENANCE_WEBHOOK_SECRET/);
+  assert.match(paymentsSource, /lmwaresMaintenanceSubscriptions\.reconcileAuthorizedPayment/);
+  assert.match(paymentsSource, /maintenanceSubscriptionId:/);
+  assert.match(wranglerSource, /MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED = "0"/);
+  assert.match(wranglerSource, /MERCADO_PAGO_MAINTENANCE_TEST_MODE = "0"/);
 });

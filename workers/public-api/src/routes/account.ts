@@ -4,6 +4,7 @@ import { createRepositories, type LmwaresNotification } from '@starter/db';
 import type { Bindings, Variables } from '../env';
 import { publicCommercialOffer } from '../lib/commercial-offer-public';
 import { publicBillingOrder } from '../lib/billing-order-public';
+import { publicMaintenanceSubscription } from '../lib/maintenance-subscription-public';
 import {
   assertTrustedPublicOrigin,
   requirePublicSession,
@@ -19,18 +20,32 @@ account.use('*', async (c, next) => {
 account.get('/', async (c) => {
   const user = c.get('publicUser');
   const repos = createRepositories(c.env.DB);
-  const [notifications, intakes, commercialIntakes, currentOffers, billingOrders] = await Promise.all([
+  const [
+    notifications,
+    intakes,
+    commercialIntakes,
+    currentOffers,
+    billingOrders,
+    workOrders,
+    maintenanceSubscriptions,
+  ] = await Promise.all([
     repos.lmwaresNotifications.listForUser(user.id),
     repos.lmwaresFreeIntakes.listForUser(user.id),
     repos.lmwaresPackageIntakes.listForUser(user.id),
     repos.lmwaresCommercialOffers.listCurrentForUser(user.id),
     repos.lmwaresBillingOrders.listForUser(user.id),
+    repos.lmwaresStarterWorkOrders.listForUser(user.id),
+    repos.lmwaresMaintenanceSubscriptions.listForUser(user.id),
   ]);
   const offersByIntake = new Map(currentOffers.map((offer) => [offer.intakeId, offer]));
   const ordersByOffer = new Map(
     billingOrders
       .filter((order) => order.commercialOfferId)
       .map((order) => [order.commercialOfferId!, order]),
+  );
+  const workOrdersByIntake = new Map(workOrders.map((workOrder) => [workOrder.intakeId, workOrder]));
+  const maintenanceByWorkOrder = new Map(
+    maintenanceSubscriptions.map((subscription) => [subscription.workOrderId, subscription]),
   );
 
   return c.json({
@@ -56,6 +71,16 @@ account.get('/', async (c) => {
       implementationPayment:
         offersByIntake.has(intake.id) && ordersByOffer.has(offersByIntake.get(intake.id)!.id)
           ? publicBillingOrder(ordersByOffer.get(offersByIntake.get(intake.id)!.id)!)
+          : null,
+      workOrder: workOrdersByIntake.has(intake.id)
+        ? publicWorkOrder(workOrdersByIntake.get(intake.id)!)
+        : null,
+      maintenanceSubscription:
+        workOrdersByIntake.has(intake.id) &&
+        maintenanceByWorkOrder.has(workOrdersByIntake.get(intake.id)!.id)
+          ? publicMaintenanceSubscription(
+              maintenanceByWorkOrder.get(workOrdersByIntake.get(intake.id)!.id)!,
+            )
           : null,
       submittedAt: intake.submittedAt,
       updatedAt: intake.updatedAt,
@@ -83,6 +108,30 @@ account.patch('/notifications/:id/read', async (c) => {
 });
 
 function toAccountNotification(notification: LmwaresNotification) {
+  if (notification.template === 'starter-site-published') {
+    const siteName = metadataString(notification.payload, 'siteName') ?? 'Tu sitio Starter';
+    const publicUrl = safePublishedUrl(metadataString(notification.payload, 'publicUrl'));
+    return {
+      id: notification.id,
+      kind: notification.template,
+      title: 'Tu sitio Starter ya está publicado',
+      summary: `${siteName} ya está en línea.`,
+      body: [
+        `Terminamos de publicar ${siteName}.`,
+        'Tu mensualidad de mantenimiento está activa desde esta publicación.',
+        'Puedes conservar el enlace, copiarlo o abrir el sitio desde este mensaje.',
+      ],
+      plan: metadataString(notification.payload, 'plan') ?? 'starter',
+      siteName,
+      referenceId: metadataString(notification.payload, 'workOrderId'),
+      actionUrl: publicUrl,
+      actionLabel: publicUrl ? 'Abrir mi sitio' : null,
+      deliveryStatus: notification.status,
+      readAt: notification.readAt,
+      sentAt: notification.sentAt,
+      createdAt: notification.createdAt,
+    };
+  }
   if (notification.template === 'implementation-payment-confirmed') {
     const amount = metadataNumber(notification.payload, 'amountCents');
     return {
@@ -170,6 +219,24 @@ function toAccountNotification(notification: LmwaresNotification) {
 function metadataNumber(payload: Metadata, key: string): number | null {
   const value = payload[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function publicWorkOrder(workOrder: {
+  id: string;
+  status: string;
+  publishedUrl: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}) {
+  return {
+    id: workOrder.id,
+    status: workOrder.status,
+    publishedUrl: safePublishedUrl(workOrder.publishedUrl),
+    publishedAt: workOrder.publishedAt,
+    createdAt: workOrder.createdAt,
+    updatedAt: workOrder.updatedAt,
+  };
 }
 
 function formatMoney(cents: number): string {

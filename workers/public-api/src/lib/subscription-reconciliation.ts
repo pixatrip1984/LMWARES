@@ -1,4 +1,8 @@
-import { AppError, type PackageSubscription } from '@starter/domain';
+import {
+  AppError,
+  type MaintenanceSubscription,
+  type PackageSubscription,
+} from '@starter/domain';
 import { createRepositories } from '@starter/db';
 import type { Bindings } from '../env';
 import {
@@ -12,6 +16,11 @@ const RECONCILIATION_BATCH_SIZE = 25;
 
 export interface SubscriptionReconciliationResult {
   subscription: PackageSubscription;
+  authorizedPaymentsFound: number;
+}
+
+export interface MaintenanceSubscriptionReconciliationResult {
+  subscription: MaintenanceSubscription;
   authorizedPaymentsFound: number;
 }
 
@@ -67,15 +76,11 @@ export async function reconcileSubscriptionsOnSchedule(
   env: Bindings,
   scheduledTime: number,
 ): Promise<void> {
-  const accessToken = env.MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN?.trim();
-  if (!accessToken) {
-    console.warn(JSON.stringify({ message: 'subscription_reconciliation_disabled' }));
-    return;
-  }
-
   const repos = createRepositories(env.DB);
-  const candidates =
-    await repos.lmwaresSubscriptions.listForReconciliation(RECONCILIATION_BATCH_SIZE);
+  const accessToken = env.MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN?.trim();
+  const candidates = accessToken
+    ? await repos.lmwaresSubscriptions.listForReconciliation(RECONCILIATION_BATCH_SIZE)
+    : [];
   let processed = 0;
   let failed = 0;
   for (const candidate of candidates) {
@@ -83,7 +88,7 @@ export async function reconcileSubscriptionsOnSchedule(
       const result = await reconcileSubscriptionWithProvider({
         env,
         subscription: candidate,
-        accessToken,
+        accessToken: accessToken!,
       });
       processed += 1;
       if (subscriptionMateriallyChanged(candidate, result.subscription)) {
@@ -124,11 +129,115 @@ export async function reconcileSubscriptionsOnSchedule(
       failed,
     }),
   );
+  await reconcileMaintenanceSubscriptionsOnSchedule(env, scheduledTime);
+}
+
+export async function reconcileMaintenanceSubscriptionWithProvider(input: {
+  env: Bindings;
+  subscription: MaintenanceSubscription;
+  accessToken: string;
+}): Promise<MaintenanceSubscriptionReconciliationResult> {
+  const repos = createRepositories(input.env.DB);
+  if (!input.subscription.providerPreapprovalId) {
+    throw new AppError('conflict', 'La mensualidad todavía no existe en Mercado Pago.');
+  }
+  const provider = await getMercadoPagoPreapproval({
+    accessToken: input.accessToken,
+    preapprovalId: input.subscription.providerPreapprovalId,
+  });
+  assertPreapprovalMatchesSubscription(provider, input.subscription);
+  let subscription = await repos.lmwaresMaintenanceSubscriptions.savePreapproval({
+    id: input.subscription.id,
+    providerPreapprovalId: provider.id,
+    authorizationUrl: provider.authorizationUrl,
+    providerStatus: provider.status,
+    nextPaymentDate: provider.nextPaymentDate,
+  });
+  const charges = await searchMercadoPagoAuthorizedPayments({
+    accessToken: input.accessToken,
+    preapprovalId: provider.id,
+  });
+  charges.sort(compareAuthorizedPayments);
+  for (const charge of charges) {
+    assertAuthorizedPaymentMatchesSubscription(charge, subscription);
+    subscription = await repos.lmwaresMaintenanceSubscriptions.reconcileAuthorizedPayment({
+      subscriptionId: subscription.id,
+      providerAuthorizedPaymentId: charge.id,
+      providerPaymentId: charge.paymentId,
+      providerStatus: charge.status,
+      paymentStatus: charge.paymentStatus,
+      summarized: charge.summarized,
+      amountCents: Math.round(charge.amount * 100),
+      currency: charge.currency,
+      debitDate: charge.debitDate,
+      retryAttempt: charge.retryAttempt,
+    });
+  }
+  return { subscription, authorizedPaymentsFound: charges.length };
+}
+
+async function reconcileMaintenanceSubscriptionsOnSchedule(
+  env: Bindings,
+  scheduledTime: number,
+): Promise<void> {
+  const accessToken = env.MERCADO_PAGO_MAINTENANCE_ACCESS_TOKEN?.trim();
+  if (!accessToken) {
+    console.warn(JSON.stringify({ message: 'maintenance_reconciliation_disabled' }));
+    return;
+  }
+  const repos = createRepositories(env.DB);
+  const candidates = await repos.lmwaresMaintenanceSubscriptions.listForReconciliation(
+    RECONCILIATION_BATCH_SIZE,
+  );
+  let processed = 0;
+  let failed = 0;
+  for (const candidate of candidates) {
+    try {
+      const result = await reconcileMaintenanceSubscriptionWithProvider({
+        env,
+        subscription: candidate,
+        accessToken,
+      });
+      processed += 1;
+      if (subscriptionMateriallyChanged(candidate, result.subscription)) {
+        await repos.audit.record({
+          actorType: 'system',
+          actorId: 'maintenance_reconciliation_cron',
+          action: 'lmwares.maintenance_subscription.scheduled_reconcile',
+          entityType: 'lmwares_maintenance_subscription',
+          entityId: candidate.id,
+          metadata: {
+            scheduledTime,
+            previousStatus: candidate.status,
+            status: result.subscription.status,
+            authorizedPaymentsFound: result.authorizedPaymentsFound,
+            lastAuthorizedPaymentId: result.subscription.lastAuthorizedPaymentId,
+          },
+          ip: null,
+          userAgent: null,
+        });
+      }
+    } catch (error) {
+      failed += 1;
+      console.error(JSON.stringify({
+        message: 'maintenance_scheduled_reconciliation_failed',
+        subscriptionId: candidate.id,
+        errorCode: error instanceof AppError ? error.code : 'internal_error',
+      }));
+    }
+  }
+  console.info(JSON.stringify({
+    message: 'maintenance_scheduled_reconciliation_completed',
+    scheduledTime,
+    candidates: candidates.length,
+    processed,
+    failed,
+  }));
 }
 
 export function assertPreapprovalMatchesSubscription(
   provider: MercadoPagoPreapproval,
-  subscription: PackageSubscription,
+  subscription: PackageSubscription | MaintenanceSubscription,
 ): void {
   if (
     provider.id !== subscription.providerPreapprovalId ||
@@ -147,7 +256,7 @@ export function assertPreapprovalMatchesSubscription(
 
 function assertAuthorizedPaymentMatchesSubscription(
   provider: MercadoPagoAuthorizedPayment,
-  subscription: PackageSubscription,
+  subscription: PackageSubscription | MaintenanceSubscription,
 ): void {
   if (
     provider.preapprovalId !== subscription.providerPreapprovalId ||
@@ -171,8 +280,8 @@ function compareAuthorizedPayments(
 }
 
 function subscriptionMateriallyChanged(
-  before: PackageSubscription,
-  after: PackageSubscription,
+  before: PackageSubscription | MaintenanceSubscription,
+  after: PackageSubscription | MaintenanceSubscription,
 ): boolean {
   return (
     before.status !== after.status ||

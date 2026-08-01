@@ -8,6 +8,7 @@ import {
   parseInput,
   reviewPackageIntakeSchema,
   updateStarterWorkOrderStatusSchema,
+  publishStarterWorkOrderSchema,
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { requireWrite } from '../middleware/auth';
@@ -36,7 +37,10 @@ commercialIntakesAdmin.get('/:id', async (c) => {
     ? await repos.lmwaresBillingOrders.getByOfferId(acceptedOffer.id)
     : null;
   const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(intake.id);
-  return c.json({ intake, offers, billingOrder, workOrder });
+  const maintenanceSubscription = workOrder
+    ? await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id)
+    : null;
+  return c.json({ intake, offers, billingOrder, workOrder, maintenanceSubscription });
 });
 
 commercialIntakesAdmin.post('/:id/work-order/assign', requireWrite, async (c) => {
@@ -76,6 +80,31 @@ commercialIntakesAdmin.patch('/:id/work-order/status', requireWrite, async (c) =
     entityType: 'lmwares_starter_work_order',
     entityId: updated.id,
     metadata: { intakeId: updated.intakeId, projectId: updated.projectId, status: updated.status },
+  });
+  return c.json({ workOrder: updated });
+});
+
+commercialIntakesAdmin.post('/:id/work-order/go-live', requireWrite, async (c) => {
+  const input = parseInput(publishStarterWorkOrderSchema, await readJson(c));
+  const repos = createRepositories(c.env.DB);
+  const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(c.req.param('id')!);
+  if (!workOrder) throw AppError.notFound('Orden de trabajo');
+  const updated = await repos.lmwaresStarterWorkOrders.publish({
+    id: workOrder.id,
+    publicUrl: input.publicUrl,
+  });
+  await repos.audit.record({
+    actorType: 'admin',
+    actorId: c.get('admin').email,
+    action: 'lmwares.starter_work_order.go_live',
+    entityType: 'lmwares_starter_work_order',
+    entityId: updated.id,
+    metadata: {
+      intakeId: updated.intakeId,
+      projectId: updated.projectId,
+      publicUrl: updated.publishedUrl,
+      publishedAt: updated.publishedAt,
+    },
   });
   return c.json({ workOrder: updated });
 });
