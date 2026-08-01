@@ -63,6 +63,31 @@ portada o eliminar imágenes de un álbum publicado modifica la colección públ
 de inmediato. Para mantener la versión publicada intacta mientras se edita será
 necesario versionar o copiar el manifiesto de imágenes por revisión.
 
+### Actualización remota: 2026-07-31
+
+La infraestructura necesaria para validar Starter fuera del entorno local quedó
+publicada sin abrir el administrador a Internet:
+
+- D1 remoto `starter-db` no tiene migraciones pendientes y contiene las tablas
+  de los cinco módulos;
+- `admin.lmwares.com` ya estaba asociado al proyecto Pages `lmwares-admin` y a
+  una aplicación autoalojada de Cloudflare Access;
+- `workers/admin-api/wrangler.toml` ya define un ambiente `production` con D1,
+  R2, el Public API real y `ACCESS_DISABLED = "0"`;
+- el Admin API se desplegó como versión
+  `d472a665-e7fa-4456-9102-60411af6ec07` sobre
+  `admin.lmwares.com/admin/*` y `admin.lmwares.com/health`;
+- el portal administrativo se construyó contra `https://admin.lmwares.com` y se
+  desplegó en Pages como `109fe855.lmwares-admin.pages.dev`;
+- una solicitud anónima a `https://admin.lmwares.com` redirige al login de
+  Cloudflare Access, confirmando que la frontera está activa.
+
+La siguiente prueba debe hacerse con una sesión Access autorizada: abrir
+`https://admin.lmwares.com`, crear o seleccionar un proyecto Starter, publicar
+una pieza desde Module Studio y confirmar su lectura mediante
+`https://api.lmwares.com/sites/<projectId>/<module>`. No se insertaron datos de
+prueba directamente en D1 remoto.
+
 ## 1. Resumen ejecutivo
 
 Se implementaron cinco verticales iniciales de módulos LMWares:
