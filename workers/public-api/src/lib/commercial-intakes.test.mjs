@@ -95,11 +95,11 @@ test('accepted offers create one server-priced implementation order', () => {
   assert.doesNotMatch(intakeSource, /amountCents: input\./);
 });
 
-test('commercial checkout is gated and uses a separate Mercado Pago contract', () => {
+test('commercial checkout is explicitly enabled and uses a separate Mercado Pago contract', () => {
   assert.match(paymentsSource, /payments\.post\('\/orders\/:id\/checkout'/);
   assert.match(paymentsSource, /assertCommercialPaymentConfiguration\(c\.env\)/);
   assert.match(paymentsSource, /MERCADO_PAGO_COMMERCIAL_ACCESS_TOKEN/);
-  assert.match(wranglerSource, /MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "0"/);
+  assert.match(wranglerSource, /MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "1"/);
   assert.match(mercadoPagoSource, /X-Idempotency-Key': `lmwares-billing-\$\{input\.order\.id\}`/);
   assert.match(mercadoPagoSource, /scope=commercial/);
   assert.match(mercadoPagoSource, /external_reference: input\.order\.externalReference/);

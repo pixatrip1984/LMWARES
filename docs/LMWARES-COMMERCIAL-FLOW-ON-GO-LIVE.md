@@ -73,9 +73,10 @@ El comando termina con código `2` si faltan credenciales, migraciones, salud de
 la API o integridad referencial. `-RequireReady Report` permite revisar el
 estado general aunque todavía no se hayan cargado los secretos.
 
-- La implementación está desplegable con
-  `MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "0"`; así no puede cobrar por
-  accidente.
+- La implementación está habilitada para la prueba productiva controlada con
+  `MERCADO_PAGO_COMMERCIAL_PAYMENTS_ENABLED = "1"`. La mensualidad permanece
+  en `"0"` y ninguna orden cobra hasta que el cliente abre y confirma su
+  Checkout Pro.
 - Antes de abrirla se cargan como secretos, sin comillas y sin registrarlos en
   el repositorio:
   - `MERCADO_PAGO_COMMERCIAL_ACCESS_TOKEN`
