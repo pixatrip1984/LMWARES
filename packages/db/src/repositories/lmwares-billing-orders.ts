@@ -8,6 +8,7 @@ import {
   type PaymentAttemptDisposition,
 } from '@starter/domain';
 import { boolFromDb, newId, nowIso, parseJson } from '../helpers';
+import { LmwaresStarterWorkOrdersRepository } from './lmwares-starter-work-orders';
 
 interface BillingOrderRow {
   id: string;
@@ -276,6 +277,9 @@ export class LmwaresBillingOrdersRepository {
               paidOrder.userId,
             ),
         ]);
+        await new LmwaresStarterWorkOrdersRepository(this.db).ensureFromPaidBillingOrder(
+          paidOrder.id,
+        );
       }
     }
 

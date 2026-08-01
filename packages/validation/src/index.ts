@@ -6,6 +6,7 @@ export * from './free-intake';
 export * from './package-payment';
 export * from './package-intake';
 export * from './commercial-offer';
+export * from './starter-work-order';
 export * from './site-blog';
 export * from './site-gallery';
 export * from './site-docs';

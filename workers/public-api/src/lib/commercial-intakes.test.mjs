@@ -14,6 +14,14 @@ const billingRepositorySource = readFileSync(
   new URL('../../../../packages/db/src/repositories/lmwares-billing-orders.ts', import.meta.url),
   'utf8',
 );
+const workOrderRepositorySource = readFileSync(
+  new URL('../../../../packages/db/src/repositories/lmwares-starter-work-orders.ts', import.meta.url),
+  'utf8',
+);
+const workOrderMigrationSource = readFileSync(
+  new URL('../../../../infra/d1/migrations/0025_lmwares_starter_work_orders.sql', import.meta.url),
+  'utf8',
+);
 
 test('commercial intake requires a UUID idempotency key and computes prices on the server', () => {
   assert.match(intakeSource, /c\.req\.header\('Idempotency-Key'\)/);
@@ -91,4 +99,20 @@ test('commercial reconciliation verifies frozen reference, currency and amount',
   assert.match(billingRepositorySource, /SET status = 'converted'/);
   assert.match(billingRepositorySource, /implementation-payment-confirmed:\$\{paidOrder\.id\}/);
   assert.match(billingRepositorySource, /INSERT OR IGNORE INTO lmw_notifications/);
+});
+
+test('a confirmed implementation payment creates one supervised Starter work order', () => {
+  assert.match(billingRepositorySource, /ensureFromPaidBillingOrder/);
+  assert.match(workOrderRepositorySource, /INSERT OR IGNORE INTO lmw_starter_work_orders/);
+  assert.match(workOrderRepositorySource, /b\.purpose = 'implementation' AND b\.status = 'paid'/);
+  assert.match(workOrderRepositorySource, /'awaiting_provisioning'/);
+  assert.match(workOrderMigrationSource, /billing_order_id[\s\S]*?UNIQUE/);
+  assert.match(workOrderMigrationSource, /intake_id[\s\S]*?UNIQUE/);
+});
+
+test('Starter work cannot go live before the future subscription gate', () => {
+  assert.match(workOrderRepositorySource, /Primero enlaza un proyecto real de Oracle/);
+  assert.match(workOrderRepositorySource, /if \(from === 'in_build'\) return to === 'client_review'/);
+  assert.match(workOrderRepositorySource, /if \(from === 'client_review'\) return to === 'in_build' \|\| to === 'ready_to_publish'/);
+  assert.doesNotMatch(workOrderRepositorySource, /status: 'live'/);
 });

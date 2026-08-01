@@ -9,10 +9,15 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 3. Oracle revisa alcance, módulos y viabilidad con participación humana.
 4. LMWares prepara una oferta final; la estimación pública no constituye todavía el precio contractual.
 5. El cliente acepta y paga la implementación.
-6. El proyecto se construye y valida en un subdominio `*.lmwares.com`.
-7. Al llegar a la compuerta de publicación, el cliente autoriza la mensualidad.
-8. LMWares comprueba la suscripción activa y publica. Desde ese momento empieza el mantenimiento mensual.
-9. Starter y Pro pueden migrar después a dominio personalizado.
+6. El pago confirmado crea una orden de trabajo Starter en
+   `awaiting_provisioning`. El operador enlaza manualmente un proyecto real ya
+   sincronizado en Oracle; no se inventa un repositorio ni se publica nada.
+7. El proyecto avanza de `in_build` a `client_review` y después a
+   `ready_to_publish`, mientras se construye y valida en un subdominio
+   `*.lmwares.com`.
+8. Al llegar a la compuerta de publicación, el cliente autoriza la mensualidad.
+9. LMWares comprueba la suscripción activa y publica. Desde ese momento empieza el mantenimiento mensual.
+10. Starter y Pro pueden migrar después a dominio personalizado.
 
 ## Reglas del sistema
 
@@ -35,6 +40,11 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
   para revisión.
 - Al confirmarse el pago, la solicitud cambia a `converted` y se crea una sola
   notificación interna aunque Mercado Pago reintente el evento.
+- Ese mismo evento crea idempotentemente una orden operacional. Sólo un
+  administrador puede enlazarla a un proyecto existente de Oracle y moverla
+  por construcción, revisión del cliente y lista para publicar.
+- `ready_to_publish` no es `live`: el panel no expone ninguna transición de
+  publicación hasta que la compuerta de suscripción esté implementada.
 - Los checkouts técnicos de sandbox permanecen cerrados en producción mediante una puerta independiente.
 - La reconciliación del ensayo existente sigue activa para observar sus cobros programados.
 

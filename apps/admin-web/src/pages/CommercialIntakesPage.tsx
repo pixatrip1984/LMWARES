@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AppError,
+  type BillingOrder,
+  type LmwaresProject,
   PACKAGE_MODULE_IDS,
   PACKAGE_INTAKE_STATUSES,
   type CommercialOffer,
   type PackageIntake,
   type PackageIntakeStatus,
+  type StarterWorkOrder,
 } from '@starter/domain';
 import { Button, Card, CardBody, EmptyState, ErrorBanner, PageHeader, Spinner, Textarea } from '@starter/ui';
 import { api } from '../lib/api';
@@ -24,6 +27,10 @@ export function CommercialIntakesPage() {
   const [status, setStatus] = useState<PackageIntakeStatus | ''>('');
   const [notes, setNotes] = useState('');
   const [offers, setOffers] = useState<CommercialOffer[]>([]);
+  const [billingOrder, setBillingOrder] = useState<BillingOrder | null>(null);
+  const [workOrder, setWorkOrder] = useState<StarterWorkOrder | null>(null);
+  const [projects, setProjects] = useState<LmwaresProject[]>([]);
+  const [projectId, setProjectId] = useState('');
   const [offerForm, setOfferForm] = useState({
     implementationPesos: '',
     monthlyPesos: '',
@@ -64,6 +71,8 @@ export function CommercialIntakesPage() {
     setNotes(selected?.reviewNotes ?? '');
     if (!selected) {
       setOffers([]);
+      setBillingOrder(null);
+      setWorkOrder(null);
       return;
     }
     setOfferForm({
@@ -75,10 +84,23 @@ export function CommercialIntakesPage() {
       modules: selected.modules,
       marketing: selected.marketing,
     });
-    api.getCommercialPackageIntake(selected.id)
-      .then((result) => setOffers(result.offers))
-      .catch(() => setOffers([]));
-  }, [selected?.id, selected?.reviewNotes]);
+    Promise.all([
+      api.getCommercialPackageIntake(selected.id),
+      selected.status === 'converted' ? api.listLmwaresProjects() : Promise.resolve(null),
+    ])
+      .then(([result, registry]) => {
+        setOffers(result.offers);
+        setBillingOrder(result.billingOrder);
+        setWorkOrder(result.workOrder);
+        setProjects(registry?.projects ?? []);
+        setProjectId(result.workOrder?.projectId ?? '');
+      })
+      .catch(() => {
+        setOffers([]);
+        setBillingOrder(null);
+        setWorkOrder(null);
+      });
+  }, [selected?.id, selected?.reviewNotes, selected?.status]);
 
   async function review(nextStatus: 'scope_review' | 'declined') {
     if (!selected) return;
@@ -94,6 +116,36 @@ export function CommercialIntakesPage() {
       );
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'No se pudo guardar la revisión.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function assignProject() {
+    if (!selected || !projectId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await api.assignStarterWorkOrder(selected.id, projectId);
+      setWorkOrder(result.workOrder);
+    } catch (err) {
+      setError(err instanceof AppError ? err.message : 'No se pudo enlazar el proyecto.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changeWorkStatus(
+    next: 'in_build' | 'client_review' | 'ready_to_publish' | 'canceled',
+  ) {
+    if (!selected || !workOrder) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await api.updateStarterWorkOrderStatus(selected.id, next);
+      setWorkOrder(result.workOrder);
+    } catch (err) {
+      setError(err instanceof AppError ? err.message : 'No se pudo avanzar la orden de trabajo.');
     } finally {
       setSaving(false);
     }
@@ -283,6 +335,56 @@ export function CommercialIntakesPage() {
                       </Button>
                     </section>
                   ) : null}
+                  {selected.status === 'converted' ? (
+                    <section className="space-y-4 border-t border-surface-border pt-6">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Implementación pagada</p>
+                        <h3 className="mt-1 text-xl font-bold text-gray-900">Orden de trabajo Starter</h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          El proyecto se enlaza conscientemente después de crearlo o sincronizarlo en Oracle.
+                        </p>
+                      </div>
+                      <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                        <Info label="Pago" value={billingOrder?.status === 'paid' ? `${money(billingOrder.amountCents)} confirmado` : billingOrder?.status ?? 'Sin orden'} />
+                        <Info label="Trabajo" value={workOrder ? workOrderStatusLabel(workOrder.status) : 'Preparando orden'} />
+                        <Info label="Proyecto Oracle" value={workOrder?.projectId ?? 'Sin enlazar'} />
+                        <Info label="Asignado por" value={workOrder?.assignedBy ?? 'Pendiente'} />
+                      </dl>
+                      {workOrder && !workOrder.projectId ? (
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                          <select
+                            aria-label="Proyecto Oracle"
+                            className="rounded-lg border border-surface-border px-3 py-2 text-sm"
+                            value={projectId}
+                            onChange={(event) => setProjectId(event.target.value)}
+                          >
+                            <option value="">Selecciona un proyecto sincronizado</option>
+                            {projects.map((project) => (
+                              <option key={project.id} value={project.id}>{project.name} · {project.id}</option>
+                            ))}
+                          </select>
+                          <Button onClick={assignProject} disabled={saving || !projectId}>Enlazar proyecto</Button>
+                        </div>
+                      ) : null}
+                      {workOrder?.projectId ? (
+                        <div className="flex flex-wrap gap-3">
+                          {workOrder.status === 'in_build' ? <Button onClick={() => changeWorkStatus('client_review')} disabled={saving}>Enviar a revisión del cliente</Button> : null}
+                          {workOrder.status === 'client_review' ? (
+                            <>
+                              <Button variant="secondary" onClick={() => changeWorkStatus('in_build')} disabled={saving}>Volver a construcción</Button>
+                              <Button onClick={() => changeWorkStatus('ready_to_publish')} disabled={saving}>Lista para publicar</Button>
+                            </>
+                          ) : null}
+                          {workOrder.status === 'ready_to_publish' ? (
+                            <>
+                              <Button variant="secondary" onClick={() => changeWorkStatus('client_review')} disabled={saving}>Volver a revisión</Button>
+                              <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">Publicación bloqueada hasta autorizar la suscripción.</span>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
                 </div>
               </CardBody>
             </Card>
@@ -332,4 +434,16 @@ function money(cents: number): string {
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function workOrderStatusLabel(status: StarterWorkOrder['status']): string {
+  const labels: Record<StarterWorkOrder['status'], string> = {
+    awaiting_provisioning: 'Esperando proyecto',
+    in_build: 'En construcción',
+    client_review: 'En revisión del cliente',
+    ready_to_publish: 'Lista para suscripción',
+    live: 'Publicada',
+    canceled: 'Cancelada',
+  };
+  return labels[status];
 }

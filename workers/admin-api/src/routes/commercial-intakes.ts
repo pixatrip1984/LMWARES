@@ -3,9 +3,11 @@ import { AppError, normalizePaidPackageModules } from '@starter/domain';
 import { createRepositories } from '@starter/db';
 import {
   issueCommercialOfferSchema,
+  assignStarterWorkOrderSchema,
   listPackageIntakesSchema,
   parseInput,
   reviewPackageIntakeSchema,
+  updateStarterWorkOrderStatusSchema,
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { requireWrite } from '../middleware/auth';
@@ -29,7 +31,53 @@ commercialIntakesAdmin.get('/:id', async (c) => {
   const intake = await repos.lmwaresPackageIntakes.getById(c.req.param('id'));
   if (!intake) throw AppError.notFound('Solicitud comercial');
   const offers = await repos.lmwaresCommercialOffers.listForIntake(intake.id);
-  return c.json({ intake, offers });
+  const acceptedOffer = offers.find((offer) => offer.status === 'accepted') ?? null;
+  const billingOrder = acceptedOffer
+    ? await repos.lmwaresBillingOrders.getByOfferId(acceptedOffer.id)
+    : null;
+  const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(intake.id);
+  return c.json({ intake, offers, billingOrder, workOrder });
+});
+
+commercialIntakesAdmin.post('/:id/work-order/assign', requireWrite, async (c) => {
+  const input = parseInput(assignStarterWorkOrderSchema, await readJson(c));
+  const repos = createRepositories(c.env.DB);
+  const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(c.req.param('id')!);
+  if (!workOrder) throw AppError.notFound('Orden de trabajo');
+  const updated = await repos.lmwaresStarterWorkOrders.assignProject({
+    id: workOrder.id,
+    projectId: input.projectId,
+    assignedBy: c.get('admin').email,
+  });
+  await repos.audit.record({
+    actorType: 'admin',
+    actorId: c.get('admin').email,
+    action: 'lmwares.starter_work_order.project_assigned',
+    entityType: 'lmwares_starter_work_order',
+    entityId: updated.id,
+    metadata: { intakeId: updated.intakeId, projectId: updated.projectId, status: updated.status },
+  });
+  return c.json({ workOrder: updated });
+});
+
+commercialIntakesAdmin.patch('/:id/work-order/status', requireWrite, async (c) => {
+  const input = parseInput(updateStarterWorkOrderStatusSchema, await readJson(c));
+  const repos = createRepositories(c.env.DB);
+  const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(c.req.param('id')!);
+  if (!workOrder) throw AppError.notFound('Orden de trabajo');
+  const updated = await repos.lmwaresStarterWorkOrders.setStatus({
+    id: workOrder.id,
+    status: input.status,
+  });
+  await repos.audit.record({
+    actorType: 'admin',
+    actorId: c.get('admin').email,
+    action: 'lmwares.starter_work_order.status_changed',
+    entityType: 'lmwares_starter_work_order',
+    entityId: updated.id,
+    metadata: { intakeId: updated.intakeId, projectId: updated.projectId, status: updated.status },
+  });
+  return c.json({ workOrder: updated });
 });
 
 commercialIntakesAdmin.patch('/:id/review', requireWrite, async (c) => {

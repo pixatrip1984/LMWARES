@@ -19,6 +19,7 @@ import { LmwaresPaymentsRepository } from './repositories/lmwares-payments';
 import { LmwaresPackageIntakesRepository } from './repositories/lmwares-package-intakes';
 import { LmwaresCommercialOffersRepository } from './repositories/lmwares-commercial-offers';
 import { LmwaresBillingOrdersRepository } from './repositories/lmwares-billing-orders';
+import { LmwaresStarterWorkOrdersRepository } from './repositories/lmwares-starter-work-orders';
 import { LmwaresSubscriptionsRepository } from './repositories/lmwares-subscriptions';
 import { SiteBlogRepository } from './repositories/site-blog';
 import { SiteGalleryRepository } from './repositories/site-gallery';
@@ -41,6 +42,7 @@ export * from './repositories/lmwares-payments';
 export * from './repositories/lmwares-package-intakes';
 export * from './repositories/lmwares-commercial-offers';
 export * from './repositories/lmwares-billing-orders';
+export * from './repositories/lmwares-starter-work-orders';
 export * from './repositories/lmwares-subscriptions';
 export * from './repositories/site-blog';
 export * from './repositories/site-gallery';
@@ -67,6 +69,7 @@ export interface Repositories {
   lmwaresPackageIntakes: LmwaresPackageIntakesRepository;
   lmwaresCommercialOffers: LmwaresCommercialOffersRepository;
   lmwaresBillingOrders: LmwaresBillingOrdersRepository;
+  lmwaresStarterWorkOrders: LmwaresStarterWorkOrdersRepository;
   lmwaresSubscriptions: LmwaresSubscriptionsRepository;
   siteBlog: SiteBlogRepository;
   siteGalleries: SiteGalleryRepository;
@@ -98,6 +101,7 @@ export function createRepositories(db: D1Database): Repositories {
     lmwaresPackageIntakes: new LmwaresPackageIntakesRepository(db),
     lmwaresCommercialOffers: new LmwaresCommercialOffersRepository(db),
     lmwaresBillingOrders: new LmwaresBillingOrdersRepository(db),
+    lmwaresStarterWorkOrders: new LmwaresStarterWorkOrdersRepository(db),
     lmwaresSubscriptions: new LmwaresSubscriptionsRepository(db),
     siteBlog: new SiteBlogRepository(db),
     siteGalleries: new SiteGalleryRepository(db),

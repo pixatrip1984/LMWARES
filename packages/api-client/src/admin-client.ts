@@ -1,6 +1,7 @@
 import type {
   AuditEvent,
   CommercialOffer,
+  BillingOrder,
   Paginated,
   Publication,
   PublicationImage,
@@ -10,6 +11,7 @@ import type {
   LmwaresValidationResult,
   PackageIntake,
   PackageIntakeStatus,
+  StarterWorkOrder,
   Request,
   RequestNote,
   RequestStatus,
@@ -110,8 +112,28 @@ export function createAdminClient(baseUrl: string) {
       return http.get<{ intakes: PackageIntake[] }>(`/admin/commercial-intakes${suffix}`);
     },
     getCommercialPackageIntake(id: string) {
-      return http.get<{ intake: PackageIntake; offers: CommercialOffer[] }>(
+      return http.get<{
+        intake: PackageIntake;
+        offers: CommercialOffer[];
+        billingOrder: BillingOrder | null;
+        workOrder: StarterWorkOrder | null;
+      }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}`,
+      );
+    },
+    assignStarterWorkOrder(id: string, projectId: string) {
+      return http.post<{ workOrder: StarterWorkOrder }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/work-order/assign`,
+        { projectId },
+      );
+    },
+    updateStarterWorkOrderStatus(
+      id: string,
+      status: 'in_build' | 'client_review' | 'ready_to_publish' | 'canceled',
+    ) {
+      return http.patch<{ workOrder: StarterWorkOrder }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/work-order/status`,
+        { status },
       );
     },
     issueCommercialOffer(id: string, input: IssueCommercialOfferInput) {
