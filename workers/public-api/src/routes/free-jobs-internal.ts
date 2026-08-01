@@ -10,6 +10,7 @@ import { createRepositories } from '@starter/db';
 import type { Bindings, Variables } from '../env';
 import { assertFreeImageDimensions, inspectFreeImage } from '../lib/free-image';
 import { buildFreePublishedEmail } from '../lib/free-notification-email';
+import { buildStarterPublishedEmail } from '../lib/starter-notification-email';
 
 export const freeJobsInternal = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const MAX_SANITIZED_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -289,17 +290,41 @@ freeJobsInternal.post('/free-notifications/dispatch', async (c) => {
   if (!notification) return c.json({ notification: null });
 
   try {
-    const email = buildFreePublishedEmail({
-      siteName: readMetadataString(notification.payload, 'siteName'),
-      publicUrl: readMetadataString(notification.payload, 'publicUrl'),
-      referenceId: notification.intakeId ?? readMetadataString(notification.payload, 'intakeId'),
-      notificationId: notification.id,
-      recipientEmail: notification.toAddress,
-      publishedAt:
-        readOptionalMetadataString(notification.payload, 'publishedAt')
-        ?? notification.createdAt,
-      supportEmail: c.env.EMAIL_REPLY_TO,
-    });
+    const email = notification.template === 'starter-site-published'
+      ? buildStarterPublishedEmail({
+          siteName: readMetadataString(notification.payload, 'siteName'),
+          publicUrl: readMetadataString(notification.payload, 'publicUrl'),
+          workOrderId: readMetadataString(notification.payload, 'workOrderId'),
+          intakeId: readMetadataString(notification.payload, 'intakeId'),
+          projectId: readMetadataString(notification.payload, 'projectId'),
+          billingOrderId: readMetadataString(notification.payload, 'billingOrderId'),
+          commercialOfferId: readMetadataString(notification.payload, 'commercialOfferId'),
+          maintenanceSubscriptionId: readMetadataString(
+            notification.payload,
+            'maintenanceSubscriptionId',
+          ),
+          monthlyAmountCents: readMetadataNumber(notification.payload, 'monthlyAmountCents'),
+          notificationId: notification.id,
+          recipientEmail: notification.toAddress,
+          publishedAt:
+            readOptionalMetadataString(notification.payload, 'publishedAt')
+            ?? notification.createdAt,
+          supportEmail: c.env.EMAIL_REPLY_TO,
+          accountUrl: `${c.env.PUBLIC_WEB_URL.replace(/\/+$/, '')}/configurar`,
+        })
+      : notification.template === 'free-site-published'
+        ? buildFreePublishedEmail({
+          siteName: readMetadataString(notification.payload, 'siteName'),
+          publicUrl: readMetadataString(notification.payload, 'publicUrl'),
+          referenceId: notification.intakeId ?? readMetadataString(notification.payload, 'intakeId'),
+          notificationId: notification.id,
+          recipientEmail: notification.toAddress,
+          publishedAt:
+            readOptionalMetadataString(notification.payload, 'publishedAt')
+            ?? notification.createdAt,
+          supportEmail: c.env.EMAIL_REPLY_TO,
+        })
+        : unsupportedNotificationTemplate(notification.template);
     const result = await c.env.EMAIL.send({
       to: notification.toAddress,
       from: { email: c.env.EMAIL_FROM, name: 'LMWares' },
@@ -318,9 +343,15 @@ freeJobsInternal.post('/free-notifications/dispatch', async (c) => {
     await repos.audit.record({
       actorType: 'system',
       actorId: runnerId,
-      action: 'lmwares.free_notification.sent',
-      entityType: 'lmwares_free_intake',
-      entityId: notification.intakeId,
+      action: notification.template === 'starter-site-published'
+        ? 'lmwares.starter_site_published.email_sent'
+        : 'lmwares.free_notification.sent',
+      entityType: notification.template === 'starter-site-published'
+        ? 'lmwares_starter_work_order'
+        : 'lmwares_free_intake',
+      entityId: notification.template === 'starter-site-published'
+        ? readOptionalMetadataString(notification.payload, 'workOrderId')
+        : notification.intakeId,
       metadata: {
         notificationId: notification.id,
         providerMessageId: result.messageId,
@@ -344,9 +375,15 @@ freeJobsInternal.post('/free-notifications/dispatch', async (c) => {
     await repos.audit.record({
       actorType: 'system',
       actorId: runnerId,
-      action: 'lmwares.free_notification.failed',
-      entityType: 'lmwares_free_intake',
-      entityId: notification.intakeId,
+      action: notification.template === 'starter-site-published'
+        ? 'lmwares.starter_site_published.email_failed'
+        : 'lmwares.free_notification.failed',
+      entityType: notification.template === 'starter-site-published'
+        ? 'lmwares_starter_work_order'
+        : 'lmwares_free_intake',
+      entityId: notification.template === 'starter-site-published'
+        ? readOptionalMetadataString(notification.payload, 'workOrderId')
+        : notification.intakeId,
       metadata: { notificationId: notification.id, code, retryAt },
     });
     return c.json({ notification: failed, retryScheduled: Boolean(retryAt) });
@@ -387,6 +424,18 @@ function readMetadataString(payload: Record<string, unknown>, key: string): stri
 function readOptionalMetadataString(payload: Record<string, unknown>, key: string): string | null {
   const value = payload[key];
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readMetadataNumber(payload: Record<string, unknown>, key: string): number {
+  const value = payload[key];
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    throw new AppError('validation_error', `La notificación no contiene ${key}.`);
+  }
+  return value;
+}
+
+function unsupportedNotificationTemplate(template: string): never {
+  throw new AppError('validation_error', `Plantilla de email no soportada: ${template.slice(0, 80)}.`);
 }
 
 function emailErrorCode(error: unknown): string {

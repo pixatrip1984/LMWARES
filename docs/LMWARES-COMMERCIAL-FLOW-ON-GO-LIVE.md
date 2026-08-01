@@ -51,8 +51,12 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
   para una implementación pagada, sin revisión de pago y en
   `ready_to_publish`.
 - La primera publicación exige una URL HTTPS bajo `*.lmwares.com`. El panel
-  vuelve idempotente la confirmación, registra auditoría y crea el aviso de
-  publicación para la cuenta del cliente.
+  vuelve idempotente la confirmación, registra auditoría y crea un único
+  comprobante de publicación visible en la cuenta y entregable por email.
+- El comprobante Starter incluye URL, fecha, importe mensual, cuenta, IDs de
+  solicitud, oferta, pago, orden, proyecto y suscripción, además de soporte e
+  instrucciones para detener cobros futuros. El outbox reutiliza los leases y
+  reintentos del canal transaccional ya validado por Free.
 - Los checkouts técnicos de sandbox permanecen cerrados en producción mediante una puerta independiente.
 - La reconciliación del ensayo existente sigue activa para observar sus cobros programados.
 

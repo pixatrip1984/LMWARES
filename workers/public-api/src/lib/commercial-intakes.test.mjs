@@ -8,6 +8,10 @@ const subscriptionsSource = readFileSync(new URL('../routes/subscriptions.ts', i
 const workerSource = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
 const wranglerSource = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 const accountSource = readFileSync(new URL('../routes/account.ts', import.meta.url), 'utf8');
+const notificationDispatcherSource = readFileSync(
+  new URL('../routes/free-jobs-internal.ts', import.meta.url),
+  'utf8',
+);
 const offersSource = readFileSync(new URL('../lib/commercial-offer-public.ts', import.meta.url), 'utf8');
 const mercadoPagoSource = readFileSync(new URL('./mercado-pago.ts', import.meta.url), 'utf8');
 const billingRepositorySource = readFileSync(
@@ -130,6 +134,15 @@ test('Starter work cannot go live before the subscription gate', () => {
   assert.match(workOrderRepositorySource, /SET status = 'live', published_url = \?/);
   assert.match(adminCommercialSource, /publishStarterWorkOrderSchema/);
   assert.match(adminCommercialSource, /lmwares\.starter_work_order\.go_live/);
+});
+
+test('Starter publication creates one idempotent account and email receipt', () => {
+  assert.match(workOrderRepositorySource, /'email', 'starter-site-published'/);
+  assert.match(workOrderRepositorySource, /starter-site-published:\$\{workOrder\.id\}/);
+  assert.match(workOrderRepositorySource, /'maintenanceSubscriptionId', s\.id/);
+  assert.match(workOrderRepositorySource, /'monthlyAmountCents', s\.amount_cents/);
+  assert.match(notificationDispatcherSource, /buildStarterPublishedEmail/);
+  assert.match(notificationDispatcherSource, /notification\.template === 'starter-site-published'/);
 });
 
 test('commercial maintenance is frozen from the accepted offer and owner gated', () => {

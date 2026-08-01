@@ -159,7 +159,7 @@ export class LmwaresStarterWorkOrdersRepository {
       if (current.publishedUrl !== input.publicUrl) {
         throw new AppError('conflict', 'La orden ya fue publicada con otra URL.');
       }
-      await this.ensurePublishedNotification(current);
+      await this.ensurePublishedNotifications(current);
       return current;
     }
     if (current.status !== 'ready_to_publish' || !current.projectId) {
@@ -192,40 +192,44 @@ export class LmwaresStarterWorkOrdersRepository {
       throw new AppError('conflict', 'La compuerta de publicación cambió mientras se procesaba.');
     }
     const published = (await this.getById(current.id))!;
-    await this.ensurePublishedNotification(published);
+    await this.ensurePublishedNotifications(published);
     return published;
   }
 
-  private async ensurePublishedNotification(workOrder: StarterWorkOrder): Promise<void> {
+  private async ensurePublishedNotifications(workOrder: StarterWorkOrder): Promise<void> {
     if (!workOrder.publishedUrl || !workOrder.publishedAt) return;
     const now = nowIso();
+    const payloadSql = `json_object(
+      'kind', 'starter-site-published',
+      'workOrderId', w.id,
+      'intakeId', w.intake_id,
+      'projectId', w.project_id,
+      'billingOrderId', w.billing_order_id,
+      'commercialOfferId', w.commercial_offer_id,
+      'maintenanceSubscriptionId', s.id,
+      'monthlyAmountCents', s.amount_cents,
+      'siteName', COALESCE(p.name, 'Tu sitio Starter'),
+      'plan', json_extract(w.work_snapshot, '$.plan'),
+      'publicUrl', w.published_url,
+      'publishedAt', w.published_at
+    )`;
     await this.db
       .prepare(
         `INSERT OR IGNORE INTO lmw_notifications
           (id, user_id, intake_id, channel, template, to_address, dedupe_key,
-           status, attempt, max_attempts, payload, sent_at, created_at, updated_at)
-         SELECT ?, w.user_id, NULL, 'in_app', 'starter-site-published', u.email, ?,
-                'sent', 0, 1,
-                json_object(
-                  'kind', 'starter-site-published',
-                  'workOrderId', w.id,
-                  'intakeId', w.intake_id,
-                  'projectId', w.project_id,
-                  'siteName', COALESCE(p.name, 'Tu sitio Starter'),
-                  'plan', json_extract(w.work_snapshot, '$.plan'),
-                  'publicUrl', w.published_url,
-                  'publishedAt', w.published_at
-                ),
-                ?, ?, ?
+           status, attempt, max_attempts, next_attempt_at, payload, created_at, updated_at)
+         SELECT ?, w.user_id, NULL, 'email', 'starter-site-published', u.email, ?,
+                'pending', 0, 5, ?, ${payloadSql}, ?, ?
          FROM lmw_starter_work_orders w
          JOIN lmw_users u ON u.id = w.user_id
          LEFT JOIN lmwares_projects p ON p.id = w.project_id
+         JOIN lmw_maintenance_subscriptions s ON s.work_order_id = w.id AND s.status = 'active'
          WHERE w.id = ? AND w.status = 'live'`,
       )
       .bind(
         newId(),
         `starter-site-published:${workOrder.id}`,
-        workOrder.publishedAt,
+        now,
         now,
         now,
         workOrder.id,
