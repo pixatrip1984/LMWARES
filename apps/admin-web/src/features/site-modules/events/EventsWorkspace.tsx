@@ -150,7 +150,11 @@ export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
         saved = await eventsApi.setStatus(projectId, saved.id, 'draft');
       }
       await refreshEvent(saved);
-      setNotice('Borrador guardado. No aparece en la agenda pública.');
+      setNotice(
+        saved.publishedRevisionAt
+          ? 'Borrador guardado. La versión pública anterior sigue activa.'
+          : 'Borrador guardado. No aparece en la agenda pública.',
+      );
     } catch (cause) {
       setError(errorMessage(cause, 'No se pudo guardar el borrador.'));
     } finally {
@@ -330,7 +334,7 @@ export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
                           {event.capacity === null ? 'sin límite' : `${event.capacity} lugares`}
                         </small>
                       </span>
-                      <StatusChip status={event.status} />
+                      <StatusChip event={event} />
                     </button>
                   ))
                 )}
@@ -344,7 +348,7 @@ export function EventsWorkspace({ projectId }: EventsWorkspaceProps) {
                 <span>{form.id ? 'Editar evento' : 'Nueva fecha'}</span>
                 <h2>{form.title || 'Evento sin título'}</h2>
               </div>
-              {selectedEvent ? <StatusChip status={selectedEvent.status} /> : null}
+              {selectedEvent ? <StatusChip event={selectedEvent} /> : null}
             </div>
 
             <div className="lm-events-fields">
@@ -615,7 +619,7 @@ function AgendaPreview({
                 </div>
               )}
               <div>
-                <StatusChip status={active.status} />
+                <StatusChip event={active} />
                 <h3>{active.title}</h3>
                 <p>{active.summary || active.description || 'Detalles próximamente.'}</p>
                 <dl>
@@ -730,8 +734,14 @@ function DateTile({ event }: { event: EventRecord }) {
   );
 }
 
-function StatusChip({ status }: { status: EventStatus }) {
-  return <span className={`lm-events-status is-${status}`}>{STATUS_LABELS[status]}</span>;
+function StatusChip({ event }: { event: EventRecord }) {
+  const label =
+    event.publishedRevisionAt && event.hasUnpublishedChanges
+      ? 'Publicado · cambios sin publicar'
+      : event.publishedRevisionAt && event.status === 'draft'
+        ? 'Publicado · borrador activo'
+        : STATUS_LABELS[event.status];
+  return <span className={`lm-events-status is-${event.status}`}>{label}</span>;
 }
 
 function emptyForm(): EventFormState {
@@ -826,6 +836,8 @@ function previewFromForm(
     cover: existing?.cover ?? null,
     coverUrl: existing?.coverUrl ?? null,
     publishedAt: existing?.publishedAt ?? null,
+    publishedRevisionAt: existing?.publishedRevisionAt ?? null,
+    hasUnpublishedChanges: existing?.hasUnpublishedChanges ?? false,
     createdBy: existing?.createdBy ?? 'preview',
     updatedBy: existing?.updatedBy ?? 'preview',
     createdAt: existing?.createdAt ?? now,

@@ -136,4 +136,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
-export type { SiteDoc, SiteDocCategory, SiteDocsAdminLibrary, SiteDocVersion };
+export type {
+  SiteDoc,
+  SiteDocCategory,
+  SiteDocsAdminLibrary,
+  SiteDocVersion,
+  SiteDocWithCurrentVersion,
+};

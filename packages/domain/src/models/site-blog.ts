@@ -67,6 +67,8 @@ export interface SiteBlogArticle extends Timestamps {
   bodyHtml: string;
   status: SiteBlogArticleStatus;
   publishedAt: IsoDateTime | null;
+  publishedRevisionAt: IsoDateTime | null;
+  hasUnpublishedChanges: boolean;
 }
 
 /** Proyección HTTP con la URL pública de la portada ya resuelta. */

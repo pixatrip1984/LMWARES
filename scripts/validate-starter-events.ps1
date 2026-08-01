@@ -53,9 +53,13 @@ $adminHeaders = @{
   Origin = $AdminOrigin
   'X-Dev-Email' = $DevEmail
 }
+if (-not [string]::IsNullOrWhiteSpace($env:LMWARES_ACCESS_COOKIE)) {
+  $adminHeaders.Cookie = "CF_Authorization=$($env:LMWARES_ACCESS_COOKIE)"
+}
 $publicHeaders = @{ Origin = $PublicOrigin }
 $runId = [DateTimeOffset]::UtcNow.ToString('yyyyMMddHHmmssfff')
 $eventSlug = "starter-events-e2e-$runId"
+$revisedSlug = "$eventSlug-revision"
 $firstEmail = "events-e2e-$runId-first@example.com"
 $replacementEmail = "events-e2e-$runId-replacement@example.com"
 $start = [DateTimeOffset]::UtcNow.AddDays(30)
@@ -91,6 +95,48 @@ $publishResponse = Invoke-ApiRequest PATCH "$eventAdminUrl/status" $adminHeaders
   status = 'published'
 }
 Assert-Status $publishResponse 200 'Publish event'
+
+Write-Host 'Saving an isolated revision over the public event...'
+$draftPayload = $eventPayload.Clone()
+$draftPayload.slug = $revisedSlug
+$draftPayload.title = 'Evento revisado todavía en borrador'
+$draftPayload.venueName = 'Ubicación todavía privada'
+$updateDraftResponse = Invoke-ApiRequest PATCH $eventAdminUrl $adminHeaders $draftPayload
+Assert-Status $updateDraftResponse 200 'Update event draft fields'
+$saveDraftResponse = Invoke-ApiRequest PATCH "$eventAdminUrl/status" $adminHeaders @{
+  status = 'draft'
+}
+Assert-Status $saveDraftResponse 200 'Save event draft'
+$savedDraft = Read-Json $saveDraftResponse
+if (-not $savedDraft.hasUnpublishedChanges -or [string]::IsNullOrWhiteSpace($savedDraft.publishedRevisionAt)) {
+  throw 'The admin did not preserve or identify the public event revision.'
+}
+
+$unchangedEventResponse = Invoke-ApiRequest GET "$PublicApiUrl/sites/$ProjectId/events/$eventId" $publicHeaders
+Assert-Status $unchangedEventResponse 200 'Read unchanged event publication'
+$unchangedEvent = (Read-Json $unchangedEventResponse).event
+if ($unchangedEvent.title -ne 'Validación E2E de Eventos Starter' -or
+    $unchangedEvent.slug -ne $eventSlug -or
+    $unchangedEvent.venueName -ne 'LMWares Lab') {
+  throw 'Draft event fields leaked into the public snapshot.'
+}
+
+$republishResponse = Invoke-ApiRequest PATCH "$eventAdminUrl/status" $adminHeaders @{
+  status = 'published'
+}
+Assert-Status $republishResponse 200 'Publish revised event'
+$republishedEvent = Read-Json $republishResponse
+if ($republishedEvent.hasUnpublishedChanges) {
+  throw 'The republished event is still marked with unpublished changes.'
+}
+$revisedEventResponse = Invoke-ApiRequest GET "$PublicApiUrl/sites/$ProjectId/events/$eventId" $publicHeaders
+Assert-Status $revisedEventResponse 200 'Read revised event publication'
+$revisedEvent = (Read-Json $revisedEventResponse).event
+if ($revisedEvent.title -ne 'Evento revisado todavía en borrador' -or
+    $revisedEvent.slug -ne $revisedSlug -or
+    $revisedEvent.venueName -ne 'Ubicación todavía privada') {
+  throw 'The revised event fields were not published.'
+}
 
 Write-Host 'Checking first registration and email deduplication...'
 $firstResponse = Invoke-ApiRequest POST $registrationUrl $publicHeaders @{
@@ -195,5 +241,5 @@ Assert-Status $closedRegistrationResponse 409 'Block registration on cancelled e
 Write-Host ''
 Write-Host 'Starter Events validation passed.' -ForegroundColor Green
 Write-Host "Event ID : $eventId"
-Write-Host "Slug     : $eventSlug"
-Write-Host 'Verified : publish, duplicate email, concurrent final spot, cancellation, slot reuse, capacity guard, event closure'
+Write-Host "Slug     : $revisedSlug"
+Write-Host 'Verified : immutable draft revision, republish, duplicate email, concurrent final spot, cancellation, slot reuse, capacity guard, event closure'

@@ -240,13 +240,21 @@ export function BlogWorkspace({ projectId }: BlogWorkspaceProps) {
     setNotice(null);
     try {
       const payload: CreateSiteBlogArticleInput = { ...draft, status };
+      const initialPayload: CreateSiteBlogArticleInput =
+        coverFile && status === 'published' ? { ...payload, status: 'draft' } : payload;
       let saved =
         selected && persistedSlug
-          ? await blogApi.update(projectId, persistedSlug, payload)
-          : await blogApi.create(projectId, payload);
+          ? await blogApi.update(projectId, persistedSlug, initialPayload)
+          : await blogApi.create(projectId, initialPayload);
 
       if (coverFile) {
         saved = await blogApi.uploadCover(projectId, saved.slug, coverFile);
+        if (status === 'published') {
+          saved = await blogApi.update(projectId, saved.slug, {
+            ...payload,
+            coverImageId: saved.coverImageId,
+          });
+        }
       }
 
       const nextItems = await loadArticles();
@@ -258,7 +266,9 @@ export function BlogWorkspace({ projectId }: BlogWorkspaceProps) {
           ? 'Artículo publicado.'
           : status === 'archived'
             ? 'Artículo archivado.'
-            : 'Borrador guardado.',
+            : canonical.publishedRevisionAt
+              ? 'Borrador guardado. La versión pública anterior sigue activa.'
+              : 'Borrador guardado.',
       );
     } catch (cause) {
       setError(readError(cause, 'No se pudo guardar el artículo.'));
@@ -304,8 +314,8 @@ export function BlogWorkspace({ projectId }: BlogWorkspaceProps) {
         <div className="lmw-blog-preview-pane">
           <div className="lmw-blog-pane-heading">
             <div>
-              <span>Vista pública</span>
-              <strong>Actualiza sólo al previsualizar o guardar</strong>
+              <span>Previsualización del borrador</span>
+              <strong>El sitio público cambia únicamente al publicar</strong>
             </div>
             <span className={`lmw-blog-status is-${preview.status}`}>
               {statusLabel(preview.status)}
@@ -329,7 +339,7 @@ export function BlogWorkspace({ projectId }: BlogWorkspaceProps) {
                 <option value="">{loading ? 'Cargando…' : 'Nuevo artículo'}</option>
                 {articles.map((article) => (
                   <option key={article.id} value={article.id}>
-                    {article.title} · {statusLabel(article.status)}
+                    {article.title} · {articleStatusLabel(article)}
                   </option>
                 ))}
               </select>
@@ -860,6 +870,16 @@ function statusLabel(status: SiteBlogArticleStatus): string {
   if (status === 'published') return 'Publicado';
   if (status === 'archived') return 'Archivado';
   return 'Borrador';
+}
+
+function articleStatusLabel(article: SiteBlogArticleView): string {
+  if (article.publishedRevisionAt && article.hasUnpublishedChanges) {
+    return 'Publicado · cambios sin publicar';
+  }
+  if (article.publishedRevisionAt && article.status === 'draft') {
+    return 'Publicado · borrador activo';
+  }
+  return statusLabel(article.status);
 }
 
 function formatDate(value: string): string {

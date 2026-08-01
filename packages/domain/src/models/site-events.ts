@@ -33,6 +33,8 @@ export interface SiteEvent extends Timestamps {
   coverAssetId: Id | null;
   cover: SiteEventCoverAsset | null;
   publishedAt: IsoDateTime | null;
+  publishedRevisionAt: IsoDateTime | null;
+  hasUnpublishedChanges: boolean;
   createdBy: string;
   updatedBy: string;
 }

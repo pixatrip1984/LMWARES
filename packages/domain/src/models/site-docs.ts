@@ -117,6 +117,8 @@ export interface SiteDoc {
   sortOrder: number;
   createdBy: string;
   publishedAt: IsoDateTime | null;
+  publishedRevisionAt: IsoDateTime | null;
+  hasUnpublishedChanges: boolean;
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
 }
@@ -130,6 +132,7 @@ export interface SiteDocsAdminLibrary {
   projectId: string;
   categories: SiteDocCategory[];
   documents: SiteDocWithCurrentVersion[];
+  publishedDocuments: SiteDocWithCurrentVersion[];
 }
 
 export interface SiteDocPublicItem {

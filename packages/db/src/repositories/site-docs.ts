@@ -91,6 +91,8 @@ interface SiteDoc {
   sortOrder: number;
   createdBy: string;
   publishedAt: string | null;
+  publishedRevisionAt: string | null;
+  hasUnpublishedChanges: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +106,7 @@ interface SiteDocsAdminLibrary {
   projectId: string;
   categories: SiteDocCategory[];
   documents: SiteDocWithCurrentVersion[];
+  publishedDocuments: SiteDocWithCurrentVersion[];
 }
 
 interface SiteDocCategoryRow {
@@ -132,6 +135,8 @@ interface SiteDocRow {
   sort_order: number;
   created_by: string;
   published_at: string | null;
+  published_revision_at: string | null;
+  has_unpublished_changes: number;
   created_at: string;
   updated_at: string;
 }
@@ -278,11 +283,17 @@ export class SiteDocsRepository {
 
   async listAdminLibrary(projectId: string): Promise<SiteDocsAdminLibrary> {
     await this.assertProject(projectId);
-    const [categories, documents] = await Promise.all([
+    const [categories, documents, publishedFiles] = await Promise.all([
       this.listCategories(projectId),
       this.listDocuments(projectId),
+      this.listPublished(projectId),
     ]);
-    return { projectId, categories, documents };
+    return {
+      projectId,
+      categories,
+      documents,
+      publishedDocuments: publishedFiles.map((record) => record.document),
+    };
   }
 
   async listCategories(projectId: string): Promise<SiteDocCategory[]> {
@@ -609,6 +620,8 @@ export class SiteDocsRepository {
     if (
       !version ||
       !version.fileAssetId ||
+      !version.extension ||
+      !version.detectedMime ||
       (version.status !== 'clean' && version.status !== 'published')
     ) {
       throw new AppError(
@@ -632,6 +645,64 @@ export class SiteDocsRepository {
            WHERE id = ? AND project_id = ? AND current_version_id = ?`,
         )
         .bind(now, now, documentId, projectId, version.id),
+      this.db
+        .prepare(
+          `INSERT INTO lmwares_doc_publications (
+             document_id, project_id,
+             category_id, category_name, category_slug, category_description, category_sort_order,
+             title, description, access_level, download_enabled, metadata, sort_order,
+             document_created_at, version_id, version_number, file_asset_id, original_name,
+             extension, declared_mime, detected_mime, size_bytes, published_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(document_id) DO UPDATE SET
+             project_id = excluded.project_id,
+             category_id = excluded.category_id,
+             category_name = excluded.category_name,
+             category_slug = excluded.category_slug,
+             category_description = excluded.category_description,
+             category_sort_order = excluded.category_sort_order,
+             title = excluded.title,
+             description = excluded.description,
+             access_level = excluded.access_level,
+             download_enabled = excluded.download_enabled,
+             metadata = excluded.metadata,
+             sort_order = excluded.sort_order,
+             document_created_at = excluded.document_created_at,
+             version_id = excluded.version_id,
+             version_number = excluded.version_number,
+             file_asset_id = excluded.file_asset_id,
+             original_name = excluded.original_name,
+             extension = excluded.extension,
+             declared_mime = excluded.declared_mime,
+             detected_mime = excluded.detected_mime,
+             size_bytes = excluded.size_bytes,
+             published_at = excluded.published_at`,
+        )
+        .bind(
+          document.id,
+          projectId,
+          nullable(document.category?.id),
+          nullable(document.category?.name),
+          nullable(document.category?.slug),
+          nullable(document.category?.description),
+          document.category?.sortOrder ?? null,
+          document.title,
+          nullable(document.description),
+          document.accessLevel,
+          boolToDb(document.downloadEnabled),
+          JSON.stringify(document.metadata),
+          document.sortOrder,
+          document.createdAt,
+          version.id,
+          version.version,
+          version.fileAssetId,
+          version.originalName,
+          version.extension,
+          nullable(version.declaredMime),
+          version.detectedMime,
+          version.sizeBytes,
+          now,
+        ),
     ]);
     return (await this.getDocument(projectId, documentId))!;
   }
@@ -652,9 +723,14 @@ export class SiteDocsRepository {
         .prepare(
           `UPDATE lmwares_doc_versions
            SET status = 'clean', published_at = NULL
-           WHERE id = ? AND document_id = ?`,
+           WHERE id = (
+             SELECT version_id FROM lmwares_doc_publications WHERE document_id = ?
+           ) AND document_id = ?`,
         )
-        .bind(version.id, documentId),
+        .bind(documentId, documentId),
+      this.db
+        .prepare(`DELETE FROM lmwares_doc_publications WHERE document_id = ?`)
+        .bind(documentId),
       this.db
         .prepare(
           `UPDATE lmwares_docs
@@ -728,13 +804,12 @@ export class SiteDocsRepository {
   async listPublished(projectId: string): Promise<SiteDocStoredFile[]> {
     const { results } = await this.db
       .prepare(
-        `${storedFileJoinSql()}
-         WHERE d.project_id = ?
-           AND d.status = 'published'
-           AND d.access_level = 'public'
-           AND d.download_enabled = 1
-           AND v.status = 'published'
-         ORDER BY COALESCE(c.sort_order, 2147483647), c.name, d.sort_order, d.title`,
+        `${publishedStoredFileJoinSql()}
+         WHERE publication.project_id = ?
+           AND publication.access_level = 'public'
+           AND publication.download_enabled = 1
+         ORDER BY COALESCE(publication.category_sort_order, 2147483647),
+           publication.category_name, publication.sort_order, publication.title`,
       )
       .bind(projectId)
       .all<StoredFileRow>();
@@ -744,12 +819,10 @@ export class SiteDocsRepository {
   async getPublishedFile(projectId: string, documentId: string): Promise<SiteDocStoredFile | null> {
     const row = await this.db
       .prepare(
-        `${storedFileJoinSql()}
-         WHERE d.project_id = ? AND d.id = ?
-           AND d.status = 'published'
-           AND d.access_level = 'public'
-           AND d.download_enabled = 1
-           AND v.status = 'published'`,
+        `${publishedStoredFileJoinSql()}
+         WHERE publication.project_id = ? AND publication.document_id = ?
+           AND publication.access_level = 'public'
+           AND publication.download_enabled = 1`,
       )
       .bind(projectId, documentId)
       .first<StoredFileRow>();
@@ -828,10 +901,28 @@ function documentJoinSql(): string {
       v.created_by AS version_created_by,
       v.created_at AS version_created_at,
       v.scanned_at AS version_scanned_at,
-      v.published_at AS version_published_at
+      v.published_at AS version_published_at,
+      publication.published_at AS published_revision_at,
+      CASE
+        WHEN publication.document_id IS NULL THEN 0
+        WHEN COALESCE(publication.category_id, '') <> COALESCE(d.category_id, '')
+          OR COALESCE(publication.category_name, '') <> COALESCE(c.name, '')
+          OR COALESCE(publication.category_slug, '') <> COALESCE(c.slug, '')
+          OR COALESCE(publication.category_description, '') <> COALESCE(c.description, '')
+          OR COALESCE(publication.category_sort_order, 0) <> COALESCE(c.sort_order, 0)
+          OR publication.title <> d.title
+          OR COALESCE(publication.description, '') <> COALESCE(d.description, '')
+          OR publication.access_level <> d.access_level
+          OR publication.download_enabled <> d.download_enabled
+          OR publication.metadata <> d.metadata
+          OR publication.sort_order <> d.sort_order
+          OR publication.version_id <> COALESCE(d.current_version_id, '')
+        THEN 1 ELSE 0
+      END AS has_unpublished_changes
     FROM lmwares_docs d
     LEFT JOIN lmwares_doc_categories c ON c.id = d.category_id
-    LEFT JOIN lmwares_doc_versions v ON v.id = d.current_version_id`;
+    LEFT JOIN lmwares_doc_versions v ON v.id = d.current_version_id
+    LEFT JOIN lmwares_doc_publications publication ON publication.document_id = d.id`;
 }
 
 function storedFileJoinSql(): string {
@@ -843,6 +934,61 @@ function storedFileJoinSql(): string {
       fa.size_bytes AS storage_size_bytes,`,
   )}
     INNER JOIN file_assets fa ON fa.id = v.file_asset_id`;
+}
+
+function publishedStoredFileJoinSql(): string {
+  return `
+    SELECT
+      fa.key AS storage_key,
+      fa.content_type AS storage_content_type,
+      fa.size_bytes AS storage_size_bytes,
+      publication.document_id AS id,
+      publication.project_id,
+      publication.category_id,
+      publication.title,
+      publication.description,
+      'published' AS status,
+      publication.access_level,
+      publication.download_enabled,
+      publication.version_id AS current_version_id,
+      publication.metadata,
+      publication.sort_order,
+      d.created_by,
+      publication.published_at,
+      publication.published_at AS published_revision_at,
+      0 AS has_unpublished_changes,
+      publication.document_created_at AS created_at,
+      publication.published_at AS updated_at,
+      publication.category_id AS category_join_id,
+      publication.project_id AS category_project_id,
+      publication.category_name,
+      publication.category_slug,
+      publication.category_description,
+      publication.category_sort_order,
+      d.created_by AS category_created_by,
+      publication.document_created_at AS category_created_at,
+      publication.published_at AS category_updated_at,
+      publication.version_id AS version_join_id,
+      publication.document_id AS version_document_id,
+      publication.version_number,
+      publication.file_asset_id AS version_file_asset_id,
+      publication.original_name AS version_original_name,
+      publication.extension AS version_extension,
+      publication.declared_mime AS version_declared_mime,
+      publication.detected_mime AS version_detected_mime,
+      publication.size_bytes AS version_size_bytes,
+      'published' AS version_status,
+      v.validation AS version_validation,
+      NULL AS version_rejection_code,
+      NULL AS version_rejection_reason,
+      v.created_by AS version_created_by,
+      v.created_at AS version_created_at,
+      v.scanned_at AS version_scanned_at,
+      publication.published_at AS version_published_at
+    FROM lmwares_doc_publications publication
+    INNER JOIN lmwares_docs d ON d.id = publication.document_id
+    INNER JOIN lmwares_doc_versions v ON v.id = publication.version_id
+    INNER JOIN file_assets fa ON fa.id = publication.file_asset_id`;
 }
 
 function mapCategory(row: SiteDocCategoryRow): SiteDocCategory {
@@ -874,6 +1020,8 @@ function mapDocument(row: SiteDocRow): SiteDoc {
     sortOrder: row.sort_order,
     createdBy: row.created_by,
     publishedAt: row.published_at,
+    publishedRevisionAt: row.published_revision_at ?? null,
+    hasUnpublishedChanges: row.has_unpublished_changes === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

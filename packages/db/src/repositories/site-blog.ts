@@ -25,6 +25,8 @@ export interface SiteBlogArticleRecord {
   bodyHtml: string;
   status: SiteBlogStatus;
   publishedAt: string | null;
+  publishedRevisionAt: string | null;
+  hasUnpublishedChanges: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -99,15 +101,55 @@ interface SiteBlogArticleRow {
   updated_at: string;
   cover_key: string | null;
   cover_content_type: string | null;
+  published_revision_at: string | null;
+  has_unpublished_changes: number;
 }
 
 const ARTICLE_SELECT = `
   SELECT
     article.*,
     cover.key AS cover_key,
-    cover.content_type AS cover_content_type
+    cover.content_type AS cover_content_type,
+    publication.published_at AS published_revision_at,
+    CASE
+      WHEN publication.article_id IS NULL THEN 0
+      WHEN publication.slug <> article.slug
+        OR publication.title <> article.title
+        OR COALESCE(publication.summary, '') <> COALESCE(article.summary, '')
+        OR COALESCE(publication.cover_image_id, '') <> COALESCE(article.cover_image_id, '')
+        OR publication.category <> article.category
+        OR publication.body_format <> article.body_format
+        OR publication.body_json <> article.body_json
+        OR publication.body_html <> article.body_html
+      THEN 1 ELSE 0
+    END AS has_unpublished_changes
   FROM lmwares_site_blog_articles article
   LEFT JOIN file_assets cover ON cover.id = article.cover_image_id
+  LEFT JOIN lmwares_site_blog_publications publication ON publication.article_id = article.id
+`;
+
+const PUBLIC_ARTICLE_SELECT = `
+  SELECT
+    publication.article_id AS id,
+    publication.project_id,
+    publication.slug,
+    publication.title,
+    publication.summary,
+    publication.cover_image_id,
+    publication.category,
+    publication.body_format,
+    publication.body_json,
+    publication.body_html,
+    'published' AS status,
+    publication.published_at,
+    publication.article_created_at AS created_at,
+    publication.published_at AS updated_at,
+    cover.key AS cover_key,
+    cover.content_type AS cover_content_type,
+    publication.published_at AS published_revision_at,
+    0 AS has_unpublished_changes
+  FROM lmwares_site_blog_publications publication
+  LEFT JOIN file_assets cover ON cover.id = publication.cover_image_id
 `;
 
 export class SiteBlogRepository {
@@ -142,16 +184,18 @@ export class SiteBlogRepository {
       category?: string;
     },
   ): Promise<SiteBlogArticlePageRecord> {
-    const clauses = [`article.project_id = ?`, `article.status = 'published'`];
+    const clauses = [`publication.project_id = ?`];
     const params: unknown[] = [projectId];
 
     if (query.q) {
       const pattern = `%${escapeLike(query.q)}%`;
-      clauses.push(`(article.title LIKE ? ESCAPE '\\' OR article.summary LIKE ? ESCAPE '\\')`);
+      clauses.push(
+        `(publication.title LIKE ? ESCAPE '\\' OR publication.summary LIKE ? ESCAPE '\\')`,
+      );
       params.push(pattern, pattern);
     }
     if (query.category) {
-      clauses.push(`article.category = ?`);
+      clauses.push(`publication.category = ?`);
       params.push(query.category);
     }
 
@@ -159,7 +203,7 @@ export class SiteBlogRepository {
     const count = await this.db
       .prepare(
         `SELECT COUNT(*) AS count
-         FROM lmwares_site_blog_articles article
+         FROM lmwares_site_blog_publications publication
          WHERE ${where}`,
       )
       .bind(...params)
@@ -168,9 +212,9 @@ export class SiteBlogRepository {
 
     const { results } = await this.db
       .prepare(
-        `${ARTICLE_SELECT}
+        `${PUBLIC_ARTICLE_SELECT}
          WHERE ${where}
-         ORDER BY article.published_at DESC, article.created_at DESC
+         ORDER BY publication.published_at DESC, publication.article_created_at DESC
          LIMIT ? OFFSET ?`,
       )
       .bind(...params, query.pageSize, (query.page - 1) * query.pageSize)
@@ -199,9 +243,8 @@ export class SiteBlogRepository {
   async getPublishedBySlug(projectId: string, slug: string): Promise<SiteBlogArticleRecord | null> {
     const row = await this.db
       .prepare(
-        `${ARTICLE_SELECT}
-         WHERE article.project_id = ? AND article.slug = ?
-           AND article.status = 'published'`,
+        `${PUBLIC_ARTICLE_SELECT}
+         WHERE publication.project_id = ? AND publication.slug = ?`,
       )
       .bind(projectId, slug)
       .first<SiteBlogArticleRow>();
@@ -213,7 +256,7 @@ export class SiteBlogRepository {
     const now = nowIso();
     const publishedAt = data.status === 'published' ? now : null;
 
-    await this.db.batch([
+    const statements: D1PreparedStatement[] = [
       this.db
         .prepare(
           `INSERT INTO lmwares_site_blog_articles (
@@ -245,7 +288,25 @@ export class SiteBlogRepository {
         reason: 'Creación del artículo.',
         createdAt: now,
       }),
-    ]);
+    ];
+    if (data.status === 'published') {
+      statements.push(
+        publicationUpsertStatement(this.db, {
+          articleId: id,
+          projectId: data.projectId,
+          slug: data.slug,
+          title: data.title,
+          summary: data.summary,
+          coverImageId: data.coverImageId,
+          category: data.category,
+          body: data.body,
+          bodyHtml: data.bodyHtml,
+          articleCreatedAt: now,
+          publishedAt: now,
+        }),
+      );
+    }
+    await this.db.batch(statements);
 
     const created = await this.getBySlug(data.projectId, data.slug);
     if (!created) throw new Error('No se pudo leer el artículo recién creado.');
@@ -309,6 +370,30 @@ export class SiteBlogRepository {
           reason: patch.statusReason ?? null,
           createdAt: now,
         }),
+      );
+    }
+
+    if (next.status === 'published') {
+      statements.push(
+        publicationUpsertStatement(this.db, {
+          articleId: existing.id,
+          projectId,
+          slug: next.slug,
+          title: next.title,
+          summary: next.summary,
+          coverImageId: next.coverImageId,
+          category: next.category,
+          body: next.body,
+          bodyHtml: next.bodyHtml,
+          articleCreatedAt: existing.createdAt,
+          publishedAt: now,
+        }),
+      );
+    } else if (next.status === 'archived') {
+      statements.push(
+        this.db
+          .prepare(`DELETE FROM lmwares_site_blog_publications WHERE article_id = ?`)
+          .bind(existing.id),
       );
     }
 
@@ -397,6 +482,57 @@ export class SiteBlogRepository {
   }
 }
 
+function publicationUpsertStatement(
+  db: D1Database,
+  data: {
+    articleId: string;
+    projectId: string;
+    slug: string;
+    title: string;
+    summary: string | null;
+    coverImageId: string | null;
+    category: string;
+    body: SiteBlogStoredBody;
+    bodyHtml: string;
+    articleCreatedAt: string;
+    publishedAt: string;
+  },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO lmwares_site_blog_publications (
+         article_id, project_id, slug, title, summary, cover_image_id, category,
+         body_format, body_json, body_html, article_created_at, published_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(article_id) DO UPDATE SET
+         project_id = excluded.project_id,
+         slug = excluded.slug,
+         title = excluded.title,
+         summary = excluded.summary,
+         cover_image_id = excluded.cover_image_id,
+         category = excluded.category,
+         body_format = excluded.body_format,
+         body_json = excluded.body_json,
+         body_html = excluded.body_html,
+         article_created_at = excluded.article_created_at,
+         published_at = excluded.published_at`,
+    )
+    .bind(
+      data.articleId,
+      data.projectId,
+      data.slug,
+      data.title,
+      nullable(data.summary),
+      nullable(data.coverImageId),
+      data.category,
+      data.body.format,
+      JSON.stringify(data.body),
+      data.bodyHtml,
+      data.articleCreatedAt,
+      data.publishedAt,
+    );
+}
+
 function statusHistoryStatement(
   db: D1Database,
   data: {
@@ -453,6 +589,8 @@ function mapSiteBlogArticle(row: SiteBlogArticleRow): SiteBlogArticleRecord {
     bodyHtml: row.body_html,
     status: row.status as SiteBlogStatus,
     publishedAt: row.published_at,
+    publishedRevisionAt: row.published_revision_at,
+    hasUnpublishedChanges: row.has_unpublished_changes === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

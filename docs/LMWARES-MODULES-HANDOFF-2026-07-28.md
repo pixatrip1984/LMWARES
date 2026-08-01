@@ -112,6 +112,40 @@ Continúa pendiente únicamente ejecutar el ciclo remoto autenticado desde una
 sesión autorizada por Cloudflare Access; la frontera anónima debe permanecer
 cerrada.
 
+### Cierre del contrato de revisiones Starter: 2026-08-01
+
+La auditoría posterior encontró que Formularios y Galerías ya conservaban una
+revisión pública independiente, pero Blog, Docs y Eventos aún exponían la fila
+editable. Se corrigió con snapshots públicos explícitos:
+
+- `0019_lmwares_blog_publications.sql` preserva slug, portada y contenido del
+  artículo publicado mientras se edita el siguiente borrador;
+- `0020_lmwares_docs_publications.sql` congela metadatos, categoría, versión y
+  archivo; cargar una versión nueva ya no retira ni reemplaza el documento
+  público hasta volver a publicar;
+- `0021_lmwares_event_publications.sql` congela datos, fechas, sede y cupo. Las
+  inscripciones y restauraciones consultan la revisión pública, no el borrador;
+- cancelar, completar, archivar o despublicar continúan siendo acciones
+  operacionales explícitas y actualizan o retiran la revisión pública;
+- el panel identifica `Publicado · cambios sin publicar` y Docs usa el snapshot
+  exacto en su columna de vista pública.
+
+La compuerta `scripts/validate-starter-modules.ps1` ejecuta los cinco
+validadores y pasó localmente. Cubre aislamiento y republicación de Blog,
+Galerías y Docs; revisiones y snapshots de solicitudes en Formularios; y, en
+Eventos, aislamiento más la carrera concurrente por el último cupo.
+
+Las migraciones `0019`–`0021` se aplicaron en D1 remoto sin pendientes. Quedaron
+desplegadas las versiones:
+
+- Public API `c699bf5b-9415-4709-93e8-49d9bb1496f9`;
+- Admin API `bc9daef0-b070-4b99-9953-11e07e13cb90`;
+- Admin Pages `c79a4d8c.lmwares-admin.pages.dev`.
+
+La prueba anónima continúa redirigiendo a Cloudflare Access. El proyecto local
+`astraeus` no existe en producción; se debe crear o seleccionar un proyecto
+desde una sesión Access antes de ejecutar la compuerta remota.
+
 ## 1. Resumen ejecutivo
 
 Se implementaron cinco verticales iniciales de módulos LMWares:

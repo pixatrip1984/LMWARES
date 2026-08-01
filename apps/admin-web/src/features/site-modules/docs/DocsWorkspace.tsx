@@ -4,6 +4,7 @@ import {
   type SiteDocDraft,
   type SiteDocsAdminLibrary,
   type SiteDocVersion,
+  type SiteDocWithCurrentVersion,
 } from './docsApi';
 import './docsWorkspace.css';
 
@@ -54,7 +55,7 @@ export function DocsWorkspace({ projectId }: DocsWorkspaceProps) {
   const selected = library?.documents.find((document) => document.id === selectedId) ?? null;
   const publicDocuments = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('es-MX');
-    return (library?.documents ?? []).filter(
+    return (library?.publishedDocuments ?? []).filter(
       (document) =>
         document.status === 'published' &&
         document.accessLevel === 'public' &&
@@ -127,7 +128,9 @@ export function DocsWorkspace({ projectId }: DocsWorkspaceProps) {
         if (fileRef.current) fileRef.current.value = '';
       },
       selected
-        ? 'Nueva versión validada; publícala cuando esté lista.'
+        ? selected.publishedRevisionAt
+          ? 'Nueva versión validada. La versión pública anterior sigue activa.'
+          : 'Nueva versión validada; publícala cuando esté lista.'
         : 'Archivo validado y guardado como clean.',
     );
   }
@@ -136,7 +139,10 @@ export function DocsWorkspace({ projectId }: DocsWorkspaceProps) {
     if (!selected) return;
     await run(async () => {
       await docsApi.updateDocument(projectId, selected.id, draft);
-    }, 'Metadatos y permisos guardados.');
+    },
+    selected.publishedRevisionAt
+      ? 'Borrador guardado. La versión pública anterior sigue activa.'
+      : 'Metadatos y permisos guardados.');
   }
 
   async function publish() {
@@ -278,7 +284,7 @@ export function DocsWorkspace({ projectId }: DocsWorkspaceProps) {
                 <option value="">Nuevo documento</option>
                 {(library?.documents ?? []).map((document) => (
                   <option value={document.id} key={document.id}>
-                    {document.title} · {statusLabel(document.status)}
+                    {document.title} · {documentStatusLabel(document)}
                   </option>
                 ))}
               </select>
@@ -290,7 +296,7 @@ export function DocsWorkspace({ projectId }: DocsWorkspaceProps) {
 
           <div className="lmw-docs-admin__status">
             <span className={`is-${selected?.status ?? 'uploading'}`}>
-              {statusLabel(selected?.status ?? 'uploading')}
+              {selected ? documentStatusLabel(selected) : statusLabel('uploading')}
             </span>
             <small>AV profundo fuera del Worker/MVP</small>
           </div>
@@ -434,6 +440,16 @@ function statusLabel(status: string) {
     published: 'Publicado',
   };
   return labels[status] ?? status;
+}
+
+function documentStatusLabel(document: SiteDocWithCurrentVersion): string {
+  if (document.publishedRevisionAt && document.hasUnpublishedChanges) {
+    return 'Publicado · cambios sin publicar';
+  }
+  if (document.publishedRevisionAt && document.status !== 'published') {
+    return 'Publicado · borrador activo';
+  }
+  return statusLabel(document.status);
 }
 
 function slugify(value: string) {

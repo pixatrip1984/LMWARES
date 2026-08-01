@@ -23,6 +23,8 @@ export interface EventRecord {
   cover: { id: string; key: string; contentType: string } | null;
   coverUrl: string | null;
   publishedAt: string | null;
+  publishedRevisionAt: string | null;
+  hasUnpublishedChanges: boolean;
   createdBy: string;
   updatedBy: string;
   createdAt: string;

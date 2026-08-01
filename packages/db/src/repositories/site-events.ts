@@ -1,4 +1,4 @@
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import type {
   SiteEvent,
   SiteEventRegistration,
@@ -32,6 +32,8 @@ interface SiteEventRow {
   cover_asset_key: string | null;
   cover_asset_content_type: string | null;
   registration_count: number;
+  published_revision_at: string | null;
+  has_unpublished_changes: number;
 }
 
 interface SiteEventRegistrationRow {
@@ -113,10 +115,63 @@ const EVENT_SELECT = `
     fa.key AS cover_asset_key,
     fa.content_type AS cover_asset_content_type,
     COALESCE(SUM(CASE WHEN r.status = 'confirmed' THEN 1 ELSE 0 END), 0)
-      AS registration_count
+      AS registration_count,
+    publication.published_at AS published_revision_at,
+    CASE
+      WHEN publication.event_id IS NULL THEN 0
+      WHEN publication.slug <> e.slug
+        OR publication.title <> e.title
+        OR COALESCE(publication.summary, '') <> COALESCE(e.summary, '')
+        OR COALESCE(publication.description, '') <> COALESCE(e.description, '')
+        OR COALESCE(publication.venue_name, '') <> COALESCE(e.venue_name, '')
+        OR COALESCE(publication.venue_address, '') <> COALESCE(e.venue_address, '')
+        OR publication.timezone <> e.timezone
+        OR publication.starts_at_utc <> e.starts_at_utc
+        OR publication.ends_at_utc <> e.ends_at_utc
+        OR COALESCE(publication.registration_closes_at_utc, '') <>
+           COALESCE(e.registration_closes_at_utc, '')
+        OR COALESCE(publication.capacity, -1) <> COALESCE(e.capacity, -1)
+        OR COALESCE(publication.cover_asset_id, '') <> COALESCE(e.cover_asset_id, '')
+      THEN 1 ELSE 0
+    END AS has_unpublished_changes
   FROM lmwares_events e
   LEFT JOIN file_assets fa ON fa.id = e.cover_asset_id
   LEFT JOIN lmwares_event_registrations r ON r.event_id = e.id
+  LEFT JOIN lmwares_event_publications publication ON publication.event_id = e.id
+`;
+
+const PUBLIC_EVENT_SELECT = `
+  SELECT
+    publication.event_id AS id,
+    publication.project_id,
+    publication.slug,
+    publication.title,
+    publication.summary,
+    publication.description,
+    publication.venue_name,
+    publication.venue_address,
+    publication.timezone,
+    publication.starts_at_utc,
+    publication.ends_at_utc,
+    publication.registration_closes_at_utc,
+    publication.capacity,
+    publication.status,
+    publication.cover_asset_id,
+    publication.published_at,
+    e.created_by,
+    e.updated_by,
+    publication.event_created_at AS created_at,
+    publication.published_at AS updated_at,
+    fa.key AS cover_asset_key,
+    fa.content_type AS cover_asset_content_type,
+    COALESCE(SUM(CASE WHEN r.status = 'confirmed' THEN 1 ELSE 0 END), 0)
+      AS registration_count,
+    publication.published_at AS published_revision_at,
+    0 AS has_unpublished_changes
+  FROM lmwares_event_publications publication
+  INNER JOIN lmwares_events e ON e.id = publication.event_id
+  LEFT JOIN file_assets fa ON fa.id = publication.cover_asset_id
+  LEFT JOIN lmwares_event_registrations r ON r.event_id = publication.event_id
 `;
 
 export class SiteEventsRepository {
@@ -156,13 +211,13 @@ export class SiteEventsRepository {
     const now = nowIso();
     const { results } = await this.db
       .prepare(
-        `${EVENT_SELECT}
-         WHERE e.project_id = ? AND e.status IN ('published', 'cancelled', 'completed')
-         GROUP BY e.id
+        `${PUBLIC_EVENT_SELECT}
+         WHERE publication.project_id = ?
+         GROUP BY publication.event_id
          ORDER BY
-           CASE WHEN e.ends_at_utc >= ? THEN 0 ELSE 1 END,
-           CASE WHEN e.ends_at_utc >= ? THEN e.starts_at_utc END ASC,
-           CASE WHEN e.ends_at_utc < ? THEN e.starts_at_utc END DESC`,
+           CASE WHEN publication.ends_at_utc >= ? THEN 0 ELSE 1 END,
+           CASE WHEN publication.ends_at_utc >= ? THEN publication.starts_at_utc END ASC,
+           CASE WHEN publication.ends_at_utc < ? THEN publication.starts_at_utc END DESC`,
       )
       .bind(projectId, now, now, now)
       .all<SiteEventRow>();
@@ -306,9 +361,11 @@ export class SiteEventsRepository {
     status: SiteEventStatus,
     actorEmail: string,
   ): Promise<SiteEventWithAvailability | null> {
+    const existing = await this.getAdminById(projectId, eventId);
+    if (!existing) return null;
     const now = nowIso();
-    const result = await this.db
-      .prepare(
+    const statements: D1PreparedStatement[] = [
+      this.db.prepare(
         `UPDATE lmwares_events SET
           status = ?,
           published_at = CASE
@@ -319,9 +376,28 @@ export class SiteEventsRepository {
           updated_at = ?
          WHERE id = ? AND project_id = ?`,
       )
-      .bind(status, status, now, actorEmail, now, eventId, projectId)
-      .run();
-    if ((result.meta.changes ?? 0) < 1) return null;
+      .bind(status, status, now, actorEmail, now, eventId, projectId),
+    ];
+    if (status === 'published') {
+      statements.push(
+        eventPublicationUpsertStatement(this.db, existing, {
+          status,
+          publishedAt: now,
+        }),
+      );
+    } else if (status === 'cancelled' || status === 'completed') {
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE lmwares_event_publications
+             SET status = ?
+             WHERE event_id = ? AND project_id = ?`,
+          )
+          .bind(status, eventId, projectId),
+      );
+    }
+    const [result] = await this.db.batch(statements);
+    if ((result?.meta.changes ?? 0) < 1) return null;
     return this.getAdminById(projectId, eventId);
   }
 
@@ -361,15 +437,16 @@ export class SiteEventsRepository {
              OR lmwares_event_registrations.status = 'confirmed'
              OR EXISTS (
                SELECT 1
-               FROM lmwares_events e
-               WHERE e.id = ?
+               FROM lmwares_event_publications publication
+               WHERE publication.event_id = ?
+                 AND publication.status = 'published'
                  AND (
-                   e.capacity IS NULL
+                   publication.capacity IS NULL
                    OR (
                      SELECT COUNT(*)
                      FROM lmwares_event_registrations current
-                     WHERE current.event_id = e.id AND current.status = 'confirmed'
-                   ) < e.capacity
+                     WHERE current.event_id = publication.event_id AND current.status = 'confirmed'
+                   ) < publication.capacity
                  )
              )
            )`,
@@ -402,29 +479,29 @@ export class SiteEventsRepository {
               id, event_id, full_name, email, email_normalized, phone, notes,
               status, created_at, updated_at
             )
-            SELECT ?1, e.id, ?4, ?5, ?6, ?7, ?8, 'confirmed', ?9, ?9
-            FROM lmwares_events e
-            WHERE e.id = ?2
-              AND e.project_id = ?3
-              AND e.status = 'published'
-              AND e.starts_at_utc > ?9
+            SELECT ?1, publication.event_id, ?4, ?5, ?6, ?7, ?8, 'confirmed', ?9, ?9
+            FROM lmwares_event_publications publication
+            WHERE publication.event_id = ?2
+              AND publication.project_id = ?3
+              AND publication.status = 'published'
+              AND publication.starts_at_utc > ?9
               AND (
-                e.registration_closes_at_utc IS NULL
-                OR e.registration_closes_at_utc > ?9
+                publication.registration_closes_at_utc IS NULL
+                OR publication.registration_closes_at_utc > ?9
               )
               AND NOT EXISTS (
                 SELECT 1
                 FROM lmwares_event_registrations duplicate
-                WHERE duplicate.event_id = e.id
+                WHERE duplicate.event_id = publication.event_id
                   AND duplicate.email_normalized = ?6
               )
               AND (
-                e.capacity IS NULL
+                publication.capacity IS NULL
                 OR (
                   SELECT COUNT(*)
                   FROM lmwares_event_registrations confirmed
-                  WHERE confirmed.event_id = e.id AND confirmed.status = 'confirmed'
-                ) < e.capacity
+                  WHERE confirmed.event_id = publication.event_id AND confirmed.status = 'confirmed'
+                ) < publication.capacity
               )
             ON CONFLICT(event_id, email_normalized) DO NOTHING`,
         )
@@ -442,23 +519,23 @@ export class SiteEventsRepository {
       this.db
         .prepare(
           `SELECT
-              e.status,
-              e.starts_at_utc,
-              e.registration_closes_at_utc,
-              e.capacity,
+              publication.status,
+              publication.starts_at_utc,
+              publication.registration_closes_at_utc,
+              publication.capacity,
               (
                 SELECT COUNT(*)
                 FROM lmwares_event_registrations confirmed
-                WHERE confirmed.event_id = e.id AND confirmed.status = 'confirmed'
+                WHERE confirmed.event_id = publication.event_id AND confirmed.status = 'confirmed'
               ) AS registration_count,
               EXISTS (
                 SELECT 1
                 FROM lmwares_event_registrations duplicate
-                WHERE duplicate.event_id = e.id
+                WHERE duplicate.event_id = publication.event_id
                   AND duplicate.email_normalized = ?
               ) AS duplicate_exists
-             FROM lmwares_events e
-             WHERE e.id = ? AND e.project_id = ?
+             FROM lmwares_event_publications publication
+             WHERE publication.event_id = ? AND publication.project_id = ?
              LIMIT 1`,
         )
         .bind(emailNormalized, data.eventId, data.projectId),
@@ -499,12 +576,13 @@ export class SiteEventsRepository {
     eventId: string,
     publicOnly: boolean,
   ): Promise<SiteEventWithAvailability | null> {
+    const select = publicOnly ? PUBLIC_EVENT_SELECT : EVENT_SELECT;
+    const alias = publicOnly ? 'publication' : 'e';
     const row = await this.db
       .prepare(
-        `${EVENT_SELECT}
-         WHERE e.project_id = ? AND e.id = ?
-           ${publicOnly ? `AND e.status IN ('published', 'cancelled', 'completed')` : ''}
-         GROUP BY e.id
+        `${select}
+         WHERE ${alias}.project_id = ? AND ${publicOnly ? `${alias}.event_id` : `${alias}.id`} = ?
+         GROUP BY ${publicOnly ? `${alias}.event_id` : `${alias}.id`}
          LIMIT 1`,
       )
       .bind(projectId, eventId)
@@ -539,6 +617,57 @@ export class SiteEventsRepository {
       .first<SiteEventRegistrationRow>();
     return row ? mapRegistration(row) : null;
   }
+}
+
+function eventPublicationUpsertStatement(
+  db: D1Database,
+  event: SiteEventWithAvailability,
+  publication: { status: Extract<SiteEventStatus, 'published'>; publishedAt: string },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO lmwares_event_publications (
+         event_id, project_id, slug, title, summary, description, venue_name, venue_address,
+         timezone, starts_at_utc, ends_at_utc, registration_closes_at_utc, capacity,
+         status, cover_asset_id, event_created_at, published_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(event_id) DO UPDATE SET
+         project_id = excluded.project_id,
+         slug = excluded.slug,
+         title = excluded.title,
+         summary = excluded.summary,
+         description = excluded.description,
+         venue_name = excluded.venue_name,
+         venue_address = excluded.venue_address,
+         timezone = excluded.timezone,
+         starts_at_utc = excluded.starts_at_utc,
+         ends_at_utc = excluded.ends_at_utc,
+         registration_closes_at_utc = excluded.registration_closes_at_utc,
+         capacity = excluded.capacity,
+         status = excluded.status,
+         cover_asset_id = excluded.cover_asset_id,
+         event_created_at = excluded.event_created_at,
+         published_at = excluded.published_at`,
+    )
+    .bind(
+      event.id,
+      event.projectId,
+      event.slug,
+      event.title,
+      nullable(event.summary),
+      nullable(event.description),
+      nullable(event.venueName),
+      nullable(event.venueAddress),
+      event.timezone,
+      event.startsAtUtc,
+      event.endsAtUtc,
+      nullable(event.registrationClosesAtUtc),
+      nullable(event.capacity),
+      publication.status,
+      nullable(event.coverAssetId),
+      event.createdAt,
+      publication.publishedAt,
+    );
 }
 
 function mapEvent(row: SiteEventRow, now: string): SiteEventWithAvailability {
@@ -576,6 +705,8 @@ function mapEvent(row: SiteEventRow, now: string): SiteEventWithAvailability {
           }
         : null,
     publishedAt: row.published_at,
+    publishedRevisionAt: row.published_revision_at,
+    hasUnpublishedChanges: row.has_unpublished_changes === 1,
     createdBy: row.created_by,
     updatedBy: row.updated_by,
     createdAt: row.created_at,

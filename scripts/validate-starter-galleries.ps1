@@ -120,6 +120,9 @@ $adminHeaders = @{
   Origin = $AdminOrigin
   'X-Dev-Email' = $DevEmail
 }
+if (-not [string]::IsNullOrWhiteSpace($env:LMWARES_ACCESS_COOKIE)) {
+  $adminHeaders.Cookie = "CF_Authorization=$($env:LMWARES_ACCESS_COOKIE)"
+}
 $publicHeaders = @{ Origin = $PublicOrigin }
 $runId = [DateTimeOffset]::UtcNow.ToString('yyyyMMddHHmmssfff')
 $originalSlug = "starter-gallery-e2e-$runId"
