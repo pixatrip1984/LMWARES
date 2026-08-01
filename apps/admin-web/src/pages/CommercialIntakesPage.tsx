@@ -100,6 +100,18 @@ export function CommercialIntakesPage() {
         setProjects(registry?.projects ?? []);
         setProjectId(result.workOrder?.projectId ?? '');
         setPublicUrl(result.workOrder?.publishedUrl ?? '');
+        const latestOffer = result.offers[0];
+        if (latestOffer) {
+          setOfferForm({
+            implementationPesos: String(latestOffer.implementationAmountCents / 100),
+            monthlyPesos: String(latestOffer.monthlyAmountCents / 100),
+            scopeSummary: latestOffer.scopeSummary,
+            implementationDescription: latestOffer.implementationDescription,
+            recurringDescription: latestOffer.recurringDescription,
+            modules: latestOffer.modules,
+            marketing: latestOffer.marketing,
+          });
+        }
       })
       .catch(() => {
         setOffers([]);
@@ -200,6 +212,27 @@ export function CommercialIntakesPage() {
       await load();
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'No se pudo emitir la oferta.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reopenImplementationPayment() {
+    if (!selected || !billingOrder) return;
+    if (!window.confirm('Se cancelará la orden pendiente y la oferta aceptada volverá a revisión. No se puede deshacer.')) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await api.reopenExpiredImplementationPayment(selected.id);
+      setItems((current) =>
+        current?.map((item) => (item.id === result.intake.id ? result.intake : item)) ?? [],
+      );
+      setOffers(result.offers);
+      setBillingOrder(result.billingOrder);
+    } catch (err) {
+      setError(err instanceof AppError ? err.message : 'No se pudo reabrir la oferta.');
     } finally {
       setSaving(false);
     }
@@ -322,6 +355,17 @@ export function CommercialIntakesPage() {
                               <b className="text-brand-700">{offer.status}</b>
                             </div>
                           ))}
+                        </div>
+                      ) : null}
+                      {offers.some((offer) => offer.status === 'accepted') && billingOrder && billingOrder.status !== 'paid' ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                          <p className="font-semibold">Cobro de implementación pendiente</p>
+                          <p className="mt-1">
+                            Si el checkout venció o el cliente necesita otro importe, cancela esta orden para emitir una nueva versión.
+                          </p>
+                          <Button className="mt-3" variant="secondary" onClick={reopenImplementationPayment} disabled={saving}>
+                            {saving ? 'Reabriendo…' : 'Cancelar cobro y reabrir oferta'}
+                          </Button>
                         </div>
                       ) : null}
                       <div className="grid gap-4 sm:grid-cols-2">

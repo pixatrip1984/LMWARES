@@ -33,6 +33,12 @@ interface BillingOrderRow {
   updated_at: string;
 }
 
+interface BillingOrderRecoveryRow extends BillingOrderRow {
+  offer_status: string;
+  intake_status: string;
+  work_order_id: string | null;
+}
+
 export interface BillingOrderReconciliationResult {
   order: BillingOrder;
   disposition: PaymentAttemptDisposition;
@@ -181,6 +187,104 @@ export class LmwaresBillingOrdersRepository {
       )
       .bind(nowIso(), id)
       .run();
+  }
+
+  async cancelExpiredImplementationAndReopen(input: {
+    intakeId: string;
+  }): Promise<{ order: BillingOrder; changed: boolean }> {
+    const current = await this.db
+      .prepare(
+        `SELECT bo.*, o.status AS offer_status, i.status AS intake_status,
+                w.id AS work_order_id
+         FROM lmw_billing_orders bo
+         JOIN lmw_commercial_offers o ON o.id = bo.commercial_offer_id
+         JOIN lmw_package_intakes i ON i.id = bo.intake_id
+         LEFT JOIN lmw_starter_work_orders w ON w.billing_order_id = bo.id
+         WHERE bo.intake_id = ? AND bo.purpose = 'implementation'
+         ORDER BY bo.created_at DESC LIMIT 1`,
+      )
+      .bind(input.intakeId)
+      .first<BillingOrderRecoveryRow>();
+    if (!current) throw AppError.notFound('Orden de implementación');
+
+    if (
+      current.status === 'canceled' &&
+      current.offer_status === 'superseded' &&
+      current.intake_status === 'scope_review'
+    ) {
+      return { order: mapBillingOrder(current), changed: false };
+    }
+    if (current.work_order_id) {
+      throw new AppError('conflict', 'La implementación ya tiene una orden de trabajo y no puede reabrirse.');
+    }
+    if (current.provider_payment_id || current.paid_at || current.payment_review_required === 1) {
+      throw new AppError('conflict', 'La orden tiene un pago o una revisión pendiente y no puede cancelarse.');
+    }
+    if (!['ready', 'checkout_failed', 'payment_pending', 'payment_failed'].includes(current.status)) {
+      throw new AppError('conflict', 'La orden ya no admite una revisión de la oferta.');
+    }
+    if (current.offer_status !== 'accepted' || current.intake_status !== 'offer_ready') {
+      throw new AppError('conflict', 'La oferta o la solicitud cambiaron y ya no pueden reabrirse.');
+    }
+    if (current.provider_preference_id) {
+      const checkoutExpiresAt = current.checkout_expires_at
+        ? Date.parse(current.checkout_expires_at)
+        : Number.NaN;
+      if (!Number.isFinite(checkoutExpiresAt) || checkoutExpiresAt > Date.now()) {
+        throw new AppError(
+          'conflict',
+          'El checkout aún está vigente. Espera a que venza antes de reabrir la oferta.',
+        );
+      }
+    }
+
+    const now = nowIso();
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE lmw_billing_orders
+           SET status = 'canceled', last_provider_status = 'checkout_expired_reopened',
+               checkout_url = NULL, updated_at = ?
+           WHERE id = ? AND purpose = 'implementation'
+             AND status IN ('ready', 'checkout_failed', 'payment_pending', 'payment_failed')
+             AND provider_payment_id IS NULL AND paid_at IS NULL
+             AND payment_review_required = 0
+             AND NOT EXISTS (
+               SELECT 1 FROM lmw_starter_work_orders WHERE billing_order_id = ?
+             )`,
+        )
+        .bind(now, current.id, current.id),
+      this.db
+        .prepare(
+          `UPDATE lmw_commercial_offers
+           SET status = 'superseded', updated_at = ?
+           WHERE id = ? AND status = 'accepted'
+             AND EXISTS (
+               SELECT 1 FROM lmw_billing_orders
+               WHERE id = ? AND status = 'canceled' AND provider_payment_id IS NULL
+             )`,
+        )
+        .bind(now, current.commercial_offer_id, current.id),
+      this.db
+        .prepare(
+          `UPDATE lmw_package_intakes
+           SET status = 'scope_review', updated_at = ?
+           WHERE id = ? AND status = 'offer_ready'
+             AND EXISTS (
+               SELECT 1 FROM lmw_commercial_offers
+               WHERE id = ? AND status = 'superseded'
+             )
+             AND EXISTS (
+               SELECT 1 FROM lmw_billing_orders
+               WHERE id = ? AND status = 'canceled' AND provider_payment_id IS NULL
+             )`,
+        )
+        .bind(now, current.intake_id, current.commercial_offer_id, current.id),
+    ]);
+    if (results.some((result) => (result.meta.changes ?? 0) !== 1)) {
+      throw new AppError('conflict', 'La orden cambió mientras se reabría la oferta.');
+    }
+    return { order: (await this.getById(current.id))!, changed: true };
   }
 
   async reconcilePayment(input: {

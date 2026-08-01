@@ -150,6 +150,16 @@ export function createAdminClient(baseUrl: string) {
         input,
       );
     },
+    reopenExpiredImplementationPayment(id: string) {
+      return http.post<{
+        intake: PackageIntake;
+        offers: CommercialOffer[];
+        billingOrder: BillingOrder;
+      }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/implementation-payment/reopen`,
+        {},
+      );
+    },
     reviewCommercialPackageIntake(
       id: string,
       input: { status: 'scope_review' | 'declined'; notes?: string | null },

@@ -178,6 +178,33 @@ commercialIntakesAdmin.post('/:id/offers', requireWrite, async (c) => {
   return c.json({ offer }, 201);
 });
 
+commercialIntakesAdmin.post('/:id/implementation-payment/reopen', requireWrite, async (c) => {
+  const repos = createRepositories(c.env.DB);
+  const intakeId = c.req.param('id')!;
+  const result = await repos.lmwaresBillingOrders.cancelExpiredImplementationAndReopen({
+    intakeId,
+  });
+  const intake = await repos.lmwaresPackageIntakes.getById(intakeId);
+  if (!intake) throw AppError.notFound('Solicitud comercial');
+  const offers = await repos.lmwaresCommercialOffers.listForIntake(intakeId);
+  if (result.changed) {
+    await repos.audit.record({
+      actorType: 'admin',
+      actorId: c.get('admin').email,
+      action: 'lmwares.billing_order.expired_checkout_reopened',
+      entityType: 'lmwares_billing_order',
+      entityId: result.order.id,
+      metadata: {
+        intakeId,
+        commercialOfferId: result.order.commercialOfferId,
+        amountCents: result.order.amountCents,
+        previousCheckoutExpiresAt: result.order.checkoutExpiresAt,
+      },
+    });
+  }
+  return c.json({ intake, offers, billingOrder: result.order });
+});
+
 async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<unknown> {
   try {
     return await c.req.json();
