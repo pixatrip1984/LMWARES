@@ -117,6 +117,24 @@ test('commercial reconciliation verifies frozen reference, currency and amount',
   assert.match(billingRepositorySource, /INSERT OR IGNORE INTO lmw_notifications/);
 });
 
+test('commercial recovery and late SPEI settlement cannot expose a second charge', () => {
+  assert.match(
+    billingRepositorySource,
+    /lmw_billing_payment_attempts pa[\s\S]*?pa\.disposition = 'pending'/,
+  );
+  assert.match(
+    billingRepositorySource,
+    /La orden tiene una transferencia pendiente\. Espera su resolución/,
+  );
+  assert.match(billingRepositorySource, /superseded_by_confirmed_payment/);
+  assert.match(billingRepositorySource, /parallel_payment_pending_after_other_paid/);
+  assert.match(
+    billingRepositorySource,
+    /SET status = 'accepted'[\s\S]*?status IN \('accepted', 'superseded'\)/,
+  );
+  assert.match(billingRepositorySource, /disposition = 'duplicate_review'/);
+});
+
 test('a confirmed implementation payment creates one supervised Starter work order', () => {
   assert.match(billingRepositorySource, /ensureFromPaidBillingOrder/);
   assert.match(workOrderRepositorySource, /INSERT OR IGNORE INTO lmw_starter_work_orders/);

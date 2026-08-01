@@ -37,6 +37,7 @@ interface BillingOrderRecoveryRow extends BillingOrderRow {
   offer_status: string;
   intake_status: string;
   work_order_id: string | null;
+  pending_payment_attempts: number;
 }
 
 export interface BillingOrderReconciliationResult {
@@ -195,7 +196,10 @@ export class LmwaresBillingOrdersRepository {
     const current = await this.db
       .prepare(
         `SELECT bo.*, o.status AS offer_status, i.status AS intake_status,
-                w.id AS work_order_id
+                w.id AS work_order_id,
+                (SELECT COUNT(*) FROM lmw_billing_payment_attempts pa
+                 WHERE pa.billing_order_id = bo.id AND pa.disposition = 'pending')
+                  AS pending_payment_attempts
          FROM lmw_billing_orders bo
          JOIN lmw_commercial_offers o ON o.id = bo.commercial_offer_id
          JOIN lmw_package_intakes i ON i.id = bo.intake_id
@@ -219,6 +223,12 @@ export class LmwaresBillingOrdersRepository {
     }
     if (current.provider_payment_id || current.paid_at || current.payment_review_required === 1) {
       throw new AppError('conflict', 'La orden tiene un pago o una revisión pendiente y no puede cancelarse.');
+    }
+    if (current.pending_payment_attempts > 0) {
+      throw new AppError(
+        'conflict',
+        'La orden tiene una transferencia pendiente. Espera su resolución antes de emitir otra oferta.',
+      );
     }
     if (!['ready', 'checkout_failed', 'payment_pending', 'payment_failed'].includes(current.status)) {
       throw new AppError('conflict', 'La orden ya no admite una revisión de la oferta.');
@@ -250,10 +260,14 @@ export class LmwaresBillingOrdersRepository {
              AND provider_payment_id IS NULL AND paid_at IS NULL
              AND payment_review_required = 0
              AND NOT EXISTS (
+               SELECT 1 FROM lmw_billing_payment_attempts
+               WHERE billing_order_id = ? AND disposition = 'pending'
+             )
+             AND NOT EXISTS (
                SELECT 1 FROM lmw_starter_work_orders WHERE billing_order_id = ?
              )`,
         )
-        .bind(now, current.id, current.id),
+        .bind(now, current.id, current.id, current.id),
       this.db
         .prepare(
           `UPDATE lmw_commercial_offers
@@ -335,18 +349,67 @@ export class LmwaresBillingOrdersRepository {
     }
 
     if (input.providerStatus === 'approved') {
+      const paidSibling = before.intakeId
+        ? await this.db
+            .prepare(
+              `SELECT id FROM lmw_billing_orders
+               WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                 AND status = 'paid'
+               LIMIT 1`,
+            )
+            .bind(before.intakeId, input.id)
+            .first<{ id: string }>()
+        : null;
       await this.db
         .prepare(
           `UPDATE lmw_billing_orders
            SET status = 'paid', provider_payment_id = ?, last_provider_status = ?,
+               payment_review_required = CASE WHEN ? THEN 1 ELSE payment_review_required END,
                paid_at = COALESCE(paid_at, ?), updated_at = ?
            WHERE id = ? AND (provider_payment_id IS NULL OR provider_payment_id = ?)`,
         )
-        .bind(input.paymentId, input.providerStatus, input.providerCreatedAt ?? now, now, input.id, input.paymentId)
+        .bind(
+          input.paymentId,
+          input.providerStatus,
+          paidSibling ? 1 : 0,
+          input.providerCreatedAt ?? now,
+          now,
+          input.id,
+          input.paymentId,
+        )
         .run();
       const paidOrder = await this.getById(input.id);
-      if (paidOrder?.status === 'paid' && paidOrder.intakeId) {
+      if (paidSibling) {
+        await this.db
+          .prepare(
+            `UPDATE lmw_billing_payment_attempts
+             SET disposition = 'duplicate_review', provider_status = ?, updated_at = ?
+             WHERE provider_payment_id = ? AND billing_order_id = ?`,
+          )
+          .bind(input.providerStatus.slice(0, 80), now, input.paymentId, input.id)
+          .run();
+        return {
+          order: (await this.getById(input.id))!,
+          disposition: 'duplicate_review',
+          duplicatePayment: true,
+        };
+      }
+      if (paidOrder?.status === 'paid' && paidOrder.intakeId && paidOrder.commercialOfferId) {
         await this.db.batch([
+          this.db
+            .prepare(
+              `UPDATE lmw_commercial_offers
+               SET status = 'superseded', updated_at = ?
+               WHERE intake_id = ? AND id <> ? AND status IN ('issued', 'accepted')`,
+            )
+            .bind(now, paidOrder.intakeId, paidOrder.commercialOfferId),
+          this.db
+            .prepare(
+              `UPDATE lmw_commercial_offers
+               SET status = 'accepted', updated_at = ?
+               WHERE id = ? AND status IN ('accepted', 'superseded')`,
+            )
+            .bind(now, paidOrder.commercialOfferId),
           this.db
             .prepare(
               `UPDATE lmw_package_intakes
@@ -354,6 +417,39 @@ export class LmwaresBillingOrdersRepository {
                WHERE id = ? AND user_id = ? AND status = 'offer_ready'`,
             )
             .bind(now, paidOrder.intakeId, paidOrder.userId),
+          this.db
+            .prepare(
+              `UPDATE lmw_billing_orders
+               SET status = 'canceled', checkout_url = NULL,
+                   last_provider_status = 'superseded_by_confirmed_payment', updated_at = ?
+               WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                 AND status IN ('ready', 'checkout_creating', 'checkout_failed',
+                                'payment_pending', 'payment_failed')
+                 AND provider_payment_id IS NULL AND paid_at IS NULL
+                 AND NOT EXISTS (
+                   SELECT 1 FROM lmw_billing_payment_attempts pa
+                   WHERE pa.billing_order_id = lmw_billing_orders.id
+                     AND pa.disposition = 'pending'
+                 )`,
+            )
+            .bind(now, paidOrder.intakeId, paidOrder.id),
+          this.db
+            .prepare(
+              `UPDATE lmw_billing_orders
+               SET payment_review_required = 1,
+                   last_provider_status = 'parallel_payment_pending_after_other_paid',
+                   updated_at = ?
+               WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                 AND status IN ('ready', 'checkout_creating', 'checkout_failed',
+                                'payment_pending', 'payment_failed')
+                 AND provider_payment_id IS NULL AND paid_at IS NULL
+                 AND EXISTS (
+                   SELECT 1 FROM lmw_billing_payment_attempts pa
+                   WHERE pa.billing_order_id = lmw_billing_orders.id
+                     AND pa.disposition = 'pending'
+                 )`,
+            )
+            .bind(now, paidOrder.intakeId, paidOrder.id),
           this.db
             .prepare(
               `INSERT OR IGNORE INTO lmw_notifications
