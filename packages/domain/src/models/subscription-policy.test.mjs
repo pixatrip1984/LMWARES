@@ -25,3 +25,10 @@ test('maps charge outcomes without hiding disputes', () => {
   );
   assert.equal(subscriptionStatusFromCharge('processed', 'charged_back', 'active'), 'disputed');
 });
+
+test('late invoice updates cannot reopen canceled or paused subscriptions', () => {
+  assert.equal(subscriptionStatusFromCharge('processed', 'approved', 'canceled'), 'canceled');
+  assert.equal(subscriptionStatusFromCharge('processed', 'approved', 'paused'), 'paused');
+  assert.equal(subscriptionStatusFromCharge('processed', 'approved', 'disputed'), 'disputed');
+  assert.equal(subscriptionStatusFromCharge('processed', 'charged_back', 'canceled'), 'disputed');
+});

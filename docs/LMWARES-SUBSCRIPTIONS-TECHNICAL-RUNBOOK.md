@@ -1,6 +1,6 @@
 # LMWares: runbook técnico de suscripciones
 
-Fecha: 2026-07-29
+Fecha: 2026-08-01
 
 Este runbook valida cobros recurrentes sin convertir el monto de prueba en una tarifa
 comercial. El flujo usa una suscripción sin plan asociado, individual por propuesta,
@@ -51,6 +51,18 @@ Estados internos: `creating`, `creation_failed`, `pending_authorization`, `activ
 - `POST /subscriptions/:id/cancel`
 - `POST /payments/webhooks/mercado-pago`
 
+Además, el Worker ejecuta una conciliación horaria (`17 * * * *`) sobre un lote
+rotativo de suscripciones abiertas. Este respaldo consulta tanto el preapproval como
+`/authorized_payments/search`, de modo que un Webhook perdido no oculte un cargo o
+un cambio de estado. La conciliación preserva estados cancelados, pausados y en disputa
+frente a eventos de factura tardíos.
+
+En el sandbox mexicano, `/authorized_payments/search` aceptó el filtro exacto
+`preapproval_id` pero rechazó los parámetros `limit` y `offset` con
+`invalid value for limit`. La conciliación no debe reutilizar la paginación de otros
+buscadores de Mercado Pago: consulta la página predeterminada y valida que cada resultado
+pertenezca al preapproval, referencia, importe y moneda congelados.
+
 Todas las acciones del usuario requieren sesión y origen confiable. El navegador no
 recibe el Access Token ni las claves de Webhook.
 
@@ -85,3 +97,22 @@ Si el sandbox no genera el primer cargo inmediatamente, la infraestructura recur
 puede validarse hasta `next_payment_date`, pero el paso de cargo programado permanece
 abierto hasta recibir `subscription_authorized_payment`; no debe marcarse como aprobado
 por inferencia.
+
+## Evidencia técnica vigente
+
+Validación del 2026-08-01 sobre la suscripción de prueba
+`1e4f6134-cb95-49c3-9c86-d9ce56250efa`:
+
+- preapproval `fc517a265b4a4af0910ff83b63af9c5b` en estado `authorized`;
+- próxima fecha informada: `2026-08-30T04:49:00.000-04:00`;
+- authorized payment `7030434341`, pago `170286433015`, MXN $10, estado de pago
+  `approved`;
+- el Webhook del cargo inicial no apareció en `lmw_payment_webhook_events`; la
+  conciliación recuperó el cargo desde el proveedor;
+- dos conciliaciones consecutivas conservaron exactamente una fila de cargo, probando
+  idempotencia por `provider_authorized_payment_id`;
+- la suscripción permaneció activa y sin `canceled_at`.
+
+Esta evidencia cierra creación, autorización, recuperación e idempotencia. La prueba de
+cancelación y el siguiente débito programado permanecen como compuertas explícitas; no se
+canceló la suscripción durante esta validación para conservar la prueba del 30 de agosto.

@@ -59,6 +59,9 @@ TURNSTILE_DISABLED = "0"
 # cambiarse a "0" antes de aceptar cobros reales.
 MERCADO_PAGO_TEST_MODE = "1"
 
+[env.production.triggers]
+crons = ["17 * * * *"]
+
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "starter-db"

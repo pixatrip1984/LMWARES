@@ -62,7 +62,10 @@ export async function createMercadoPagoPreference(input: {
 }): Promise<MercadoPagoPreference> {
   const validFrom = new Date();
   const expiresAt = new Date(validFrom.getTime() + CHECKOUT_TTL_MS).toISOString();
-  const notificationUrl = publicHttpsUrl(input.publicApiUrl, '/payments/webhooks/mercado-pago');
+  const notificationUrl = publicHttpsUrl(
+    input.publicApiUrl,
+    '/payments/webhooks/mercado-pago',
+  );
   const paymentReturnUrl = publicHttpsUrl(
     input.publicWebUrl,
     `/pago/${encodeURIComponent(input.proposal.id)}`,
@@ -137,10 +140,7 @@ export async function createMercadoPagoPreapproval(input: {
   publicWebUrl: string;
   proposalId: string;
 }): Promise<MercadoPagoPreapproval> {
-  const notificationUrl = publicHttpsUrl(
-    input.publicApiUrl,
-    '/payments/webhooks/mercado-pago',
-  );
+  const notificationUrl = publicHttpsUrl(input.publicApiUrl, '/payments/webhooks/mercado-pago');
   const backUrl = publicHttpsUrl(
     input.publicWebUrl,
     `/pago/${encodeURIComponent(input.proposalId)}`,
@@ -262,6 +262,43 @@ export async function getMercadoPagoAuthorizedPayment(input: {
     throw new AppError('internal_error', 'Mercado Pago devolvió un cargo programado inválido.');
   }
   return authorizedPayment;
+}
+
+export async function searchMercadoPagoAuthorizedPayments(input: {
+  accessToken: string;
+  preapprovalId: string;
+}): Promise<MercadoPagoAuthorizedPayment[]> {
+  // Este endpoint de Suscripciones rechaza `limit` y `offset` en el sandbox
+  // mexicano aunque esos nombres existan en otras búsquedas de Mercado Pago.
+  // Consultamos la página predeterminada filtrada por la suscripción exacta;
+  // los webhooks siguen siendo la fuente primaria para cada cargo nuevo.
+  const query = new URLSearchParams({ preapproval_id: input.preapprovalId });
+  const response = await fetch(`${MERCADO_PAGO_API}/authorized_payments/search?${query}`, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${input.accessToken}`,
+    },
+  });
+  const payload = await readProviderJson(response);
+  if (!response.ok) {
+    throw providerError('buscar los cargos programados', response.status, payload);
+  }
+  if (!isRecord(payload) || !Array.isArray(payload.results)) {
+    throw new AppError(
+      'internal_error',
+      'Mercado Pago devolvió una búsqueda de cargos programados inválida.',
+    );
+  }
+
+  const results = payload.results.map(parseAuthorizedPayment);
+  if (results.some((item) => item === null)) {
+    throw new AppError('internal_error', 'Mercado Pago devolvió un cargo programado inválido.');
+  }
+  const authorizedPayments = results as MercadoPagoAuthorizedPayment[];
+  if (authorizedPayments.some((item) => item.preapprovalId !== input.preapprovalId)) {
+    throw new AppError('internal_error', 'Mercado Pago devolvió cargos de otra suscripción.');
+  }
+  return authorizedPayments;
 }
 
 export async function cancelMercadoPagoPreapproval(input: {
@@ -580,11 +617,22 @@ function providerError(action: string, status: number, payload: unknown): AppErr
   }
   const providerDiagnostic =
     status >= 500 ? 'provider_internal_error' : `provider_http_${Math.max(0, status)}`;
+  const providerMessageDiagnostic = safeProviderMessageDiagnostic(safeProviderMessage);
   return new AppError(
     'internal_error',
     `No fue posible ${action} en Mercado Pago. Revisa las credenciales de prueba.`,
-    { providerDiagnostic: [providerDiagnostic] },
+    { providerDiagnostic: [providerDiagnostic, providerMessageDiagnostic] },
   );
+}
+
+function safeProviderMessageDiagnostic(value: string): string {
+  const normalized = value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80);
+  return normalized ? `provider_message_${normalized}` : 'provider_message_unknown';
 }
 
 function assertMercadoPagoCheckoutUrl(value: string): void {

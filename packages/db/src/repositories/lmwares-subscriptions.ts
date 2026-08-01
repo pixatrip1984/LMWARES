@@ -76,6 +76,21 @@ export class LmwaresSubscriptionsRepository {
     return row ? mapSubscription(row) : null;
   }
 
+  async listForReconciliation(limit = 25): Promise<PackageSubscription[]> {
+    const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM lmw_subscriptions
+         WHERE provider_preapproval_id IS NOT NULL
+           AND status IN ('pending_authorization', 'active', 'payment_attention', 'paused')
+         ORDER BY updated_at ASC, id ASC
+         LIMIT ?`,
+      )
+      .bind(safeLimit)
+      .all<SubscriptionRow>();
+    return result.results.map(mapSubscription);
+  }
+
   async claimCreation(input: {
     proposalId: string;
     userId: string;

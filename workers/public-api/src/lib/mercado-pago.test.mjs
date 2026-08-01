@@ -8,6 +8,8 @@ const paymentsRouteSource = readFileSync(
   new URL('../routes/payments.ts', import.meta.url),
   'utf8',
 );
+const workerSource = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
+const wranglerSource = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 
 const preapprovalStart = providerSource.indexOf(
   'export async function createMercadoPagoPreapproval',
@@ -59,4 +61,29 @@ test('subscription simulator probes require a valid signature and never become b
   const eventClaim = handlerSource.indexOf('claimWebhookEvent');
   assert.ok(probeReturn >= 0 && probeReturn < providerLookup);
   assert.ok(probeReturn < eventClaim);
+});
+
+test('scheduled reconciliation searches invoices by the exact preapproval id', () => {
+  const searchStart = providerSource.indexOf(
+    'export async function searchMercadoPagoAuthorizedPayments',
+  );
+  const searchEnd = providerSource.indexOf('export async function cancelMercadoPagoPreapproval');
+  const searchSource = providerSource.slice(searchStart, searchEnd);
+
+  assert.ok(searchStart >= 0 && searchEnd > searchStart);
+  assert.match(searchSource, /\/authorized_payments\/search\?\$\{query\}/);
+  assert.match(searchSource, /preapproval_id: input\.preapprovalId/);
+  assert.match(searchSource, /item\.preapprovalId !== input\.preapprovalId/);
+  assert.doesNotMatch(searchSource, /limit:/);
+  assert.doesNotMatch(searchSource, /offset:/);
+});
+
+test('production schedules reconciliation through waitUntil', () => {
+  assert.match(workerSource, /scheduled\(controller, env, ctx\)/);
+  assert.match(
+    workerSource,
+    /ctx\.waitUntil\(reconcileSubscriptionsOnSchedule\(env, controller\.scheduledTime\)\)/,
+  );
+  assert.match(wranglerSource, /\[env\.production\.triggers\]/);
+  assert.match(wranglerSource, /crons = \["17 \* \* \* \*"\]/);
 });

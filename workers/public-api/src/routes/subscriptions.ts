@@ -10,6 +10,7 @@ import {
   mercadoPagoProviderDiagnostic,
   type MercadoPagoPreapproval,
 } from '../lib/mercado-pago';
+import { reconcileSubscriptionWithProvider } from '../lib/subscription-reconciliation';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
 
 const TEST_SUBSCRIPTION_AMOUNT_CENTS = 1000;
@@ -109,24 +110,41 @@ subscriptions.post('/:id/reconcile', async (c) => {
   const session = await requirePublicSession(c);
   const accessToken = testSubscriptionAccessToken(c.env);
   let subscription = await ownedSubscription(c.env, c.req.param('id'), session.user.id);
-  const providerSubscription = subscription.providerPreapprovalId
-    ? await getMercadoPagoPreapproval({
-        accessToken,
-        preapprovalId: subscription.providerPreapprovalId,
-      })
-    : await findMercadoPagoPreapproval({
-        accessToken,
-        externalReference: subscription.externalReference,
-      });
-  if (!providerSubscription) {
-    return c.json({ found: false, subscription: publicSubscription(subscription) });
+  if (!subscription.providerPreapprovalId) {
+    const recovered = await findMercadoPagoPreapproval({
+      accessToken,
+      externalReference: subscription.externalReference,
+    });
+    if (!recovered) {
+      return c.json({ found: false, subscription: publicSubscription(subscription) });
+    }
+    assertPreapprovalMatches(recovered, subscription);
+    subscription = await saveProviderSubscription(c.env, subscription, recovered);
   }
-  assertPreapprovalMatches(providerSubscription, subscription);
-  subscription = await saveProviderSubscription(c.env, subscription, providerSubscription);
+  let reconciliation;
+  try {
+    reconciliation = await reconcileSubscriptionWithProvider({
+      env: c.env,
+      subscription,
+      accessToken,
+    });
+  } catch (error) {
+    if (c.env.MERCADO_PAGO_TEST_MODE === '1' && error instanceof AppError) {
+      const diagnostics = error.details?.providerDiagnostic?.join(', ');
+      throw new AppError(
+        error.code,
+        `${error.message} Diagnóstico: ${diagnostics ?? mercadoPagoProviderDiagnostic(error)}.`,
+        error.details,
+      );
+    }
+    throw error;
+  }
+  subscription = reconciliation.subscription;
   await audit(c, session.user.id, 'lmwares.subscription.reconcile', subscription, {
-    providerPreapprovalId: providerSubscription.id,
-    providerStatus: providerSubscription.status,
-    nextPaymentDate: providerSubscription.nextPaymentDate,
+    providerPreapprovalId: subscription.providerPreapprovalId,
+    providerStatus: subscription.providerStatus,
+    nextPaymentDate: subscription.nextPaymentDate,
+    authorizedPaymentsFound: reconciliation.authorizedPaymentsFound,
   });
   return c.json({ found: true, subscription: publicSubscription(subscription) });
 });

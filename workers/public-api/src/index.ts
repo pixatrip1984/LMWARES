@@ -19,6 +19,7 @@ import { payments } from './routes/payments';
 import { subscriptions } from './routes/subscriptions';
 import { account } from './routes/account';
 import { mapLocations } from './routes/map-locations';
+import { reconcileSubscriptionsOnSchedule } from './lib/subscription-reconciliation';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -99,7 +100,14 @@ app.get('/media/:key{.+}', async (c) => {
   return new Response(object.body, { headers });
 });
 
-export default app;
+export default {
+  fetch(request, env, ctx) {
+    return app.fetch(request, env, ctx);
+  },
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(reconcileSubscriptionsOnSchedule(env, controller.scheduledTime));
+  },
+} satisfies ExportedHandler<Bindings>;
 
 function freeSlugFromHost(hostHeader: string | undefined, baseDomain: string): string | null {
   const host = (hostHeader ?? '').split(':')[0]!.toLowerCase();
