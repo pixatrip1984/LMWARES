@@ -26,6 +26,8 @@ interface AlbumDraft {
   category: string;
   sortOrder: number;
   status: GalleryStatus;
+  publishedRevisionAt: string | null;
+  hasUnpublishedChanges: boolean;
   coverImageId: string | null;
   images: GalleryImageView[];
 }
@@ -40,6 +42,8 @@ const EMPTY_DRAFT: AlbumDraft = {
   category: 'General',
   sortOrder: 0,
   status: 'draft',
+  publishedRevisionAt: null,
+  hasUnpublishedChanges: false,
   coverImageId: null,
   images: [],
 };
@@ -48,6 +52,9 @@ export function GalleriesWorkspace({
   projectId,
 }: GalleriesWorkspaceProps) {
   const [albums, setAlbums] = useState<GalleryAlbumSummary[]>([]);
+  const [publishedAlbums, setPublishedAlbums] = useState<
+    GalleryAlbumSummary[]
+  >([]);
   const [draft, setDraft] = useState<AlbumDraft>(EMPTY_DRAFT);
   const [previewSurface, setPreviewSurface] =
     useState<PreviewSurface>('albums');
@@ -67,6 +74,7 @@ export function GalleriesWorkspace({
       try {
         const response = await galleriesApi.list(projectId);
         setAlbums(response.albums);
+        setPublishedAlbums(response.publishedAlbums);
         const target =
           response.albums.find((album) => album.id === preferredAlbumId) ??
           response.albums[0];
@@ -146,7 +154,11 @@ export function GalleriesWorkspace({
         saved = await galleriesApi.saveDraft(projectId, saved.id);
       }
       await loadWorkspace(saved.id);
-      setNotice('Borrador guardado. La versión pública no muestra este álbum.');
+      setNotice(
+        saved.publishedRevisionAt
+          ? 'Borrador guardado. La versión pública anterior permanece activa hasta volver a publicar.'
+          : 'Borrador guardado. Este álbum todavía no tiene una versión pública.',
+      );
     } catch (caught) {
       setError(errorMessage(caught, 'No se pudo guardar el borrador.'));
     } finally {
@@ -371,14 +383,14 @@ export function GalleriesWorkspace({
                 Álbum actual
               </button>
               <span>
-                {draft.status === 'published' ? 'Publicado' : 'Borrador local'}
+                {statusLabel(draft.status, draft.hasUnpublishedChanges)}
               </span>
             </div>
 
             {loading ? (
               <PreviewLoading />
             ) : previewSurface === 'albums' ? (
-              <AlbumIndexPreview albums={albums} />
+              <AlbumIndexPreview albums={publishedAlbums} />
             ) : (
               <AlbumPreview draft={draft} cover={cover} />
             )}
@@ -398,7 +410,8 @@ export function GalleriesWorkspace({
                 <option value="">Nuevo álbum</option>
                 {albums.map((album) => (
                   <option key={album.id} value={album.id}>
-                    {album.title} · {statusLabel(album.status)}
+                    {album.title} ·{' '}
+                    {statusLabel(album.status, album.hasUnpublishedChanges)}
                   </option>
                 ))}
               </select>
@@ -410,7 +423,7 @@ export function GalleriesWorkspace({
 
           <div className="lmw-galleries-admin__status-line">
             <span className={`is-${draft.status}`}>
-              {statusLabel(draft.status)}
+              {statusLabel(draft.status, draft.hasUnpublishedChanges)}
             </span>
             <small>
               {draft.id
@@ -693,7 +706,7 @@ function AlbumIndexPreview({
 }: {
   albums: GalleryAlbumSummary[];
 }) {
-  const visible = albums.filter((album) => album.status === 'published');
+  const visible = albums;
   return (
     <div className="lmw-gallery-preview">
       <header className="lmw-gallery-preview__intro">
@@ -803,12 +816,20 @@ function toDraft(album: GalleryAlbumDetail): AlbumDraft {
     category: album.category,
     sortOrder: album.sortOrder,
     status: album.status,
+    publishedRevisionAt: album.publishedRevisionAt,
+    hasUnpublishedChanges: album.hasUnpublishedChanges,
     coverImageId: album.coverImageId,
     images: album.images,
   };
 }
 
-function statusLabel(status: GalleryStatus): string {
+function statusLabel(
+  status: GalleryStatus,
+  hasUnpublishedChanges = false,
+): string {
+  if (status === 'published' && hasUnpublishedChanges) {
+    return 'Publicado · cambios sin publicar';
+  }
   return status === 'published' ? 'Publicado' : 'Borrador';
 }
 

@@ -60,10 +60,14 @@ adminSiteGalleries.get('/', async (c) => {
   const projectId = readProjectId(c);
   const gallery = new SiteGalleryRepository(c.env.DB);
   await assertProject(gallery, projectId);
-  const albums = await gallery.listAdmin(projectId);
+  const [albums, publishedAlbums] = await Promise.all([
+    gallery.listAdmin(projectId),
+    gallery.listPublished(projectId),
+  ]);
   return c.json({
     projectId,
     albums: albums.map((album) => presentSummary(c, album)),
+    publishedAlbums: publishedAlbums.map((album) => presentSummary(c, album)),
   });
 });
 
@@ -140,10 +144,9 @@ adminSiteGalleries.post('/:albumId/draft', requireWrite, async (c) => {
   await assertProject(gallery, projectId);
   const before = await gallery.getById(projectId, albumId);
   if (!before) throw AppError.notFound('Álbum');
-  const album = await gallery.setStatus(
+  const album = await gallery.saveDraft(
     projectId,
     albumId,
-    'draft',
     c.get('admin').email,
     reason ?? 'Guardado como borrador',
   );
@@ -175,14 +178,15 @@ adminSiteGalleries.post('/:albumId/publish', requireWrite, async (c) => {
     );
   }
 
-  const album = await gallery.setStatus(
+  const publication = await gallery.publishAlbum(
     projectId,
     albumId,
-    'published',
     c.get('admin').email,
     reason ?? 'Álbum publicado',
   );
-  if (!album) throw AppError.notFound('Álbum');
+  if (!publication) throw AppError.notFound('Álbum');
+  const { album, orphanedImages } = publication;
+  await deleteOrphanedObjects(c, orphanedImages);
   await audit(c, gallery, {
     action: 'site_gallery.album.publish',
     projectId,
@@ -420,9 +424,13 @@ adminSiteGalleries.delete(
     const image = await gallery.getImage(projectId, albumId, imageId);
     if (!image) throw AppError.notFound('Imagen');
 
-    // El objeto se elimina primero: una falla posterior es reintentable y nunca
-    // deja un binario accesible después de que el admin pidió borrarlo.
-    await c.env.MEDIA.delete(image.key);
+    // Una imagen incluida en la revisión pública debe seguir existiendo en R2
+    // aunque se quite del borrador. Se limpia al publicar la siguiente revisión.
+    const retainedForPublication = await gallery.imageIsPublished(
+      albumId,
+      imageId,
+    );
+    if (!retainedForPublication) await c.env.MEDIA.delete(image.key);
     const removed = await gallery.removeImage(projectId, albumId, imageId);
     if (!removed) throw AppError.notFound('Imagen');
 
@@ -430,7 +438,7 @@ adminSiteGalleries.delete(
       action: 'site_gallery.image.delete',
       projectId,
       albumId,
-      metadata: { imageId },
+      metadata: { imageId, retainedForPublication },
     });
     return c.body(null, 204);
   },
@@ -507,6 +515,8 @@ function presentSummary(
     coverImageId: album.coverImageId,
     sortOrder: album.sortOrder,
     publishedAt: album.publishedAt,
+    publishedRevisionAt: album.publishedRevisionAt,
+    hasUnpublishedChanges: album.hasUnpublishedChanges,
     createdAt: album.createdAt,
     updatedAt: album.updatedAt,
     imageCount: album.imageCount,
@@ -529,6 +539,8 @@ function presentDetail(c: GalleryContext, album: SiteGalleryAlbumDetailRecord) {
     coverImageId: album.coverImageId,
     sortOrder: album.sortOrder,
     publishedAt: album.publishedAt,
+    publishedRevisionAt: album.publishedRevisionAt,
+    hasUnpublishedChanges: album.hasUnpublishedChanges,
     createdAt: album.createdAt,
     updatedAt: album.updatedAt,
     images,
@@ -798,4 +810,23 @@ function toHex(bytes: Uint8Array): string {
 
 function formatMegabytes(bytes: number): string {
   return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
+
+async function deleteOrphanedObjects(
+  c: GalleryContext,
+  images: SiteGalleryStoredImage[],
+): Promise<void> {
+  for (const image of images) {
+    try {
+      await c.env.MEDIA.delete(image.key);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          message: 'site_gallery.publication_asset_cleanup_failed',
+          key: image.key,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  }
 }

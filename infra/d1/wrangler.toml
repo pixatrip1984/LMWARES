@@ -3,9 +3,20 @@
 name = "starter-d1"
 compatibility_date = "2026-06-28"
 
-# La simulación local sigue usando almacenamiento local; para operaciones
-# `--remote` este UUID identifica la base real de LMWares.
+# El UUID neutral coincide con los Workers locales y mantiene una sola base
+# persistida para setup, migraciones, seed y desarrollo.
 [[d1_databases]]
+binding = "DB"
+database_name = "starter-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Las operaciones remotas deben declarar `--env production`; así nunca se
+# mezclan accidentalmente la simulación local y la base real de LMWares.
+[env.production]
+name = "starter-d1-production"
+
+[[env.production.d1_databases]]
 binding = "DB"
 database_name = "starter-db"
 database_id = "682732b7-8517-416d-ac7c-6789e491fe43"

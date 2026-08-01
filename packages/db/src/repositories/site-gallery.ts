@@ -17,6 +17,8 @@ export interface SiteGalleryAlbumRecord {
   coverImageId: string | null;
   sortOrder: number;
   publishedAt: string | null;
+  publishedRevisionAt: string | null;
+  hasUnpublishedChanges: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +45,16 @@ export interface SiteGalleryAlbumSummaryRecord extends SiteGalleryAlbumRecord {
 
 export interface SiteGalleryAlbumDetailRecord extends SiteGalleryAlbumRecord {
   images: SiteGalleryStoredImage[];
+}
+
+export interface SiteGalleryPublicationResult {
+  album: SiteGalleryAlbumDetailRecord;
+  orphanedImages: SiteGalleryStoredImage[];
+}
+
+export interface SiteGalleryImageRemoval {
+  image: SiteGalleryStoredImage;
+  deleteObject: boolean;
 }
 
 export interface SiteGalleryAlbumFields {
@@ -76,6 +88,8 @@ interface AlbumRow {
   cover_image_id: string | null;
   sort_order: number;
   published_at: string | null;
+  published_revision_at: string | null;
+  published_source_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +128,8 @@ interface AlbumSummaryRow extends AlbumRow {
 const SUMMARY_SELECT = `
   SELECT
     a.*,
+    publication.revision_at AS published_revision_at,
+    publication.updated_at AS published_source_updated_at,
     (SELECT COUNT(*) FROM site_gallery_images image_count
       WHERE image_count.album_id = a.id) AS image_count,
     cover.id AS cover_id,
@@ -129,7 +145,63 @@ const SUMMARY_SELECT = `
     cover_asset.size_bytes AS cover_size_bytes,
     cover_asset.checksum AS cover_checksum
   FROM site_gallery_albums a
+  LEFT JOIN site_gallery_publications publication
+    ON publication.album_id = a.id
   LEFT JOIN site_gallery_images cover ON cover.id = a.cover_image_id
+  LEFT JOIN file_assets cover_asset ON cover_asset.id = cover.file_asset_id`;
+
+const PUBLISHED_ALBUM_SELECT = `
+  SELECT
+    publication.album_id AS id,
+    publication.project_id,
+    publication.slug,
+    publication.title,
+    publication.description,
+    publication.category,
+    'published' AS status,
+    publication.cover_image_id,
+    publication.sort_order,
+    publication.published_at,
+    publication.revision_at AS published_revision_at,
+    publication.updated_at AS published_source_updated_at,
+    publication.created_at,
+    publication.updated_at
+  FROM site_gallery_publications publication`;
+
+const PUBLISHED_SUMMARY_SELECT = `
+  SELECT
+    publication.album_id AS id,
+    publication.project_id,
+    publication.slug,
+    publication.title,
+    publication.description,
+    publication.category,
+    'published' AS status,
+    publication.cover_image_id,
+    publication.sort_order,
+    publication.published_at,
+    publication.revision_at AS published_revision_at,
+    publication.updated_at AS published_source_updated_at,
+    publication.created_at,
+    publication.updated_at,
+    (SELECT COUNT(*) FROM site_gallery_publication_images image_count
+      WHERE image_count.album_id = publication.album_id) AS image_count,
+    cover.image_id AS cover_id,
+    cover.album_id AS cover_album_id,
+    cover.file_asset_id AS cover_file_asset_id,
+    cover.alt AS cover_alt,
+    cover.position AS cover_position,
+    cover.width AS cover_width,
+    cover.height AS cover_height,
+    cover.created_at AS cover_created_at,
+    cover_asset.key AS cover_key,
+    cover_asset.content_type AS cover_content_type,
+    cover_asset.size_bytes AS cover_size_bytes,
+    cover_asset.checksum AS cover_checksum
+  FROM site_gallery_publications publication
+  LEFT JOIN site_gallery_publication_images cover
+    ON cover.album_id = publication.album_id
+   AND cover.image_id = publication.cover_image_id
   LEFT JOIN file_assets cover_asset ON cover_asset.id = cover.file_asset_id`;
 
 export class SiteGalleryRepository {
@@ -163,17 +235,20 @@ export class SiteGalleryRepository {
     const statement = q
       ? this.db
           .prepare(
-            `${SUMMARY_SELECT}
-             WHERE a.project_id = ? AND a.status = 'published'
-               AND (a.title LIKE ? OR a.category LIKE ? OR a.description LIKE ?)
-             ORDER BY a.sort_order ASC, a.published_at DESC, a.title ASC`,
+            `${PUBLISHED_SUMMARY_SELECT}
+             WHERE publication.project_id = ?
+               AND (publication.title LIKE ? OR publication.category LIKE ?
+                    OR publication.description LIKE ?)
+             ORDER BY publication.sort_order ASC,
+               publication.published_at DESC, publication.title ASC`,
           )
           .bind(projectId, `%${q}%`, `%${q}%`, `%${q}%`)
       : this.db
           .prepare(
-            `${SUMMARY_SELECT}
-             WHERE a.project_id = ? AND a.status = 'published'
-             ORDER BY a.sort_order ASC, a.published_at DESC, a.title ASC`,
+            `${PUBLISHED_SUMMARY_SELECT}
+             WHERE publication.project_id = ?
+             ORDER BY publication.sort_order ASC,
+               publication.published_at DESC, publication.title ASC`,
           )
           .bind(projectId);
     const { results } = await statement.all<AlbumSummaryRow>();
@@ -186,8 +261,14 @@ export class SiteGalleryRepository {
   ): Promise<SiteGalleryAlbumRecord | null> {
     const row = await this.db
       .prepare(
-        `SELECT * FROM site_gallery_albums
-         WHERE id = ? AND project_id = ?`,
+        `SELECT
+           album.*,
+           publication.revision_at AS published_revision_at,
+           publication.updated_at AS published_source_updated_at
+         FROM site_gallery_albums album
+         LEFT JOIN site_gallery_publications publication
+           ON publication.album_id = album.id
+         WHERE album.id = ? AND album.project_id = ?`,
       )
       .bind(albumId, projectId)
       .first<AlbumRow>();
@@ -209,14 +290,14 @@ export class SiteGalleryRepository {
   ): Promise<SiteGalleryAlbumDetailRecord | null> {
     const row = await this.db
       .prepare(
-        `SELECT * FROM site_gallery_albums
-         WHERE project_id = ? AND slug = ? AND status = 'published'`,
+        `${PUBLISHED_ALBUM_SELECT}
+         WHERE publication.project_id = ? AND publication.slug = ?`,
       )
       .bind(projectId, slug)
       .first<AlbumRow>();
     if (!row) return null;
     const album = mapAlbum(row);
-    return { ...album, images: await this.listImages(album.id) };
+    return { ...album, images: await this.listPublishedImages(album.id) };
   }
 
   async slugExists(
@@ -315,57 +396,158 @@ export class SiteGalleryRepository {
     return this.getDetail(projectId, albumId);
   }
 
-  async setStatus(
+  async saveDraft(
     projectId: string,
     albumId: string,
-    status: SiteGalleryStatus,
     changedBy: string,
     reason?: string | null,
   ): Promise<SiteGalleryAlbumDetailRecord | null> {
     const existing = await this.getDetail(projectId, albumId);
     if (!existing) return null;
-    if (existing.status === status) return existing;
+    if (existing.status === 'draft' || existing.publishedRevisionAt) {
+      return existing;
+    }
 
     const now = nowIso();
-    const publishedAt =
-      status === 'published' ? (existing.publishedAt ?? now) : null;
-    const coverImageId =
-      status === 'published'
-        ? (existing.coverImageId ?? existing.images[0]?.id ?? null)
-        : existing.coverImageId;
-
     await this.db.batch([
       this.db
         .prepare(
           `UPDATE site_gallery_albums
-           SET status = ?, cover_image_id = ?, published_at = ?, updated_at = ?
+           SET status = 'draft', updated_at = ?
            WHERE id = ? AND project_id = ?`,
         )
-        .bind(
-          status,
-          nullable(coverImageId),
-          nullable(publishedAt),
-          now,
-          albumId,
-          projectId,
-        ),
+        .bind(now, albumId, projectId),
       this.db
         .prepare(
           `INSERT INTO status_history
             (id, entity_type, entity_id, from_status, to_status, changed_by, reason, created_at)
-           VALUES (?, 'site_gallery_album', ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, 'site_gallery_album', ?, ?, 'draft', ?, ?, ?)`,
         )
         .bind(
           newId(),
           albumId,
           existing.status,
-          status,
           changedBy,
           nullable(reason),
           now,
         ),
     ]);
     return this.getDetail(projectId, albumId);
+  }
+
+  async publishAlbum(
+    projectId: string,
+    albumId: string,
+    changedBy: string,
+    reason?: string | null,
+  ): Promise<SiteGalleryPublicationResult | null> {
+    const existing = await this.getDetail(projectId, albumId);
+    if (!existing) return null;
+
+    const previousImages = await this.listPublishedImages(albumId);
+    const now = nowIso();
+    const publishedAt = existing.publishedAt ?? now;
+    const coverImageId = existing.coverImageId ?? existing.images[0]?.id ?? null;
+    const statements: D1PreparedStatement[] = [
+      this.db
+        .prepare(
+          `DELETE FROM site_gallery_publication_images WHERE album_id = ?`,
+        )
+        .bind(albumId),
+      this.db
+        .prepare(
+          `INSERT INTO site_gallery_publications (
+             album_id, project_id, slug, title, description, category,
+             cover_image_id, sort_order, published_at, created_at, updated_at,
+             revision_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(album_id) DO UPDATE SET
+             project_id = excluded.project_id,
+             slug = excluded.slug,
+             title = excluded.title,
+             description = excluded.description,
+             category = excluded.category,
+             cover_image_id = excluded.cover_image_id,
+             sort_order = excluded.sort_order,
+             published_at = excluded.published_at,
+             created_at = excluded.created_at,
+             updated_at = excluded.updated_at,
+             revision_at = excluded.revision_at`,
+        )
+        .bind(
+          albumId,
+          projectId,
+          existing.slug,
+          existing.title,
+          nullable(existing.description),
+          existing.category,
+          nullable(coverImageId),
+          existing.sortOrder,
+          publishedAt,
+          existing.createdAt,
+          now,
+          now,
+        ),
+      ...existing.images.map((image) =>
+        this.db
+          .prepare(
+            `INSERT INTO site_gallery_publication_images (
+               album_id, image_id, file_asset_id, alt, position, width, height,
+               created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            albumId,
+            image.id,
+            image.fileAssetId,
+            nullable(image.alt),
+            image.position,
+            image.width,
+            image.height,
+            image.createdAt,
+          ),
+      ),
+      this.db
+        .prepare(
+          `UPDATE site_gallery_albums
+           SET status = 'published', cover_image_id = ?, published_at = ?,
+             updated_at = ?
+           WHERE id = ? AND project_id = ?`,
+        )
+        .bind(nullable(coverImageId), publishedAt, now, albumId, projectId),
+    ];
+
+    if (existing.status !== 'published') {
+      statements.push(
+        this.db
+          .prepare(
+            `INSERT INTO status_history
+              (id, entity_type, entity_id, from_status, to_status, changed_by, reason, created_at)
+             VALUES (?, 'site_gallery_album', ?, ?, 'published', ?, ?, ?)`,
+          )
+          .bind(
+            newId(),
+            albumId,
+            existing.status,
+            changedBy,
+            nullable(reason),
+            now,
+          ),
+      );
+    }
+
+    await this.db.batch(statements);
+
+    const currentFileAssetIds = new Set(
+      existing.images.map((image) => image.fileAssetId),
+    );
+    const staleImages = previousImages.filter(
+      (image) => !currentFileAssetIds.has(image.fileAssetId),
+    );
+    const orphanedImages = await this.deleteUnreferencedAssets(staleImages);
+    const album = await this.getDetail(projectId, albumId);
+    if (!album) return null;
+    return { album, orphanedImages };
   }
 
   async addImage(data: {
@@ -460,6 +642,18 @@ export class SiteGalleryRepository {
     return row ? mapStoredImage(row) : null;
   }
 
+  async imageIsPublished(albumId: string, imageId: string): Promise<boolean> {
+    const row = await this.db
+      .prepare(
+        `SELECT 1 AS present
+         FROM site_gallery_publication_images
+         WHERE album_id = ? AND image_id = ?`,
+      )
+      .bind(albumId, imageId)
+      .first<{ present: number }>();
+    return row !== null;
+  }
+
   async updateImageAlt(
     projectId: string,
     albumId: string,
@@ -540,7 +734,7 @@ export class SiteGalleryRepository {
     projectId: string,
     albumId: string,
     imageId: string,
-  ): Promise<SiteGalleryStoredImage | null> {
+  ): Promise<SiteGalleryImageRemoval | null> {
     const image = await this.getImage(projectId, albumId, imageId);
     if (!image) return null;
     const replacement = await this.db
@@ -573,11 +767,12 @@ export class SiteGalleryRepository {
           `DELETE FROM site_gallery_images WHERE id = ? AND album_id = ?`,
         )
         .bind(imageId, albumId),
-      this.db
-        .prepare(`DELETE FROM file_assets WHERE id = ?`)
-        .bind(image.fileAssetId),
     ]);
-    return image;
+
+    const deletedAsset = await this.deleteAssetIfUnreferenced(
+      image.fileAssetId,
+    );
+    return { image, deleteObject: deletedAsset };
   }
 
   async recordAudit(data: SiteGalleryAuditData): Promise<void> {
@@ -626,6 +821,51 @@ export class SiteGalleryRepository {
       .all<StoredImageRow>();
     return results.map(mapStoredImage);
   }
+
+  private async listPublishedImages(
+    albumId: string,
+  ): Promise<SiteGalleryStoredImage[]> {
+    const { results } = await this.db
+      .prepare(
+        `${PUBLISHED_IMAGE_SELECT}
+         WHERE image.album_id = ?
+         ORDER BY image.position ASC, image.created_at ASC`,
+      )
+      .bind(albumId)
+      .all<StoredImageRow>();
+    return results.map(mapStoredImage);
+  }
+
+  private async deleteUnreferencedAssets(
+    candidates: SiteGalleryStoredImage[],
+  ): Promise<SiteGalleryStoredImage[]> {
+    const removed: SiteGalleryStoredImage[] = [];
+    for (const candidate of candidates) {
+      if (await this.deleteAssetIfUnreferenced(candidate.fileAssetId)) {
+        removed.push(candidate);
+      }
+    }
+    return removed;
+  }
+
+  private async deleteAssetIfUnreferenced(fileAssetId: string): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `DELETE FROM file_assets
+         WHERE id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM site_gallery_images draft
+             WHERE draft.file_asset_id = file_assets.id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM site_gallery_publication_images publication
+             WHERE publication.file_asset_id = file_assets.id
+           )`,
+      )
+      .bind(fileAssetId)
+      .run();
+    return result.meta.changes > 0;
+  }
 }
 
 const IMAGE_SELECT = `
@@ -637,6 +877,23 @@ const IMAGE_SELECT = `
     asset.checksum
   FROM site_gallery_images image
   INNER JOIN site_gallery_albums album ON album.id = image.album_id
+  INNER JOIN file_assets asset ON asset.id = image.file_asset_id`;
+
+const PUBLISHED_IMAGE_SELECT = `
+  SELECT
+    image.image_id AS id,
+    image.album_id,
+    image.file_asset_id,
+    image.alt,
+    image.position,
+    image.width,
+    image.height,
+    image.created_at,
+    asset.key,
+    asset.content_type,
+    asset.size_bytes,
+    asset.checksum
+  FROM site_gallery_publication_images image
   INNER JOIN file_assets asset ON asset.id = image.file_asset_id`;
 
 function mapAlbum(row: AlbumRow): SiteGalleryAlbumRecord {
@@ -651,6 +908,10 @@ function mapAlbum(row: AlbumRow): SiteGalleryAlbumRecord {
     coverImageId: row.cover_image_id,
     sortOrder: row.sort_order,
     publishedAt: row.published_at,
+    publishedRevisionAt: row.published_revision_at,
+    hasUnpublishedChanges:
+      row.published_source_updated_at !== null &&
+      row.updated_at !== row.published_source_updated_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

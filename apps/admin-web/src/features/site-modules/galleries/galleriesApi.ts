@@ -24,6 +24,8 @@ export interface GalleryAlbum {
   coverImageId: string | null;
   sortOrder: number;
   publishedAt: string | null;
+  publishedRevisionAt: string | null;
+  hasUnpublishedChanges: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +51,7 @@ export interface GalleryAlbumFields {
 export interface GalleryAlbumListResponse {
   projectId: string;
   albums: GalleryAlbumSummary[];
+  publishedAlbums: GalleryAlbumSummary[];
 }
 
 const http = createHttpClient({

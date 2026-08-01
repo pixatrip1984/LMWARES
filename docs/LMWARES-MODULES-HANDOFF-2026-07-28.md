@@ -57,11 +57,18 @@ reproducible en `scripts/validate-starter-events.ps1`. No se desplegaron módulo
 ni migraciones remotas. Los cinco módulos Starter completaron ya su ciclo E2E
 local principal.
 
-Una brecha restante de Galerías no bloquea su ciclo principal, pero debe
-resolverse antes de prometer borradores totalmente aislados: reordenar, cambiar
-portada o eliminar imágenes de un álbum publicado modifica la colección pública
-de inmediato. Para mantener la versión publicada intacta mientras se edita será
-necesario versionar o copiar el manifiesto de imágenes por revisión.
+La brecha de aislamiento de Galerías quedó cerrada el 2026-08-01. La migración
+`0018_lmwares_gallery_publications.sql` separa el álbum editable de su revisión
+pública inmutable. Guardar, reordenar, cambiar portada, texto alternativo, slug
+o eliminar una imagen sólo modifica el borrador; el sitio conserva la revisión
+anterior hasta volver a publicar. El administrador identifica esos casos como
+`Publicado · cambios sin publicar` y su vista pública usa el mismo snapshot que
+consume la API pública.
+
+La prueba reproducible `scripts/validate-starter-galleries.ps1` verificó además
+que una imagen retirada del borrador sigue disponible mientras pertenece a la
+revisión pública y que, tras republicar, el slug anterior y el objeto R2 ya
+huérfano dejan de estar disponibles.
 
 ### Actualización remota: 2026-07-31
 
@@ -87,6 +94,23 @@ La siguiente prueba debe hacerse con una sesión Access autorizada: abrir
 una pieza desde Module Studio y confirmar su lectura mediante
 `https://api.lmwares.com/sites/<projectId>/<module>`. No se insertaron datos de
 prueba directamente en D1 remoto.
+
+### Actualización remota: 2026-08-01
+
+- la migración `0018_lmwares_gallery_publications.sql` se aplicó correctamente
+  en D1 remoto `starter-db`;
+- Public API quedó desplegada como
+  `08f1a4d3-b4a1-4cae-8979-de12524f9d76`;
+- Admin API quedó desplegada como
+  `1837e144-c34a-4b13-93f0-447792f977ed`;
+- Admin Pages quedó desplegado como
+  `915226ed.lmwares-admin.pages.dev`;
+- typecheck, pruebas generales, dry-run de Workers, build de producción y E2E
+  local de aislamiento de Galerías quedaron verdes.
+
+Continúa pendiente únicamente ejecutar el ciclo remoto autenticado desde una
+sesión autorizada por Cloudflare Access; la frontera anónima debe permanecer
+cerrada.
 
 ## 1. Resumen ejecutivo
 
