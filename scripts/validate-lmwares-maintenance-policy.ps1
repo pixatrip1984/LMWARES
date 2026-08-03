@@ -158,12 +158,29 @@ WHERE lmw_maintenance_subscription_charges.maintenance_subscription_id = exclude
   Assert-Equal $charge[0].status 'processed' 'El reintento debe actualizar el cargo existente.'
   Assert-Equal ([int]$charge[0].retry_attempt) 1 'El reintento actualizado debe persistir.'
 
+  Write-Host 'Comprobando que una cancelación sea terminal ante carreras...'
+  $null = Invoke-D1Json "UPDATE lmw_maintenance_subscriptions SET status='canceled', canceled_at='2026-08-03T00:20:00.000Z' WHERE id='maintenance-good';"
+  $null = Invoke-D1Json @'
+UPDATE lmw_maintenance_subscriptions
+SET status = CASE WHEN status IN ('canceled', 'disputed') THEN status ELSE 'active' END,
+    provider_status = 'authorized',
+    authorized_at = CASE
+      WHEN status NOT IN ('canceled', 'disputed') AND 'active' = 'active'
+      THEN COALESCE(authorized_at, '2026-08-03T00:21:00.000Z') ELSE authorized_at END,
+    updated_at = '2026-08-03T00:21:00.000Z'
+WHERE id = 'maintenance-good';
+'@
+  $terminal = Invoke-D1Json "SELECT status, CAST(strftime('%s', canceled_at) AS INTEGER) AS canceled_epoch FROM lmw_maintenance_subscriptions WHERE id='maintenance-good';"
+  Assert-Equal $terminal[0].status 'canceled' 'Una conciliación concurrente no debe reabrir una mensualidad cancelada.'
+  $expectedCanceledAt = [DateTimeOffset]::Parse('2026-08-03T00:20:00.000Z').ToUnixTimeSeconds()
+  Assert-Equal ([long]$terminal[0].canceled_epoch) $expectedCanceledAt 'La evidencia de cancelación debe conservarse.'
+
   $fk = Invoke-D1Json 'SELECT COUNT(*) AS violations FROM pragma_foreign_key_check;'
   Assert-Equal ([int]$fk[0].violations) 0 'La prueba dejó violaciones de llaves foráneas.'
 
   Write-Host ''
   Write-Host 'Política de mensualidad Starter validada.' -ForegroundColor Green
-  Write-Host 'Verificado: elegibilidad, proyecto enlazado, pago canónico, revisión, oferta aceptada, idempotencia, publicación y cargo recurrente.'
+  Write-Host 'Verificado: elegibilidad, proyecto enlazado, pago canónico, revisión, oferta aceptada, idempotencia, publicación, cargo recurrente y cancelación terminal.'
   Write-Host 'Proveedor: no se realizaron llamadas a Mercado Pago.'
 } finally {
   $resolvedPersist = [IO.Path]::GetFullPath($persistPath)

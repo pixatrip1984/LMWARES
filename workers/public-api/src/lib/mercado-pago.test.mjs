@@ -9,6 +9,10 @@ const paymentsRouteSource = readFileSync(
   'utf8',
 );
 const workerSource = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
+const reconciliationSource = readFileSync(
+  new URL('./subscription-reconciliation.ts', import.meta.url),
+  'utf8',
+);
 const wranglerSource = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 
 const preapprovalStart = providerSource.indexOf(
@@ -86,4 +90,21 @@ test('production schedules reconciliation through waitUntil', () => {
   );
   assert.match(wranglerSource, /\[env\.production\.triggers\]/);
   assert.match(wranglerSource, /crons = \["17 \* \* \* \*"\]/);
+});
+
+test('maintenance reconciliation continues when creation is closed', () => {
+  const start = reconciliationSource.indexOf('async function reconcileMaintenanceSubscriptionsOnSchedule');
+  const end = reconciliationSource.indexOf('export function assertPreapprovalMatchesSubscription');
+  const source = reconciliationSource.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(source, /MERCADO_PAGO_MAINTENANCE_ACCESS_TOKEN/);
+  assert.match(source, /lmwaresMaintenanceSubscriptions\.listForReconciliation/);
+  assert.doesNotMatch(source, /MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED/);
+});
+
+test('maintenance payment events have their own idempotency namespace', () => {
+  assert.match(paymentsRouteSource, /maintenanceEventPrefix = maintenanceScope \? 'maintenance:' : ''/);
+  assert.match(paymentsRouteSource, /`\$\{maintenanceEventPrefix\}\$\{requestId\}`/);
+  assert.match(paymentsRouteSource, /MERCADO_PAGO_MAINTENANCE_WEBHOOK_SECRET/);
+  assert.match(paymentsRouteSource, /MERCADO_PAGO_MAINTENANCE_ACCESS_TOKEN/);
 });

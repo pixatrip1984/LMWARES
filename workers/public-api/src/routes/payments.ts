@@ -123,11 +123,12 @@ payments.post('/webhooks/mercado-pago', async (c) => {
           paymentId,
         })
       : null;
+  const maintenanceEventPrefix = maintenanceScope ? 'maintenance:' : '';
   const providerRequestId = isLegacyIpn
-    ? `ipn:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
+    ? `${maintenanceEventPrefix}ipn:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
     : providerVerifiedTestWebhook
-      ? `test-webhook:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
-      : requestId;
+      ? `${maintenanceEventPrefix}test-webhook:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
+      : `${maintenanceEventPrefix}${requestId}`;
   const transport = isLegacyIpn
     ? 'ipn'
     : providerVerifiedTestWebhook

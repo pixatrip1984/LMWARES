@@ -11,6 +11,10 @@ const workOrderSource = readFileSync(
   new URL('../../../../packages/db/src/repositories/lmwares-starter-work-orders.ts', import.meta.url),
   'utf8',
 );
+const technicalSubscriptionSource = readFileSync(
+  new URL('../../../../packages/db/src/repositories/lmwares-subscriptions.ts', import.meta.url),
+  'utf8',
+);
 
 test('maintenance creation requires every commercial publication gate', () => {
   const claimStart = repositorySource.indexOf('async claimCreation');
@@ -46,4 +50,18 @@ test('publication remains gated by an active maintenance subscription', () => {
   assert.match(publishSource, /current\.status !== 'ready_to_publish'/);
   assert.match(publishSource, /s\.status = 'active'/);
   assert.match(publishSource, /status = 'live'/);
+});
+
+test('provider reconciliation cannot race a canceled or disputed lifecycle back open', () => {
+  for (const source of [repositorySource, technicalSubscriptionSource]) {
+    const saveStart = source.indexOf('async savePreapproval');
+    const saveEnd = source.indexOf('async markCreationFailed', saveStart);
+    const saveSource = source.slice(saveStart, saveEnd);
+    assert.ok(saveStart >= 0 && saveEnd > saveStart);
+    assert.match(
+      saveSource,
+      /status = CASE WHEN status IN \('canceled', 'disputed'\) THEN status ELSE \? END/,
+    );
+    assert.match(saveSource, /status NOT IN \('canceled', 'disputed'\) AND \? = 'active'/);
+  }
 });

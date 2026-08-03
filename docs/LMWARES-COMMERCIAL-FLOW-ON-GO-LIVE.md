@@ -105,6 +105,11 @@ estado general aunque todavía no se hayan cargado los secretos.
 - Webhook y cron consultan nuevamente Mercado Pago, exigen coincidencia exacta
   de referencia, importe, moneda y frecuencia, y guardan cada cargo por su ID
   autorizado único.
+- Cerrar la compuerta impide contratos nuevos, pero no detiene Webhooks, cron,
+  conciliación ni cancelación de contratos existentes. Los eventos mensuales
+  usan su propio espacio de idempotencia y sus credenciales exclusivas.
+- `canceled` y `disputed` son estados terminales en D1: una respuesta
+  concurrente u obsoleta no puede reabrirlos como `active`.
 - Sólo una mensualidad activa permite cambiar la orden de
   `ready_to_publish` a `live`; ninguna respuesta del navegador puede saltarse
   esa verificación en D1.

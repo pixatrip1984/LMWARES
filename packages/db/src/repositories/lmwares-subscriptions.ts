@@ -163,10 +163,15 @@ export class LmwaresSubscriptionsRepository {
     await this.db
       .prepare(
         `UPDATE lmw_subscriptions
-         SET status = ?, provider_preapproval_id = ?, authorization_url = ?,
+         SET status = CASE WHEN status IN ('canceled', 'disputed') THEN status ELSE ? END,
+             provider_preapproval_id = ?, authorization_url = ?,
              provider_status = ?, next_payment_date = ?,
-             authorized_at = CASE WHEN ? = 'active' THEN COALESCE(authorized_at, ?) ELSE authorized_at END,
-             canceled_at = CASE WHEN ? = 'canceled' THEN COALESCE(canceled_at, ?) ELSE canceled_at END,
+             authorized_at = CASE
+               WHEN status NOT IN ('canceled', 'disputed') AND ? = 'active'
+               THEN COALESCE(authorized_at, ?) ELSE authorized_at END,
+             canceled_at = CASE
+               WHEN status <> 'disputed' AND ? = 'canceled'
+               THEN COALESCE(canceled_at, ?) ELSE canceled_at END,
              updated_at = ?
          WHERE id = ?`,
       )
