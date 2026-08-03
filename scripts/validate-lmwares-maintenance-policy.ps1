@@ -175,12 +175,56 @@ WHERE id = 'maintenance-good';
   $expectedCanceledAt = [DateTimeOffset]::Parse('2026-08-03T00:20:00.000Z').ToUnixTimeSeconds()
   Assert-Equal ([long]$terminal[0].canceled_epoch) $expectedCanceledAt 'La evidencia de cancelación debe conservarse.'
 
+  Write-Host 'Comprobando recuperación idempotente del comprobante publicado...'
+  $notificationSql = @'
+INSERT OR IGNORE INTO lmw_notifications
+  (id, user_id, intake_id, channel, template, to_address, dedupe_key,
+   status, attempt, max_attempts, next_attempt_at, payload, created_at, updated_at)
+SELECT 'notification-fixture', w.user_id, NULL, 'email', 'starter-site-published', u.email,
+       'starter-site-published:' || w.id, 'pending', 0, 5,
+       '2026-08-03T00:30:00.000Z',
+       json_object(
+         'kind', 'starter-site-published',
+         'workOrderId', w.id,
+         'intakeId', w.intake_id,
+         'projectId', w.project_id,
+         'billingOrderId', w.billing_order_id,
+         'commercialOfferId', w.commercial_offer_id,
+         'maintenanceSubscriptionId', s.id,
+         'monthlyAmountCents', s.amount_cents,
+         'siteName', COALESCE(p.name, 'Tu sitio Starter'),
+         'plan', json_extract(w.work_snapshot, '$.plan'),
+         'publicUrl', w.published_url,
+         'publishedAt', w.published_at
+       ),
+       '2026-08-03T00:30:00.000Z', '2026-08-03T00:30:00.000Z'
+FROM lmw_starter_work_orders w
+JOIN lmw_users u ON u.id = w.user_id
+LEFT JOIN lmwares_projects p ON p.id = w.project_id
+JOIN lmw_maintenance_subscriptions s ON s.work_order_id = w.id
+WHERE w.id = 'work-good' AND w.status = 'live';
+'@
+  $null = Invoke-D1Json $notificationSql
+  $null = Invoke-D1Json ($notificationSql.Replace("'notification-fixture'", "'notification-duplicate'"))
+  $notification = Invoke-D1Json @'
+SELECT COUNT(*) AS total, MAX(template) AS template, MAX(to_address) AS to_address,
+       MAX(json_extract(payload, '$.publicUrl')) AS public_url,
+       MAX(json_extract(payload, '$.maintenanceSubscriptionId')) AS subscription_id
+FROM lmw_notifications
+WHERE dedupe_key = 'starter-site-published:work-good';
+'@
+  Assert-Equal ([int]$notification[0].total) 1 'La publicación repetida debe conservar un solo comprobante.'
+  Assert-Equal $notification[0].template 'starter-site-published' 'El comprobante debe usar la plantilla Starter.'
+  Assert-Equal $notification[0].to_address 'maintenance-validator@example.com' 'El comprobante debe pertenecer a la cuenta contratante.'
+  Assert-Equal $notification[0].public_url 'https://fixture.lmwares.com' 'El comprobante debe congelar la URL publicada.'
+  Assert-Equal $notification[0].subscription_id 'maintenance-good' 'El comprobante debe enlazar la mensualidad autorizada.'
+
   $fk = Invoke-D1Json 'SELECT COUNT(*) AS violations FROM pragma_foreign_key_check;'
   Assert-Equal ([int]$fk[0].violations) 0 'La prueba dejó violaciones de llaves foráneas.'
 
   Write-Host ''
   Write-Host 'Política de mensualidad Starter validada.' -ForegroundColor Green
-  Write-Host 'Verificado: elegibilidad, proyecto enlazado, pago canónico, revisión, oferta aceptada, idempotencia, publicación, cargo recurrente y cancelación terminal.'
+  Write-Host 'Verificado: elegibilidad, proyecto enlazado, pago canónico, revisión, oferta aceptada, idempotencia, publicación, cargo recurrente, cancelación terminal y comprobante recuperable.'
   Write-Host 'Proveedor: no se realizaron llamadas a Mercado Pago.'
 } finally {
   $resolvedPersist = [IO.Path]::GetFullPath($persistPath)

@@ -53,6 +53,9 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 - La primera publicación exige una URL HTTPS bajo `*.lmwares.com`. El panel
   vuelve idempotente la confirmación, registra auditoría y crea un único
   comprobante de publicación visible en la cuenta y entregable por email.
+- Una cancelación concurrente posterior a `live` no puede hacer desaparecer el
+  comprobante: el outbox puede reconstruirlo idempotentemente desde la orden
+  publicada y la mensualidad congelada, aunque ésta ya figure cancelada.
 - El comprobante Starter incluye URL, fecha, importe mensual, cuenta, IDs de
   solicitud, oferta, pago, orden, proyecto y suscripción, además de soporte e
   instrucciones para detener cobros futuros. El outbox reutiliza los leases y

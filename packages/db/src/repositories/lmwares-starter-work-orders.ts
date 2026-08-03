@@ -223,7 +223,7 @@ export class LmwaresStarterWorkOrdersRepository {
          FROM lmw_starter_work_orders w
          JOIN lmw_users u ON u.id = w.user_id
          LEFT JOIN lmwares_projects p ON p.id = w.project_id
-         JOIN lmw_maintenance_subscriptions s ON s.work_order_id = w.id AND s.status = 'active'
+         JOIN lmw_maintenance_subscriptions s ON s.work_order_id = w.id
          WHERE w.id = ? AND w.status = 'live'`,
       )
       .bind(
