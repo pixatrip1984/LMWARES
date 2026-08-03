@@ -105,6 +105,13 @@ export const galleriesApi = {
     );
   },
 
+  unpublish(projectId: string, albumId: string) {
+    return http.post<GalleryAlbumDetail>(
+      `${modulePath(projectId)}/${encodeURIComponent(albumId)}/unpublish`,
+      {},
+    );
+  },
+
   uploadImage(
     projectId: string,
     albumId: string,

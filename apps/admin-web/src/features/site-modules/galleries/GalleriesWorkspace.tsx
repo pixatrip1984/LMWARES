@@ -183,6 +183,22 @@ export function GalleriesWorkspace({
     }
   }
 
+  async function unpublish() {
+    if (!draft.id) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const unpublished = await galleriesApi.unpublish(projectId, draft.id);
+      await loadWorkspace(unpublished.id);
+      setNotice('Álbum retirado de la vista pública y conservado como borrador.');
+    } catch (caught) {
+      setError(errorMessage(caught, 'No se pudo retirar el álbum.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function preview() {
     setPreviewSurface('album');
     setNotice('La vista izquierda refleja los cambios locales antes de guardar.');
@@ -338,6 +354,16 @@ export function GalleriesWorkspace({
           >
             Publicar
           </button>
+          {draft.publishedRevisionAt ? (
+            <button
+              type="button"
+              className="is-secondary"
+              onClick={() => void unpublish()}
+              disabled={busy}
+            >
+              Retirar
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -654,6 +680,16 @@ export function GalleriesWorkspace({
             >
               {busy ? 'Procesando…' : 'Publicar'}
             </button>
+            {draft.publishedRevisionAt ? (
+              <button
+                type="button"
+                className="is-secondary"
+                onClick={() => void unpublish()}
+                disabled={busy}
+              >
+                Retirar
+              </button>
+            ) : null}
           </div>
         </aside>
       </div>

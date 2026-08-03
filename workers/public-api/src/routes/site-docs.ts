@@ -31,7 +31,7 @@ siteDocsPublic.get('/', async (c) => {
     const { document, version } = record;
     if (!version.extension || !document.publishedAt) continue;
     if (document.category) categories.set(document.category.id, publicCategory(document.category));
-    const base = `${origin}/sites/${encodeURIComponent(projectId)}/docs/${document.id}`;
+    const base = `${origin}/sites/${encodeURIComponent(projectId)}/documents/${document.id}`;
     documents.push({
       id: document.id,
       title: document.title,

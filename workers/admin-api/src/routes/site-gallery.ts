@@ -201,6 +201,38 @@ adminSiteGalleries.post('/:albumId/publish', requireWrite, async (c) => {
   return c.json(presentDetail(c, album));
 });
 
+adminSiteGalleries.post('/:albumId/unpublish', requireWrite, async (c) => {
+  const projectId = readProjectId(c);
+  const albumId = readAlbumId(c);
+  const { reason } = parseInput(
+    siteGalleryStatusReasonSchema,
+    await readJson(c),
+  );
+  const gallery = new SiteGalleryRepository(c.env.DB);
+  await assertProject(gallery, projectId);
+  const before = await gallery.getDetail(projectId, albumId);
+  if (!before) throw AppError.notFound('Álbum');
+
+  const album = await gallery.unpublishAlbum(
+    projectId,
+    albumId,
+    c.get('admin').email,
+    reason ?? 'Álbum retirado de la vista pública',
+  );
+  if (!album) throw AppError.notFound('Álbum');
+  await audit(c, gallery, {
+    action: 'site_gallery.album.unpublish',
+    projectId,
+    albumId,
+    metadata: {
+      from: before.status,
+      to: album.status,
+      imageCount: album.images.length,
+    },
+  });
+  return c.json(presentDetail(c, album));
+});
+
 adminSiteGalleries.post('/:albumId/images', requireWrite, async (c) => {
   const projectId = readProjectId(c);
   const albumId = readAlbumId(c);

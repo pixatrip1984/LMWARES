@@ -26,7 +26,7 @@ export function DocsPublicModule({ projectId, apiBaseUrl }: DocsPublicModuleProp
     const controller = new AbortController();
     setLibrary(null);
     setError(null);
-    fetch(`${base}/sites/${encodeURIComponent(projectId)}/docs`, {
+    fetch(`${base}/sites/${encodeURIComponent(projectId)}/documents`, {
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     })

@@ -550,6 +550,55 @@ export class SiteGalleryRepository {
     return { album, orphanedImages };
   }
 
+  async unpublishAlbum(
+    projectId: string,
+    albumId: string,
+    changedBy: string,
+    reason?: string | null,
+  ): Promise<SiteGalleryAlbumDetailRecord | null> {
+    const existing = await this.getDetail(projectId, albumId);
+    if (!existing) return null;
+    if (!existing.publishedRevisionAt) return existing;
+
+    const now = nowIso();
+    await this.db.batch([
+      this.db
+        .prepare(
+          `DELETE FROM site_gallery_publication_images WHERE album_id = ?`,
+        )
+        .bind(albumId),
+      this.db
+        .prepare(
+          `DELETE FROM site_gallery_publications
+           WHERE album_id = ? AND project_id = ?`,
+        )
+        .bind(albumId, projectId),
+      this.db
+        .prepare(
+          `UPDATE site_gallery_albums
+           SET status = 'draft', published_at = NULL, updated_at = ?
+           WHERE id = ? AND project_id = ?`,
+        )
+        .bind(now, albumId, projectId),
+      this.db
+        .prepare(
+          `INSERT INTO status_history
+            (id, entity_type, entity_id, from_status, to_status, changed_by, reason, created_at)
+           VALUES (?, 'site_gallery_album', ?, ?, 'draft', ?, ?, ?)`,
+        )
+        .bind(
+          newId(),
+          albumId,
+          existing.status,
+          changedBy,
+          nullable(reason),
+          now,
+        ),
+    ]);
+
+    return this.getDetail(projectId, albumId);
+  }
+
   async addImage(data: {
     projectId: string;
     albumId: string;

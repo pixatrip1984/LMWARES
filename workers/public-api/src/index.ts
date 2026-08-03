@@ -67,6 +67,7 @@ app.route('/internal', freeJobsInternal);
 app.route('/sites/:projectId/blog', siteBlogPublic);
 app.route('/sites/:projectId/galleries', publicSiteGalleries);
 app.route('/sites/:projectId/docs', siteDocsPublic);
+app.route('/sites/:projectId/documents', siteDocsPublic);
 app.route('/sites/:projectId/forms', siteForms);
 app.route('/sites/:projectId/events', siteEvents);
 app.route('/sites', freeSites);

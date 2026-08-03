@@ -57,6 +57,7 @@ app.route('/admin/commercial-intakes', commercialIntakesAdmin);
 app.route('/admin/projects/:projectId/modules/blog', siteBlogAdmin);
 app.route('/admin/projects/:projectId/modules/galleries', adminSiteGalleries);
 app.route('/admin/projects/:projectId/modules/docs', siteDocsAdmin);
+app.route('/admin/projects/:projectId/modules/documents', siteDocsAdmin);
 app.route('/admin/projects/:projectId/modules/forms', siteForms);
 app.route('/admin/projects/:projectId/modules/events', siteEvents);
 app.route('/admin/projects', lmwaresProjects);

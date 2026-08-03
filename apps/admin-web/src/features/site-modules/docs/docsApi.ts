@@ -6,8 +6,9 @@ import type {
   SiteDocVersion,
   SiteDocWithCurrentVersion,
 } from '@starter/domain';
+import { config } from '../../../lib/config';
 
-const API_BASE = (import.meta.env.VITE_ADMIN_API_URL ?? 'http://127.0.0.1:8888').replace(/\/$/, '');
+const API_BASE = config.apiUrl;
 
 export interface SiteDocDraft {
   title: string;
@@ -96,7 +97,7 @@ export const docsApi = {
 };
 
 function basePath(projectId: string): string {
-  return `/admin/projects/${encodeURIComponent(projectId)}/modules/docs`;
+  return `/admin/projects/${encodeURIComponent(projectId)}/modules/documents`;
 }
 
 function uploadForm(input: NewSiteDocUpload): FormData {
