@@ -48,8 +48,8 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 - La mensualidad comercial vive en `lmw_maintenance_subscriptions`; no se
   mezcla con `lmw_subscriptions`, que conserva únicamente el ensayo técnico.
 - El importe mensual se copia de la oferta aceptada y sólo puede reservarse
-  para una implementación pagada, sin revisión de pago y en
-  `ready_to_publish`.
+  para una implementación pagada, sin revisión de pago, con un proyecto real
+  enlazado y en `ready_to_publish`.
 - La primera publicación exige una URL HTTPS bajo `*.lmwares.com`. El panel
   vuelve idempotente la confirmación, registra auditoría y crea un único
   comprobante de publicación visible en la cuenta y entregable por email.
@@ -109,6 +109,19 @@ estado general aunque todavía no se hayan cargado los secretos.
   `ready_to_publish` a `live`; ninguna respuesta del navegador puede saltarse
   esa verificación en D1.
 
+La política de datos puede comprobarse sin secretos ni llamadas al proveedor:
+
+```powershell
+npm run lmwares:maintenance:validate
+```
+
+El validador crea una base D1 local aislada, aplica todas las migraciones y
+comprueba con datos sintéticos que se bloquean órdenes sin proyecto, sin pago,
+con revisión pendiente, con oferta reemplazada o todavía en construcción.
+También verifica la reserva idempotente de una sola mensualidad, la transición
+a `live` únicamente con suscripción `active` y la conciliación idempotente de
+un cargo autorizado. El almacenamiento temporal se elimina al terminar.
+
 ### Evidencia comercial acumulada: 2026-08-03
 
 El preflight y consultas agregadas de sólo lectura sobre D1 remoto confirmaron:
@@ -130,6 +143,10 @@ pagadas y exige al menos una orden elegible cuando se ejecuta con
 si está en `ready_to_publish`, tiene proyecto enlazado, pago canónico sin
 revisión y oferta aceptada. Así el preflight no puede declarar lista la
 mensualidad mientras ShynoLaser continúe legítimamente en construcción.
+
+La regresión local de la política de mantenimiento pasó el mismo día sobre una
+base D1 aislada. Durante esa prueba no se abrió la compuerta remota, no se
+leyeron secretos y no se realizó ninguna solicitud a Mercado Pago.
 
 ## Validación técnica de la oferta
 

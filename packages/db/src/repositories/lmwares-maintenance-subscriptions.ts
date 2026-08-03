@@ -132,6 +132,7 @@ export class LmwaresMaintenanceSubscriptionsRepository {
          JOIN lmw_billing_orders b ON b.id = w.billing_order_id
          JOIN lmw_commercial_offers o ON o.id = w.commercial_offer_id
          WHERE w.id = ? AND w.user_id = ? AND w.status = 'ready_to_publish'
+           AND w.project_id IS NOT NULL
            AND b.status = 'paid' AND b.payment_review_required = 0
            AND o.status = 'accepted' AND o.monthly_amount_cents > 0`,
       )

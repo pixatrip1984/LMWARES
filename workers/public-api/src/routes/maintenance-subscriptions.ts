@@ -31,8 +31,8 @@ maintenanceSubscriptions.get('/work-orders/:workOrderId', async (c) => {
 maintenanceSubscriptions.post('/work-orders/:workOrderId', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
-  const accessToken = maintenanceAccessToken(c.env);
   assertMaintenanceEnabled(c.env);
+  const accessToken = maintenanceAccessToken(c.env);
   const workOrder = await ownedWorkOrder(c.env, c.req.param('workOrderId')!, session.user.id);
   if (workOrder.status !== 'ready_to_publish') {
     throw new AppError('conflict', 'La mensualidad sólo se autoriza cuando el proyecto está listo para publicar.');
