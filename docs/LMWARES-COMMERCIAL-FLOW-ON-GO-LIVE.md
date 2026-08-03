@@ -108,6 +108,13 @@ estado general aunque todavía no se hayan cargado los secretos.
 - Sólo una mensualidad activa permite cambiar la orden de
   `ready_to_publish` a `live`; ninguna respuesta del navegador puede saltarse
   esa verificación en D1.
+- El regreso de Mercado Pago a `/suscripcion/<workOrderId>` concilia
+  automáticamente el estado cuando incluye `preapproval_id`, pero la interfaz
+  distingue explícitamente `active` de `live`: autorizar abre la compuerta y
+  la publicación sigue siendo una acción operacional separada.
+- El centro de cuenta conserva el acceso a administrar la mensualidad después
+  de publicar y muestra acciones específicas para estados pendientes, en
+  atención, pausados, disputados o cancelados.
 
 La política de datos puede comprobarse sin secretos ni llamadas al proveedor:
 

@@ -56,10 +56,21 @@
   padding: 9px 13px;
 }
 
-.lmw-payment-status.is-paid {
+.lmw-payment-status.is-paid,
+.lmw-payment-status.is-active {
   background: rgba(58, 220, 143, 0.12);
   border-color: rgba(58, 220, 143, 0.4);
   color: #70efb1;
+}
+
+.lmw-payment-status.is-payment_attention,
+.lmw-payment-status.is-paused,
+.lmw-payment-status.is-disputed,
+.lmw-payment-status.is-canceled,
+.lmw-payment-status.is-creation_failed {
+  background: rgba(255, 126, 64, 0.1);
+  border-color: rgba(255, 145, 87, 0.38);
+  color: #ffb184;
 }
 
 .lmw-payment-status.is-payment_failed,

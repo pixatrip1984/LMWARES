@@ -5,6 +5,7 @@ import type {
   AccountSite,
   PublicPackageIntake,
 } from '@starter/api-client';
+import { maintenanceActionLabel } from '../../lib/maintenance-ui';
 import './accountCenterModal.css';
 
 export type AccountCenterTab = 'notifications' | 'sites' | 'account';
@@ -428,11 +429,11 @@ function SitesPanel({
                               : 'Continuar al pago'}
                           </a>
                         ) : null}
-                        {intake.workOrder?.status === 'ready_to_publish' ? (
+                        {intake.workOrder && (
+                          intake.workOrder.status === 'ready_to_publish' || intake.maintenanceSubscription
+                        ) ? (
                           <a href={`/suscripcion/${encodeURIComponent(intake.workOrder.id)}`}>
-                            {intake.maintenanceSubscription?.status === 'active'
-                              ? 'Ver mensualidad autorizada'
-                              : 'Autorizar mensualidad para publicar'}
+                            {maintenanceActionLabel(intake.maintenanceSubscription?.status ?? null)}
                           </a>
                         ) : null}
                         {intake.workOrder?.status === 'live' && intake.workOrder.publishedUrl ? (
