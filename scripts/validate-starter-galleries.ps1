@@ -1,3 +1,5 @@
+#requires -Version 7.0
+
 [CmdletBinding()]
 param(
   [string]$PublicApiUrl = 'http://127.0.0.1:8887',

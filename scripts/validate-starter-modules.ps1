@@ -1,3 +1,5 @@
+#requires -Version 7.0
+
 [CmdletBinding()]
 param(
   [ValidateSet('local', 'remote')] [string]$Mode = 'local',

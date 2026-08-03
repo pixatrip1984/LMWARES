@@ -219,7 +219,8 @@ Galerías y Docs descritos arriba.
 ### Revalidación posterior al checkout comercial: 2026-08-01
 
 Después de desplegar la orden de pago de implementación (`12689ae`) se volvió a
-ejecutar `scripts/validate-starter-modules.ps1 -Mode local -ProjectId astraeus`.
+ejecutar `pwsh -NoProfile -File scripts/validate-starter-modules.ps1 -Mode local
+-ProjectId astraeus`.
 Los cinco validadores pasaron: Blog, Galerías, Docs, Formularios y Eventos. La
 ejecución volvió a cubrir snapshots públicos inmutables, republicación, limpieza
 R2, respuestas congeladas de formularios y la carrera concurrente por el último
@@ -241,6 +242,30 @@ operador, pero el puente de automatización rechazó `fileChooser.setFiles` con
 falso positivo. Permanecen como única evidencia faltante los dos gestos humanos:
 cargar/publicar una imagen en Galerías y cargar/publicar/descargar un documento
 en Docs.
+
+### Revalidación del HEAD comercial: 2026-08-03
+
+Con el repositorio limpio en `809298d` se levantó nuevamente el stack local y
+se ejecutó la compuerta completa con PowerShell 7:
+
+```powershell
+pwsh -NoProfile -File scripts/validate-starter-modules.ps1 -Mode local -ProjectId astraeus
+```
+
+Los cinco módulos pasaron después de integrar oferta comercial, pago de
+implementación, orden supervisada, mensualidad y comprobantes de publicación.
+La regresión volvió a cubrir Blog, Galerías, Docs, Formularios y Eventos,
+incluidos snapshots públicos inmutables, republicación, limpieza R2,
+solicitudes congeladas y carrera concurrente por cupo.
+
+Los validadores requieren PowerShell 7 porque usan `SkipHttpErrorCheck`. Todos
+declaran ahora `#requires -Version 7.0`, evitando que Windows PowerShell 5.1
+produzca un error de parámetros engañoso antes de alcanzar las APIs.
+
+La sesión remota previa de Cloudflare Access ya había expirado al intentar
+reanudar los dos E2E manuales. La ruta de Galerías quedó preparada en el login;
+no se solicitó código, no se subieron archivos y la brecha remota continúa
+limitada a los gestos de Galerías y Docs descritos arriba.
 
 ## 1. Resumen ejecutivo
 
