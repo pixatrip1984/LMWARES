@@ -89,7 +89,7 @@ try {
         '--config', $d1Config,
         '--env', 'production',
         '--json',
-        '--command', "SELECT name FROM d1_migrations WHERE name='0026_lmwares_maintenance_subscriptions.sql'; SELECT COUNT(*) AS fk_violations FROM pragma_foreign_key_check; SELECT COUNT(*) AS implementation_orders FROM lmw_billing_orders WHERE purpose='implementation'; SELECT COUNT(*) AS maintenance_subscriptions FROM lmw_maintenance_subscriptions;"
+        '--command', "SELECT name FROM d1_migrations WHERE name='0026_lmwares_maintenance_subscriptions.sql'; SELECT COUNT(*) AS fk_violations FROM pragma_foreign_key_check; SELECT COUNT(*) AS implementation_orders FROM lmw_billing_orders WHERE purpose='implementation'; SELECT COUNT(*) AS maintenance_subscriptions FROM lmw_maintenance_subscriptions; SELECT COUNT(*) AS paid_implementation_orders FROM lmw_billing_orders WHERE purpose='implementation' AND status='paid' AND payment_review_required=0; SELECT COUNT(*) AS maintenance_eligible_work_orders FROM lmw_starter_work_orders w JOIN lmw_billing_orders b ON b.id=w.billing_order_id JOIN lmw_commercial_offers o ON o.id=w.commercial_offer_id WHERE w.status='ready_to_publish' AND w.project_id IS NOT NULL AND b.status='paid' AND b.payment_review_required=0 AND o.status='accepted';"
     ))
 
     $health = Invoke-WebRequest -Uri 'https://api.lmwares.com/health' -UseBasicParsing -TimeoutSec 20
@@ -97,6 +97,7 @@ try {
     $maintenanceReady = Test-SecretSet -Names $maintenanceSecrets -Available $secrets
     $migrationReady = @($db[0].results).Count -eq 1
     $fkViolations = [int]$db[1].results[0].fk_violations
+    $maintenanceEligibleWorkOrders = [int]$db[5].results[0].maintenance_eligible_work_orders
     $databaseReady = $migrationReady -and $fkViolations -eq 0
 
     Write-Output 'LMWARES_COMMERCIAL_PREFLIGHT'
@@ -110,6 +111,8 @@ try {
     Write-Output "MAINTENANCE_GATE=$maintenanceGate"
     Write-Output "IMPLEMENTATION_ORDERS=$([int]$db[2].results[0].implementation_orders)"
     Write-Output "MAINTENANCE_SUBSCRIPTIONS=$([int]$db[3].results[0].maintenance_subscriptions)"
+    Write-Output "PAID_IMPLEMENTATION_ORDERS=$([int]$db[4].results[0].paid_implementation_orders)"
+    Write-Output "MAINTENANCE_ELIGIBLE_WORK_ORDERS=$maintenanceEligibleWorkOrders"
     Write-Output 'COMMERCIAL_WEBHOOK=https://api.lmwares.com/payments/webhooks/mercado-pago?scope=commercial'
     Write-Output 'MAINTENANCE_WEBHOOK=https://api.lmwares.com/payments/webhooks/mercado-pago?scope=maintenance'
     Write-Output 'SECRET_VALUES=not_read'
@@ -117,8 +120,8 @@ try {
     $baseReady = $health.StatusCode -eq 200 -and $databaseReady
     $requiredReady = switch ($RequireReady) {
         'Commercial' { $baseReady -and $commercialReady }
-        'Maintenance' { $baseReady -and $maintenanceReady }
-        'All' { $baseReady -and $commercialReady -and $maintenanceReady }
+        'Maintenance' { $baseReady -and $maintenanceReady -and $maintenanceEligibleWorkOrders -gt 0 }
+        'All' { $baseReady -and $commercialReady -and $maintenanceReady -and $maintenanceEligibleWorkOrders -gt 0 }
         default { $baseReady }
     }
     if (-not $requiredReady) { exit 2 }

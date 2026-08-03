@@ -109,6 +109,28 @@ estado general aunque todavía no se hayan cargado los secretos.
   `ready_to_publish` a `live`; ninguna respuesta del navegador puede saltarse
   esa verificación en D1.
 
+### Evidencia comercial acumulada: 2026-08-03
+
+El preflight y consultas agregadas de sólo lectura sobre D1 remoto confirmaron:
+
+- tres órdenes de implementación: una `paid` por MXN $10, una `canceled` por
+  MXN $1 y una `payment_pending` por MXN $10;
+- un intento de pago `accepted` y uno `pending`;
+- seis Webhooks comerciales `processed` y ninguno fallido vinculado a estas
+  órdenes;
+- una orden operacional en `in_build`, vinculada a `shynolaser.mx`;
+- ambas parejas de secretos comerciales y de mantenimiento presentes;
+- pago comercial habilitado, mensualidad todavía deshabilitada;
+- cero suscripciones de mantenimiento y cero órdenes actualmente elegibles
+  para crearlas.
+
+`lmwares-commercial-preflight.ps1` informa ahora las órdenes de implementación
+pagadas y exige al menos una orden elegible cuando se ejecuta con
+`-RequireReady Maintenance` o `-RequireReady All`. Una orden sólo es elegible
+si está en `ready_to_publish`, tiene proyecto enlazado, pago canónico sin
+revisión y oferta aceptada. Así el preflight no puede declarar lista la
+mensualidad mientras ShynoLaser continúe legítimamente en construcción.
+
 ## Validación técnica de la oferta
 
 - La primera oferta queda `superseded` al emitir una segunda versión.
