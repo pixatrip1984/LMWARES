@@ -470,18 +470,34 @@ function SitesPanel({
                       </div>
                     ) : (
                       <div className="lmw-account-offer__accept">
-                        <strong className="lmw-account-offer__accepted">
-                          {intake.implementationPayment?.status === 'paid'
-                            ? 'Pago de implementación confirmado.'
-                            : 'Oferta aceptada. El siguiente paso es el pago de implementación.'}
-                        </strong>
-                        {intake.implementationPayment ? (
-                          <a href={`/pago/implementacion/${encodeURIComponent(intake.implementationPayment.id)}`}>
-                            {intake.implementationPayment.status === 'paid'
-                              ? 'Ver comprobación del pago'
-                              : 'Continuar al pago'}
-                          </a>
-                        ) : null}
+                        {(() => {
+                          const phases = intake.implementationPhases
+                            .slice()
+                            .sort((a, b) => a.phase - b.phase);
+                          const paidCount = phases.filter((phase) => phase.status === 'paid').length;
+                          const allPaid = phases.length > 0 && paidCount === phases.length;
+                          return (
+                            <>
+                              <strong className="lmw-account-offer__accepted">
+                                {allPaid
+                                  ? 'Pago de implementación confirmado (4/4 fases).'
+                                  : `Oferta aceptada. Fases de pago: ${paidCount}/${phases.length || 4} confirmadas.`}
+                              </strong>
+                              {phases.length ? (
+                                <ul className="lmw-account-offer__phases">
+                                  {phases.map((phase) => (
+                                    <li key={phase.id}>
+                                      Fase {phase.phase} de 4 · {formatMoney(phase.amountCents, phase.currency)}{' '}
+                                      <a href={`/pago/implementacion/${encodeURIComponent(phase.id)}`}>
+                                        {phase.status === 'paid' ? 'Ver comprobación' : 'Pagar esta fase (opcional adelantarla)'}
+                                      </a>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                         {intake.currentOffer.monthlyAmountCents > 0 && intake.workOrder && (
                           intake.workOrder.status === 'ready_to_publish' || intake.maintenanceSubscription
                         ) ? (

@@ -28,7 +28,7 @@ export function CommercialIntakesPage() {
   const [status, setStatus] = useState<PackageIntakeStatus | ''>('');
   const [notes, setNotes] = useState('');
   const [offers, setOffers] = useState<CommercialOffer[]>([]);
-  const [billingOrder, setBillingOrder] = useState<BillingOrder | null>(null);
+  const [billingOrders, setBillingOrders] = useState<BillingOrder[]>([]);
   const [workOrder, setWorkOrder] = useState<StarterWorkOrder | null>(null);
   const [maintenanceSubscription, setMaintenanceSubscription] = useState<MaintenanceSubscription | null>(null);
   const [projects, setProjects] = useState<LmwaresProject[]>([]);
@@ -74,7 +74,7 @@ export function CommercialIntakesPage() {
     setNotes(selected?.reviewNotes ?? '');
     if (!selected) {
       setOffers([]);
-      setBillingOrder(null);
+      setBillingOrders([]);
       setWorkOrder(null);
       setMaintenanceSubscription(null);
       return;
@@ -94,7 +94,7 @@ export function CommercialIntakesPage() {
     ])
       .then(([result, registry]) => {
         setOffers(result.offers);
-        setBillingOrder(result.billingOrder);
+        setBillingOrders(result.billingOrders);
         setWorkOrder(result.workOrder);
         setMaintenanceSubscription(result.maintenanceSubscription);
         setProjects(registry?.projects ?? []);
@@ -115,7 +115,7 @@ export function CommercialIntakesPage() {
       })
       .catch(() => {
         setOffers([]);
-        setBillingOrder(null);
+        setBillingOrders([]);
         setWorkOrder(null);
         setMaintenanceSubscription(null);
       });
@@ -217,8 +217,10 @@ export function CommercialIntakesPage() {
     }
   }
 
+  const phase1Order = billingOrders.find((order) => order.phase === 1) ?? null;
+
   async function reopenImplementationPayment() {
-    if (!selected || !billingOrder) return;
+    if (!selected || !phase1Order) return;
     if (!window.confirm('Se cancelará la orden pendiente y la oferta aceptada volverá a revisión. No se puede deshacer.')) {
       return;
     }
@@ -230,7 +232,9 @@ export function CommercialIntakesPage() {
         current?.map((item) => (item.id === result.intake.id ? result.intake : item)) ?? [],
       );
       setOffers(result.offers);
-      setBillingOrder(result.billingOrder);
+      setBillingOrders((current) =>
+        current.map((order) => (order.id === result.billingOrder.id ? result.billingOrder : order)),
+      );
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'No se pudo reabrir la oferta.');
     } finally {
@@ -357,7 +361,7 @@ export function CommercialIntakesPage() {
                           ))}
                         </div>
                       ) : null}
-                      {offers.some((offer) => offer.status === 'accepted') && billingOrder && billingOrder.status !== 'paid' ? (
+                      {offers.some((offer) => offer.status === 'accepted') && phase1Order && phase1Order.status !== 'paid' ? (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                           <p className="font-semibold">Cobro de implementación pendiente</p>
                           <p className="mt-1">
@@ -409,7 +413,18 @@ export function CommercialIntakesPage() {
                         </p>
                       </div>
                       <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                        <Info label="Pago" value={billingOrder?.status === 'paid' ? `${money(billingOrder.amountCents)} confirmado` : billingOrder?.status ?? 'Sin orden'} />
+                        <Info
+                          label="Fases de pago"
+                          value={
+                            billingOrders.length
+                              ? `${billingOrders.filter((order) => order.status === 'paid').length}/${billingOrders.length} pagadas · ${billingOrders
+                                  .slice()
+                                  .sort((a, b) => a.phase - b.phase)
+                                  .map((order) => `F${order.phase}:${order.status === 'paid' ? money(order.amountCents) : order.status}`)
+                                  .join(' · ')}`
+                              : 'Sin orden'
+                          }
+                        />
                         <Info label="Trabajo" value={workOrder ? workOrderStatusLabel(workOrder.status) : 'Preparando orden'} />
                         <Info label="Proyecto Oracle" value={workOrder?.projectId ?? 'Sin enlazar'} />
                         <Info label="Asignado por" value={workOrder?.assignedBy ?? 'Pendiente'} />
