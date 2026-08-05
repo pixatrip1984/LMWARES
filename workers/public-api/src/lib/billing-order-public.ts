@@ -7,6 +7,7 @@ export function publicBillingOrder(order: BillingOrder) {
     commercialOfferId: order.commercialOfferId,
     intakeId: order.intakeId,
     status: order.status,
+    phase: order.phase,
     amountCents: order.amountCents,
     currency: order.currency,
     checkoutUrl: order.checkoutUrl,

@@ -16,6 +16,7 @@ const {
   estimateCommercialPackage,
   isPaidPackageModuleAvailable,
   normalizePaidPackageModules,
+  splitImplementationIntoPhases,
 } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 );
@@ -75,4 +76,27 @@ test('rejects package combinations outside the paid contract', () => {
   );
   assert.throws(() => normalizePaidPackageModules('starter', ['landing', 'panel', 'cart']));
   assert.throws(() => normalizePaidPackageModules('pro', ['landing', 'panel', 'data']));
+});
+
+test('splits the implementation total into 4 equal 25% phases', () => {
+  const phases = splitImplementationIntoPhases(790_000);
+  assert.equal(phases.length, 4);
+  assert.deepEqual(phases.map((phase) => phase.phase), [1, 2, 3, 4]);
+  assert.deepEqual(phases.map((phase) => phase.amountCents), [197_500, 197_500, 197_500, 197_500]);
+  assert.equal(
+    phases.reduce((sum, phase) => sum + phase.amountCents, 0),
+    790_000,
+  );
+});
+
+test('absorbs rounding remainders in the last phase so the total never drifts', () => {
+  const phases = splitImplementationIntoPhases(100_001);
+  assert.equal(
+    phases.reduce((sum, phase) => sum + phase.amountCents, 0),
+    100_001,
+  );
+  assert.equal(phases[0].amountCents, 25_000);
+  assert.equal(phases[1].amountCents, 25_000);
+  assert.equal(phases[2].amountCents, 25_000);
+  assert.equal(phases[3].amountCents, 25_001);
 });

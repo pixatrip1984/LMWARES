@@ -25,6 +25,44 @@ export function normalizeCommercialMarketing(marketing: boolean): false {
   return false;
 }
 
+/**
+ * El pago de implementación se fracciona en 4 fases del 25% cada una,
+ * alineadas 1 a 1 con las transiciones de `lmw_starter_work_orders`:
+ * arranque (awaiting_provisioning -> in_build), revisión del cliente
+ * (in_build -> client_review), listo para publicar (client_review ->
+ * ready_to_publish) y publicación (ready_to_publish -> live). Adelantar el
+ * pago de una fase posterior es opcional para el cliente, nunca obligatorio.
+ */
+export const IMPLEMENTATION_PAYMENT_PHASE_PERCENTAGES = [25, 25, 25, 25] as const;
+export const IMPLEMENTATION_PAYMENT_PHASE_COUNT = IMPLEMENTATION_PAYMENT_PHASE_PERCENTAGES.length;
+
+export interface ImplementationPaymentPhaseSplit {
+  phase: 1 | 2 | 3 | 4;
+  amountCents: number;
+}
+
+/**
+ * Divide el importe total de implementación en 4 fases del 25%. La última
+ * fase absorbe el residuo del redondeo para que la suma sea exacta al total.
+ */
+export function splitImplementationIntoPhases(totalCents: number): ImplementationPaymentPhaseSplit[] {
+  if (!Number.isSafeInteger(totalCents) || totalCents <= 0) {
+    throw new AppError('validation_error', 'El importe de implementación no es válido.');
+  }
+  const shares: number[] = [];
+  let allocated = 0;
+  IMPLEMENTATION_PAYMENT_PHASE_PERCENTAGES.forEach((percentage, index) => {
+    const isLast = index === IMPLEMENTATION_PAYMENT_PHASE_PERCENTAGES.length - 1;
+    const share = isLast ? totalCents - allocated : Math.round((totalCents * percentage) / 100);
+    allocated += share;
+    shares.push(share);
+  });
+  return shares.map((amountCents, index) => ({
+    phase: (index + 1) as 1 | 2 | 3 | 4,
+    amountCents,
+  }));
+}
+
 export const COMMERCIAL_PACKAGE_PRICING_CENTS = {
   implementation: {
     starterOneComplement: 790_000,

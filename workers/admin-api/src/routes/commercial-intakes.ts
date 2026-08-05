@@ -33,14 +33,14 @@ commercialIntakesAdmin.get('/:id', async (c) => {
   if (!intake) throw AppError.notFound('Solicitud comercial');
   const offers = await repos.lmwaresCommercialOffers.listForIntake(intake.id);
   const acceptedOffer = offers.find((offer) => offer.status === 'accepted') ?? null;
-  const billingOrder = acceptedOffer
-    ? await repos.lmwaresBillingOrders.getByOfferId(acceptedOffer.id)
-    : null;
+  const billingOrders = acceptedOffer
+    ? await repos.lmwaresBillingOrders.getPhasesForOffer(acceptedOffer.id)
+    : [];
   const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(intake.id);
   const maintenanceSubscription = workOrder
     ? await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id)
     : null;
-  return c.json({ intake, offers, billingOrder, workOrder, maintenanceSubscription });
+  return c.json({ intake, offers, billingOrders, workOrder, maintenanceSubscription });
 });
 
 commercialIntakesAdmin.post('/:id/work-order/assign', requireWrite, async (c) => {

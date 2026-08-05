@@ -107,7 +107,7 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
     userId: session.user.id,
     termsVersion: input.termsVersion,
   });
-  const billingOrder = await repos.lmwaresBillingOrders.ensureImplementationOrder({
+  const billingOrders = await repos.lmwaresBillingOrders.ensureImplementationPhases({
     offerId: result.offer.id,
     intakeId: intake.id,
     userId: session.user.id,
@@ -132,7 +132,7 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
   }
   return c.json({
     offer: publicCommercialOffer(result.offer),
-    billingOrder: publicBillingOrder(billingOrder),
+    billingOrders: billingOrders.map(publicBillingOrder),
   });
 });
 

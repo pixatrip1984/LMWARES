@@ -2,6 +2,8 @@ import type { D1Database } from '@cloudflare/workers-types';
 import {
   AppError,
   decidePaymentPolicy,
+  IMPLEMENTATION_PAYMENT_PHASE_COUNT,
+  splitImplementationIntoPhases,
   type BillingOrder,
   type BillingOrderStatus,
   type Metadata,
@@ -17,6 +19,7 @@ interface BillingOrderRow {
   intake_id: string | null;
   user_id: string;
   status: string;
+  phase: number;
   amount_cents: number;
   currency: string;
   order_snapshot: string;
@@ -49,62 +52,115 @@ export interface BillingOrderReconciliationResult {
 export class LmwaresBillingOrdersRepository {
   constructor(private readonly db: D1Database) {}
 
-  async ensureImplementationOrder(input: {
+  /**
+   * Crea, si aún no existen, las 4 órdenes de pago de implementación (fases
+   * del 25%) para una oferta aceptada. Es idempotente: si ya existen se
+   * devuelven tal cual, ordenadas por fase. El cliente puede pagarlas en
+   * orden o adelantar una fase posterior; ninguna fase exige a las demás.
+   */
+  async ensureImplementationPhases(input: {
     offerId: string;
     intakeId: string;
     userId: string;
-  }): Promise<BillingOrder> {
-    const existing = await this.getByOfferId(input.offerId);
-    if (existing) {
-      if (existing.userId !== input.userId || existing.intakeId !== input.intakeId) {
+  }): Promise<BillingOrder[]> {
+    const existing = await this.getPhasesForOffer(input.offerId);
+    if (existing.length > 0) {
+      const mismatched = existing.find(
+        (order) => order.userId !== input.userId || order.intakeId !== input.intakeId,
+      );
+      if (mismatched) {
         throw new AppError('conflict', 'La orden de implementación no coincide con la solicitud.');
       }
       return existing;
     }
 
-    const id = newId();
-    const now = nowIso();
-    const externalReference = `lmw-implementation:${id}`;
-    await this.db
+    const offer = await this.db
       .prepare(
-        `INSERT OR IGNORE INTO lmw_billing_orders
-          (id, purpose, commercial_offer_id, intake_id, user_id, status,
-           amount_cents, currency, order_snapshot, external_reference, provider,
-           created_at, updated_at)
-         SELECT ?, 'implementation', o.id, o.intake_id, o.user_id, 'ready',
-                o.implementation_amount_cents, o.currency,
-                json_object(
-                  'schema', 'lmwares.billing-order.implementation.v1',
-                  'offerId', o.id,
-                  'offerVersion', o.version,
-                  'plan', o.plan,
-                  'modules', json(o.modules),
-                  'marketing', json(CASE o.marketing WHEN 1 THEN 'true' ELSE 'false' END),
-                  'scopeSummary', o.scope_summary,
-                  'implementationDescription', o.implementation_description,
-                  'termsVersion', o.terms_version,
-                  'termsSnapshot', json(o.terms_snapshot)
-                ),
-                ?, 'mercado_pago', ?, ?
-         FROM lmw_commercial_offers o
-         WHERE o.id = ? AND o.intake_id = ? AND o.user_id = ? AND o.status = 'accepted'`,
+        `SELECT id, intake_id, user_id, version, plan, modules, marketing, currency,
+                scope_summary, implementation_description, terms_version, terms_snapshot,
+                implementation_amount_cents
+         FROM lmw_commercial_offers
+         WHERE id = ? AND intake_id = ? AND user_id = ? AND status = 'accepted'`,
       )
-      .bind(
-        id,
-        externalReference,
-        now,
-        now,
-        input.offerId,
-        input.intakeId,
-        input.userId,
-      )
-      .run();
-
-    const order = await this.getByOfferId(input.offerId);
-    if (!order || order.userId !== input.userId) {
+      .bind(input.offerId, input.intakeId, input.userId)
+      .first<{
+        id: string;
+        intake_id: string;
+        user_id: string;
+        version: number;
+        plan: string;
+        modules: string;
+        marketing: number;
+        currency: string;
+        scope_summary: string;
+        implementation_description: string;
+        terms_version: string;
+        terms_snapshot: string;
+        implementation_amount_cents: number;
+      }>();
+    if (!offer) {
       throw new AppError('conflict', 'La oferta debe estar aceptada antes de preparar el pago.');
     }
-    return order;
+
+    const phases = splitImplementationIntoPhases(offer.implementation_amount_cents);
+    const now = nowIso();
+    const statements = phases.map((share) => {
+      const id = newId();
+      const externalReference = `lmw-implementation:${id}`;
+      return this.db
+        .prepare(
+          `INSERT OR IGNORE INTO lmw_billing_orders
+            (id, purpose, commercial_offer_id, intake_id, user_id, status, phase,
+             amount_cents, currency, order_snapshot, external_reference, provider,
+             created_at, updated_at)
+           VALUES (?, 'implementation', ?, ?, ?, 'ready', ?, ?, ?, ?, ?, 'mercado_pago', ?, ?)`,
+        )
+        .bind(
+          id,
+          offer.id,
+          offer.intake_id,
+          offer.user_id,
+          share.phase,
+          share.amountCents,
+          offer.currency,
+          JSON.stringify({
+            schema: 'lmwares.billing-order.implementation.v1',
+            offerId: offer.id,
+            offerVersion: offer.version,
+            plan: offer.plan,
+            modules: JSON.parse(offer.modules),
+            marketing: Boolean(offer.marketing),
+            scopeSummary: offer.scope_summary,
+            implementationDescription: offer.implementation_description,
+            termsVersion: offer.terms_version,
+            termsSnapshot: JSON.parse(offer.terms_snapshot),
+            phase: share.phase,
+            phaseCount: IMPLEMENTATION_PAYMENT_PHASE_COUNT,
+          }),
+          externalReference,
+          now,
+          now,
+        );
+    });
+    await this.db.batch(statements);
+
+    const created = await this.getPhasesForOffer(input.offerId);
+    if (created.length !== IMPLEMENTATION_PAYMENT_PHASE_COUNT) {
+      throw new AppError('conflict', 'La oferta debe estar aceptada antes de preparar el pago.');
+    }
+    return created;
+  }
+
+  async getPhasesForOffer(offerId: string): Promise<BillingOrder[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM lmw_billing_orders
+         WHERE commercial_offer_id = ? AND purpose = 'implementation'
+         ORDER BY phase ASC`,
+      )
+      .bind(offerId)
+      .all<BillingOrderRow>();
+    return result.results.map(mapBillingOrder);
   }
 
   async getById(id: string): Promise<BillingOrder | null> {
@@ -204,7 +260,7 @@ export class LmwaresBillingOrdersRepository {
          JOIN lmw_commercial_offers o ON o.id = bo.commercial_offer_id
          JOIN lmw_package_intakes i ON i.id = bo.intake_id
          LEFT JOIN lmw_starter_work_orders w ON w.billing_order_id = bo.id
-         WHERE bo.intake_id = ? AND bo.purpose = 'implementation'
+         WHERE bo.intake_id = ? AND bo.purpose = 'implementation' AND bo.phase = 1
          ORDER BY bo.created_at DESC LIMIT 1`,
       )
       .bind(input.intakeId)
@@ -247,6 +303,28 @@ export class LmwaresBillingOrdersRepository {
         );
       }
     }
+    // Un cliente puede haber adelantado el pago de una fase posterior (2-4)
+    // antes de completar la fase 1; en ese caso la oferta ya no puede
+    // reabrirse sin intervención manual, porque hay dinero real comprometido.
+    const paidOrPendingSiblingPhase = await this.db
+      .prepare(
+        `SELECT id FROM lmw_billing_orders
+         WHERE commercial_offer_id = ? AND purpose = 'implementation' AND id <> ?
+           AND (status = 'paid' OR payment_review_required = 1 OR provider_payment_id IS NOT NULL
+                OR EXISTS (
+                  SELECT 1 FROM lmw_billing_payment_attempts pa
+                  WHERE pa.billing_order_id = lmw_billing_orders.id AND pa.disposition = 'pending'
+                ))
+         LIMIT 1`,
+      )
+      .bind(current.commercial_offer_id, current.id)
+      .first<{ id: string }>();
+    if (paidOrPendingSiblingPhase) {
+      throw new AppError(
+        'conflict',
+        'Otra fase de esta oferta ya tiene un pago registrado y no puede reabrirse automáticamente.',
+      );
+    }
 
     const now = nowIso();
     const results = await this.db.batch([
@@ -255,19 +333,19 @@ export class LmwaresBillingOrdersRepository {
           `UPDATE lmw_billing_orders
            SET status = 'canceled', last_provider_status = 'checkout_expired_reopened',
                checkout_url = NULL, updated_at = ?
-           WHERE id = ? AND purpose = 'implementation'
+           WHERE commercial_offer_id = ? AND purpose = 'implementation'
              AND status IN ('ready', 'checkout_failed', 'payment_pending', 'payment_failed')
              AND provider_payment_id IS NULL AND paid_at IS NULL
              AND payment_review_required = 0
              AND NOT EXISTS (
                SELECT 1 FROM lmw_billing_payment_attempts
-               WHERE billing_order_id = ? AND disposition = 'pending'
+               WHERE billing_order_id = lmw_billing_orders.id AND disposition = 'pending'
              )
              AND NOT EXISTS (
-               SELECT 1 FROM lmw_starter_work_orders WHERE billing_order_id = ?
+               SELECT 1 FROM lmw_starter_work_orders WHERE billing_order_id = lmw_billing_orders.id
              )`,
         )
-        .bind(now, current.id, current.id, current.id),
+        .bind(now, current.commercial_offer_id),
       this.db
         .prepare(
           `UPDATE lmw_commercial_offers
@@ -295,7 +373,7 @@ export class LmwaresBillingOrdersRepository {
         )
         .bind(now, current.intake_id, current.commercial_offer_id, current.id),
     ]);
-    if (results.some((result) => (result.meta.changes ?? 0) !== 1)) {
+    if (results.some((result) => (result.meta.changes ?? 0) < 1)) {
       throw new AppError('conflict', 'La orden cambió mientras se reabría la oferta.');
     }
     return { order: (await this.getById(current.id))!, changed: true };
@@ -354,10 +432,11 @@ export class LmwaresBillingOrdersRepository {
             .prepare(
               `SELECT id FROM lmw_billing_orders
                WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                 AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)
                  AND status = 'paid'
                LIMIT 1`,
             )
-            .bind(before.intakeId, input.id)
+            .bind(before.intakeId, input.id, before.commercialOfferId)
             .first<{ id: string }>()
         : null;
       await this.db
@@ -423,6 +502,7 @@ export class LmwaresBillingOrdersRepository {
                SET status = 'canceled', checkout_url = NULL,
                    last_provider_status = 'superseded_by_confirmed_payment', updated_at = ?
                WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                 AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)
                  AND status IN ('ready', 'checkout_creating', 'checkout_failed',
                                 'payment_pending', 'payment_failed')
                  AND provider_payment_id IS NULL AND paid_at IS NULL
@@ -432,7 +512,7 @@ export class LmwaresBillingOrdersRepository {
                      AND pa.disposition = 'pending'
                  )`,
             )
-            .bind(now, paidOrder.intakeId, paidOrder.id),
+            .bind(now, paidOrder.intakeId, paidOrder.id, paidOrder.commercialOfferId),
           this.db
             .prepare(
               `UPDATE lmw_billing_orders
@@ -440,6 +520,7 @@ export class LmwaresBillingOrdersRepository {
                    last_provider_status = 'parallel_payment_pending_after_other_paid',
                    updated_at = ?
                WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                 AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)
                  AND status IN ('ready', 'checkout_creating', 'checkout_failed',
                                 'payment_pending', 'payment_failed')
                  AND provider_payment_id IS NULL AND paid_at IS NULL
@@ -449,7 +530,7 @@ export class LmwaresBillingOrdersRepository {
                      AND pa.disposition = 'pending'
                  )`,
             )
-            .bind(now, paidOrder.intakeId, paidOrder.id),
+            .bind(now, paidOrder.intakeId, paidOrder.id, paidOrder.commercialOfferId),
           this.db
             .prepare(
               `INSERT OR IGNORE INTO lmw_notifications
@@ -532,6 +613,7 @@ function mapBillingOrder(row: BillingOrderRow): BillingOrder {
     intakeId: row.intake_id,
     userId: row.user_id,
     status: row.status as BillingOrderStatus,
+    phase: (row.phase as 1 | 2 | 3 | 4) ?? 1,
     amountCents: row.amount_cents,
     currency: row.currency as 'MXN',
     orderSnapshot: parseJson<Metadata>(row.order_snapshot, {}),

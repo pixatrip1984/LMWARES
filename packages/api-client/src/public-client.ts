@@ -152,7 +152,7 @@ export interface PublicPackageIntake {
   maintenanceStartPolicy: 'on_go_live';
   proposalId: string | null;
   currentOffer: PublicCommercialOffer | null;
-  implementationPayment: PublicBillingOrder | null;
+  implementationPhases: PublicBillingOrder[];
   workOrder: PublicStarterWorkOrder | null;
   maintenanceSubscription: PublicMaintenanceSubscription | null;
   submittedAt: string;
@@ -189,6 +189,7 @@ export interface PublicBillingOrder {
     | 'refunded'
     | 'charged_back'
     | 'canceled';
+  phase: 1 | 2 | 3 | 4;
   amountCents: number;
   currency: 'MXN';
   checkoutUrl: string | null;
@@ -393,7 +394,7 @@ export function createPublicClient(baseUrl: string) {
     },
 
     acceptCommercialOffer(intakeId: string, offerId: string, termsVersion: string) {
-      return http.post<{ offer: PublicCommercialOffer; billingOrder: PublicBillingOrder }>(
+      return http.post<{ offer: PublicCommercialOffer; billingOrders: PublicBillingOrder[] }>(
         `/commercial-intakes/${encodeURIComponent(intakeId)}/offers/${encodeURIComponent(offerId)}/accept`,
         { accepted: true, termsVersion },
       );

@@ -22,6 +22,11 @@ export interface BillingOrder extends Timestamps {
   intakeId: Id | null;
   userId: Id;
   status: BillingOrderStatus;
+  /**
+   * Fase de pago de implementación (1-4, 25% cada una). Las órdenes de pago
+   * único históricas conservan `phase: 1` con el 100% del importe.
+   */
+  phase: 1 | 2 | 3 | 4;
   amountCents: number;
   currency: 'MXN';
   orderSnapshot: Metadata;

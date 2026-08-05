@@ -87,11 +87,11 @@ test('account returns only the sanitized current offer and an in-app notice', ()
   assert.doesNotMatch(offersSource, /userId/);
 });
 
-test('accepted offers create one server-priced implementation order', () => {
-  assert.match(intakeSource, /ensureImplementationOrder/);
+test('accepted offers create four server-priced implementation phase orders', () => {
+  assert.match(intakeSource, /ensureImplementationPhases/);
   assert.match(billingRepositorySource, /INSERT OR IGNORE INTO lmw_billing_orders/);
-  assert.match(billingRepositorySource, /o\.implementation_amount_cents/);
-  assert.match(billingRepositorySource, /o\.status = 'accepted'/);
+  assert.match(billingRepositorySource, /splitImplementationIntoPhases\(offer\.implementation_amount_cents\)/);
+  assert.match(billingRepositorySource, /status = 'accepted'/);
   assert.match(billingRepositorySource, /lmw-implementation:\$\{id\}/);
   assert.doesNotMatch(intakeSource, /amountCents: input\./);
 });
@@ -136,10 +136,28 @@ test('commercial recovery and late SPEI settlement cannot expose a second charge
   assert.match(billingRepositorySource, /disposition = 'duplicate_review'/);
 });
 
+test('paying one implementation phase never flags or cancels its sibling phases', () => {
+  // A paying phase (1-4) must only ever be treated as a conflicting/duplicate
+  // payment against a *different* commercial offer version, never against a
+  // sibling phase row that belongs to the same accepted offer.
+  assert.match(
+    billingRepositorySource,
+    /purpose = 'implementation' AND id <> \?\s*\n\s*AND \(commercial_offer_id IS NULL OR commercial_offer_id <> \?\)\s*\n\s*AND status = 'paid'/,
+  );
+  assert.match(
+    billingRepositorySource,
+    /SET status = 'canceled', checkout_url = NULL,[\s\S]*?AND \(commercial_offer_id IS NULL OR commercial_offer_id <> \?\)/,
+  );
+  assert.match(
+    billingRepositorySource,
+    /SET payment_review_required = 1,[\s\S]*?AND \(commercial_offer_id IS NULL OR commercial_offer_id <> \?\)/,
+  );
+});
+
 test('a confirmed implementation payment creates one supervised Starter work order', () => {
   assert.match(billingRepositorySource, /ensureFromPaidBillingOrder/);
   assert.match(workOrderRepositorySource, /INSERT OR IGNORE INTO lmw_starter_work_orders/);
-  assert.match(workOrderRepositorySource, /b\.purpose = 'implementation' AND b\.status = 'paid'/);
+  assert.match(workOrderRepositorySource, /b\.purpose = 'implementation' AND b\.phase = 1 AND b\.status = 'paid'/);
   assert.match(workOrderRepositorySource, /'awaiting_provisioning'/);
   assert.match(workOrderMigrationSource, /billing_order_id[\s\S]*?UNIQUE/);
   assert.match(workOrderMigrationSource, /intake_id[\s\S]*?UNIQUE/);
@@ -155,6 +173,18 @@ test('Starter publication requires maintenance only when the accepted offer has 
   assert.match(workOrderRepositorySource, /SET status = 'live', published_url = \?/);
   assert.match(adminCommercialSource, /publishStarterWorkOrderSchema/);
   assert.match(adminCommercialSource, /lmwares\.starter_work_order\.go_live/);
+});
+
+test('phased implementation payments gate client_review, ready_to_publish and go-live', () => {
+  assert.match(workOrderRepositorySource, /PHASE_GATE_BY_TARGET_STATUS/);
+  assert.match(workOrderRepositorySource, /client_review: 2,/);
+  assert.match(workOrderRepositorySource, /ready_to_publish: 3,/);
+  assert.match(workOrderRepositorySource, /assertPhasePaid\(current\.commercialOfferId, requiredPhase\)/);
+  assert.match(workOrderRepositorySource, /assertPhasePaid\(current\.commercialOfferId, 4\)/);
+  assert.match(
+    workOrderRepositorySource,
+    /bo\.purpose = 'implementation' AND bo\.phase = 4 AND bo\.status <> 'paid'/,
+  );
 });
 
 test('Starter publication creates one idempotent account and email receipt', () => {

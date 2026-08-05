@@ -37,7 +37,7 @@ export class LmwaresStarterWorkOrdersRepository {
          SELECT ?, b.id, b.intake_id, b.commercial_offer_id, b.user_id,
                 'awaiting_provisioning', b.order_snapshot, ?, ?
          FROM lmw_billing_orders b
-         WHERE b.id = ? AND b.purpose = 'implementation' AND b.status = 'paid'
+         WHERE b.id = ? AND b.purpose = 'implementation' AND b.phase = 1 AND b.status = 'paid'
            AND b.intake_id IS NOT NULL AND b.commercial_offer_id IS NOT NULL`,
       )
       .bind(newId(), now, now, billingOrderId)
@@ -142,6 +142,10 @@ export class LmwaresStarterWorkOrdersRepository {
     if (!allowedTransition(current.status, input.status)) {
       throw new AppError('conflict', `No se puede pasar de ${current.status} a ${input.status}.`);
     }
+    const requiredPhase = PHASE_GATE_BY_TARGET_STATUS[input.status];
+    if (requiredPhase) {
+      await this.assertPhasePaid(current.commercialOfferId, requiredPhase);
+    }
     const result = await this.db
       .prepare(`UPDATE lmw_starter_work_orders SET status = ?, updated_at = ? WHERE id = ? AND status = ?`)
       .bind(input.status, nowIso(), input.id, current.status)
@@ -150,6 +154,29 @@ export class LmwaresStarterWorkOrdersRepository {
       throw new AppError('conflict', 'La orden cambió mientras se actualizaba.');
     }
     return (await this.getById(input.id))!;
+  }
+
+  /**
+   * Verifica que una fase de pago (2 o 3) esté confirmada antes de avanzar el
+   * estado del sitio. Si la fase no tiene una orden de pago asociada (caso de
+   * pago único histórico, sin filas 2-4), la compuerta se considera superada
+   * para preservar la compatibilidad hacia atrás.
+   */
+  private async assertPhasePaid(offerId: string, phase: 2 | 3 | 4): Promise<void> {
+    const row = await this.db
+      .prepare(
+        `SELECT status FROM lmw_billing_orders
+         WHERE commercial_offer_id = ? AND purpose = 'implementation' AND phase = ?
+         LIMIT 1`,
+      )
+      .bind(offerId, phase)
+      .first<{ status: string }>();
+    if (row && row.status !== 'paid') {
+      throw new AppError(
+        'conflict',
+        `La fase ${phase} de pago de implementación debe estar confirmada antes de continuar.`,
+      );
+    }
   }
 
   async publish(input: { id: string; publicUrl: string }): Promise<StarterWorkOrder> {
@@ -165,6 +192,7 @@ export class LmwaresStarterWorkOrdersRepository {
     if (current.status !== 'ready_to_publish' || !current.projectId) {
       throw new AppError('conflict', 'El proyecto todavía no está listo para publicar.');
     }
+    await this.assertPhasePaid(current.commercialOfferId, 4);
     const publicationGate = await this.db
       .prepare(
         `SELECT o.monthly_amount_cents,
@@ -199,6 +227,11 @@ export class LmwaresStarterWorkOrdersRepository {
                     WHERE s.work_order_id = lmw_starter_work_orders.id AND s.status = 'active'
                   )
                 )
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM lmw_billing_orders bo
+              WHERE bo.commercial_offer_id = lmw_starter_work_orders.commercial_offer_id
+                AND bo.purpose = 'implementation' AND bo.phase = 4 AND bo.status <> 'paid'
             )`,
       )
       .bind(input.publicUrl, now, now, current.id)
@@ -261,6 +294,17 @@ function allowedTransition(from: StarterWorkOrderStatus, to: StarterWorkOrderSta
   if (from === 'ready_to_publish') return to === 'client_review';
   return false;
 }
+
+/**
+ * Fase de pago de implementación (25% cada una) que debe estar confirmada
+ * antes de permitir la transición de estado indicada. `in_build` no requiere
+ * una compuerta adicional porque ya exige la fase 1 pagada (creación de la
+ * orden de trabajo). `live` se controla aparte en `publish()`.
+ */
+const PHASE_GATE_BY_TARGET_STATUS: Partial<Record<StarterWorkOrderStatus, 2 | 3>> = {
+  client_review: 2,
+  ready_to_publish: 3,
+};
 
 function mapWorkOrder(row: StarterWorkOrderRow): StarterWorkOrder {
   return {

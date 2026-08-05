@@ -116,7 +116,7 @@ export function createAdminClient(baseUrl: string) {
       return http.get<{
         intake: PackageIntake;
         offers: CommercialOffer[];
-        billingOrder: BillingOrder | null;
+        billingOrders: BillingOrder[];
         workOrder: StarterWorkOrder | null;
         maintenanceSubscription: MaintenanceSubscription | null;
       }>(

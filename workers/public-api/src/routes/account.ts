@@ -38,11 +38,13 @@ account.get('/', async (c) => {
     repos.lmwaresMaintenanceSubscriptions.listForUser(user.id),
   ]);
   const offersByIntake = new Map(currentOffers.map((offer) => [offer.intakeId, offer]));
-  const ordersByOffer = new Map(
-    billingOrders
-      .filter((order) => order.commercialOfferId)
-      .map((order) => [order.commercialOfferId!, order]),
-  );
+  const ordersByOffer = new Map<string, typeof billingOrders>();
+  for (const order of billingOrders) {
+    if (!order.commercialOfferId) continue;
+    const bucket = ordersByOffer.get(order.commercialOfferId) ?? [];
+    bucket.push(order);
+    ordersByOffer.set(order.commercialOfferId, bucket);
+  }
   const workOrdersByIntake = new Map(workOrders.map((workOrder) => [workOrder.intakeId, workOrder]));
   const maintenanceByWorkOrder = new Map(
     maintenanceSubscriptions.map((subscription) => [subscription.workOrderId, subscription]),
@@ -68,10 +70,13 @@ account.get('/', async (c) => {
       currentOffer: offersByIntake.has(intake.id)
         ? publicCommercialOffer(offersByIntake.get(intake.id)!)
         : null,
-      implementationPayment:
-        offersByIntake.has(intake.id) && ordersByOffer.has(offersByIntake.get(intake.id)!.id)
-          ? publicBillingOrder(ordersByOffer.get(offersByIntake.get(intake.id)!.id)!)
-          : null,
+      implementationPhases: (offersByIntake.has(intake.id)
+        ? ordersByOffer.get(offersByIntake.get(intake.id)!.id) ?? []
+        : []
+      )
+        .slice()
+        .sort((a, b) => a.phase - b.phase)
+        .map(publicBillingOrder),
       workOrder: workOrdersByIntake.has(intake.id)
         ? publicWorkOrder(workOrdersByIntake.get(intake.id)!)
         : null,
