@@ -12,6 +12,7 @@ $persistPath = Join-Path $validationParent ([guid]::NewGuid().ToString('N'))
 $configPath = Join-Path $workspace 'infra\d1\wrangler.toml'
 $fixturePath = Join-Path $PSScriptRoot 'fixtures\lmwares-maintenance-policy.sql'
 $repositoryPath = Join-Path $workspace 'packages\db\src\repositories\lmwares-maintenance-subscriptions.ts'
+$workOrderRepositoryPath = Join-Path $workspace 'packages\db\src\repositories\lmwares-starter-work-orders.ts'
 
 function Invoke-Wrangler {
   param([Parameter(Mandatory)] [string[]]$Arguments, [switch]$Json)
@@ -68,6 +69,16 @@ try {
       throw "El repositorio perdió la compuerta: $requiredClause"
     }
   }
+  $workOrderRepositorySource = Get-Content -LiteralPath $workOrderRepositoryPath -Raw
+  foreach ($requiredClause in @(
+    'publicationGate.monthly_amount_cents > 0',
+    'o.monthly_amount_cents = 0',
+    "s.status = 'active'"
+  )) {
+    if (-not $workOrderRepositorySource.Contains($requiredClause)) {
+      throw "El repositorio de publicación perdió la compuerta condicional: $requiredClause"
+    }
+  }
 
   Write-Host 'Comprobando elegibilidad...'
   $eligibility = Invoke-D1Json @'
@@ -87,7 +98,7 @@ ORDER BY w.id;
   $eligibilityById = @{}
   foreach ($row in $eligibility) { $eligibilityById[$row.id] = [int]$row.eligible }
   Assert-Equal $eligibilityById['work-good'] 1 'La orden válida debe ser elegible.'
-  foreach ($blocked in @('work-no-project', 'work-unpaid', 'work-review', 'work-offer', 'work-building')) {
+  foreach ($blocked in @('work-no-project', 'work-unpaid', 'work-review', 'work-offer', 'work-building', 'work-one-time')) {
     Assert-Equal $eligibilityById[$blocked] 0 "La orden $blocked no debe ser elegible."
   }
 
@@ -132,6 +143,38 @@ WHERE id = 'work-good' AND status = 'ready_to_publish' AND project_id IS NOT NUL
 
   $blockedPublication = Invoke-D1Json "SELECT COUNT(*) AS total FROM lmw_starter_work_orders WHERE id <> 'work-good' AND status='live';"
   Assert-Equal ([int]$blockedPublication[0].total) 0 'Ninguna orden sin mensualidad activa debe publicar.'
+
+  Write-Host 'Comprobando publicación de implementación única sin mensualidad...'
+  $null = Invoke-D1Json @'
+UPDATE lmw_starter_work_orders
+SET status = 'live', published_url = 'https://mg-seguros.lmwares.com',
+    published_at = '2026-08-03T00:06:00.000Z', updated_at = '2026-08-03T00:06:00.000Z'
+WHERE id = 'work-one-time' AND status = 'ready_to_publish' AND project_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM lmw_commercial_offers o
+    WHERE o.id = lmw_starter_work_orders.commercial_offer_id
+      AND o.status = 'accepted'
+      AND (
+        o.monthly_amount_cents = 0
+        OR EXISTS (
+          SELECT 1 FROM lmw_maintenance_subscriptions s
+          WHERE s.work_order_id = lmw_starter_work_orders.id AND s.status = 'active'
+        )
+      )
+  );
+'@
+  $oneTimePublication = Invoke-D1Json @'
+SELECT w.status, w.published_url, o.implementation_amount_cents, o.monthly_amount_cents,
+       (SELECT COUNT(*) FROM lmw_maintenance_subscriptions s WHERE s.work_order_id = w.id) AS subscriptions
+FROM lmw_starter_work_orders w
+JOIN lmw_commercial_offers o ON o.id = w.commercial_offer_id
+WHERE w.id = 'work-one-time';
+'@
+  Assert-Equal $oneTimePublication[0].status 'live' 'La implementación única debe publicar.'
+  Assert-Equal $oneTimePublication[0].published_url 'https://mg-seguros.lmwares.com' 'La URL de implementación única debe persistir.'
+  Assert-Equal ([int]$oneTimePublication[0].implementation_amount_cents) 1090000 'El importe de Starter + Catálogo + Formulario debe quedar congelado.'
+  Assert-Equal ([int]$oneTimePublication[0].monthly_amount_cents) 0 'La oferta única no debe crear mensualidad.'
+  Assert-Equal ([int]$oneTimePublication[0].subscriptions) 0 'La publicación única no debe inventar una suscripción.'
 
   $chargeSql = @'
 INSERT INTO lmw_maintenance_subscription_charges
@@ -223,8 +266,8 @@ WHERE dedupe_key = 'starter-site-published:work-good';
   Assert-Equal ([int]$fk[0].violations) 0 'La prueba dejó violaciones de llaves foráneas.'
 
   Write-Host ''
-  Write-Host 'Política de mensualidad Starter validada.' -ForegroundColor Green
-  Write-Host 'Verificado: elegibilidad, proyecto enlazado, pago canónico, revisión, oferta aceptada, idempotencia, publicación, cargo recurrente, cancelación terminal y comprobante recuperable.'
+  Write-Host 'Política comercial Starter validada.' -ForegroundColor Green
+  Write-Host 'Verificado: pago único sin mensualidad, elegibilidad recurrente, proyecto enlazado, pago canónico, revisión, oferta aceptada, idempotencia, publicación, cargo recurrente, cancelación terminal y comprobante recuperable.'
   Write-Host 'Proveedor: no se realizaron llamadas a Mercado Pago.'
 } finally {
   $resolvedPersist = [IO.Path]::GetFullPath($persistPath)

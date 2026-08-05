@@ -1,6 +1,8 @@
 # Flujo comercial LMWares: mantenimiento al publicar
 
-Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no durante la construcción.
+Decisión vigente: **el mantenimiento es opcional**. Cuando se contrata, la
+mensualidad comienza al publicar el proyecto, no durante la construcción. Una
+oferta con MXN $0/mes es una implementación de pago único y no genera renovación.
 
 ## Secuencia autorizada
 
@@ -15,8 +17,10 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 7. El proyecto avanza de `in_build` a `client_review` y después a
    `ready_to_publish`, mientras se construye y valida en un subdominio
    `*.lmwares.com`.
-8. Al llegar a la compuerta de publicación, el cliente autoriza la mensualidad.
-9. LMWares comprueba la suscripción activa y publica. Desde ese momento empieza el mantenimiento mensual.
+8. Al llegar a la compuerta de publicación, si la oferta incluye mantenimiento,
+   el cliente autoriza la mensualidad. Si la oferta fija MXN $0/mes, este paso no existe.
+9. LMWares publica después de comprobar la suscripción activa sólo cuando el
+   importe mensual es mayor que cero. Las ofertas de pago único se publican sin suscripción.
 10. Starter y Pro pueden migrar después a dominio personalizado.
 
 ## Reglas del sistema
@@ -43,8 +47,9 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 - Ese mismo evento crea idempotentemente una orden operacional. Sólo un
   administrador puede enlazarla a un proyecto existente de Oracle y moverla
   por construcción, revisión del cliente y lista para publicar.
-- `ready_to_publish` no es `live`: el panel no expone ninguna transición de
-  publicación hasta que Mercado Pago confirme una mensualidad `active`.
+- `ready_to_publish` no es `live`: cuando la oferta tiene mensualidad, el panel
+  exige que Mercado Pago la confirme como `active`; cuando la oferta aceptada
+  tiene MXN $0/mes, permite publicar sin crear una suscripción.
 - La mensualidad comercial vive en `lmw_maintenance_subscriptions`; no se
   mezcla con `lmw_subscriptions`, que conserva únicamente el ensayo técnico.
 - El importe mensual se copia de la oferta aceptada y sólo puede reservarse
@@ -56,10 +61,10 @@ Decisión vigente: **la mensualidad comienza al publicar el proyecto**, no duran
 - Una cancelación concurrente posterior a `live` no puede hacer desaparecer el
   comprobante: el outbox puede reconstruirlo idempotentemente desde la orden
   publicada y la mensualidad congelada, aunque ésta ya figure cancelada.
-- El comprobante Starter incluye URL, fecha, importe mensual, cuenta, IDs de
-  solicitud, oferta, pago, orden, proyecto y suscripción, además de soporte e
-  instrucciones para detener cobros futuros. El outbox reutiliza los leases y
-  reintentos del canal transaccional ya validado por Free.
+- El comprobante Starter incluye URL, fecha, cuenta e IDs de solicitud, oferta,
+  pago, orden y proyecto. Incluye importe e ID de suscripción sólo si se contrató
+  mantenimiento; para pago único declara explícitamente que no hay renovaciones.
+  El outbox reutiliza los leases y reintentos del canal transaccional ya validado por Free.
 - Los checkouts técnicos de sandbox permanecen cerrados en producción mediante una puerta independiente.
 - La reconciliación del ensayo existente sigue activa para observar sus cobros programados.
 

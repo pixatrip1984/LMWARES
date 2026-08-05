@@ -25,7 +25,7 @@
     "managed:staging:doctor": "powershell -ExecutionPolicy Bypass -File ./scripts/managed-staging-doctor.ps1",
     "check:workers": "npm run check:public-api && npm run check:admin-api",
     "check:public-api": "wrangler deploy --config workers/public-api/wrangler.toml --env=\"\" --dry-run --outdir ./.wrangler/dry-run-public",
-    "check:admin-api": "wrangler deploy --config workers/admin-api/wrangler.toml --dry-run --outdir ./.wrangler/dry-run-admin",
+    "check:admin-api": "wrangler deploy --config workers/admin-api/wrangler.toml --env=\"\" --dry-run --outdir ./.wrangler/dry-run-admin",
     "dev:public-api": "npm run dev --workspace @workers/public-api",
     "dev:admin-api": "npm run dev --workspace @workers/admin-api",
     "dev:public-web": "npm run dev --workspace @apps/public-web",

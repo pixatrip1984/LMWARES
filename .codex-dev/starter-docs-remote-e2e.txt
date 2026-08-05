@@ -1,0 +1,6 @@
+LMWARES Starter remote E2E
+
+Archivo sintetico sin datos personales para validar carga, inspeccion,
+publicacion y descarga del modulo Docs en el proyecto astraeus.
+
+Fecha de preparacion: 2026-08-03.

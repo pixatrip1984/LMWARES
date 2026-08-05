@@ -8,6 +8,12 @@ No es una landing específica: es la **base técnica** sobre la que se construye
 productos (catálogos sin pagos, galerías/portfolios, mini-CRMs, paneles de
 negocio local) agregando configuración, campos extra, copy, diseño y reglas.
 
+> **Continuidad LMWares/Oracle:** antes de modificar, limpiar o desplegar este
+> checkout, leer
+> [`docs/LMWARES-FINAL-TRANSITION-HANDOFF-2026-08-05.md`](./docs/LMWARES-FINAL-TRANSITION-HANDOFF-2026-08-05.md).
+> Resume el estado Git real, producción, módulos, pagos, pendientes y el orden
+> seguro de reanudación para un agente nuevo.
+
 ## Stack
 
 | Capa            | Tecnología                                  |

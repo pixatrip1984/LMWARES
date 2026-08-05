@@ -2,7 +2,9 @@
 
 Fecha: 2026-07-23  
 Estado: visión de producto y arquitectura propuesta; sin implementación  
-Alcance: LMWares, Mercado Pago, Cloudflare y Oracle. AstraMuses queda fuera de este ciclo.
+Alcance: LMWares, Mercado Pago, Cloudflare y Oracle. AstraMuses queda fuera de este ciclo:
+se mostrará como `Próximamente`, se usará internamente para promocionar LMWares
+con contenido SaaS UGC y no podrá seleccionarse, cotizarse ni cobrarse.
 
 ## 1. Decisión ejecutiva
 
@@ -59,6 +61,16 @@ Reglas ya acordadas:
 - Landing y Panel forman la base de Starter y Pro.
 - Starter permite hasta dos complementos.
 - Carrito y Optimization requieren Pro.
+- Para el lanzamiento inicial, Pro se ofrece como Pro base con cualquier
+  combinación de módulos Starter. Carrito y Optimization permanecen visibles
+  como `Próximamente`, pero no pueden seleccionarse, cotizarse ni cobrarse.
+- Cuando estén disponibles, Carrito y Optimization serán ampliaciones de pago
+  para proyectos Pro; no se consideran incluidos retroactivamente.
+- AstraMuses no forma parte del lanzamiento conjunto. Cualquier campo legado de
+  marketing se conserva únicamente por compatibilidad histórica; las nuevas
+  solicitudes y ofertas deben congelarlo en `false`.
+- Starter y Pro pueden contratarse como pago único fijando la mensualidad final
+  en MXN $0. En ese caso la publicación no crea ni exige una suscripción.
 - Todos los planes se despliegan primero en un subdominio LMWares.
 - Starter y Pro pueden migrar después a un dominio personalizado.
 - El dominio final no sustituye el subdominio; éste conserva valor como ruta de
