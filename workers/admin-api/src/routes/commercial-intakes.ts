@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AppError, normalizePaidPackageModules } from '@starter/domain';
+import { AppError, normalizeCommercialMarketing, normalizePaidPackageModules } from '@starter/domain';
 import { createRepositories } from '@starter/db';
 import {
   issueCommercialOfferSchema,
@@ -137,12 +137,13 @@ commercialIntakesAdmin.post('/:id/offers', requireWrite, async (c) => {
     throw new AppError('validation_error', 'La oferta debe vencer entre una hora y 90 días.');
   }
   const modules = normalizePaidPackageModules(input.plan, input.modules);
+  const marketing = normalizeCommercialMarketing(input.marketing);
   const repos = createRepositories(c.env.DB);
   const offer = await repos.lmwaresCommercialOffers.issue({
     intakeId: c.req.param('id')!,
     plan: input.plan,
     modules,
-    marketing: input.marketing,
+    marketing,
     implementationAmountCents: input.implementationAmountCents,
     monthlyAmountCents: input.monthlyAmountCents,
     scopeSummary: input.scopeSummary,
@@ -153,9 +154,13 @@ commercialIntakesAdmin.post('/:id/offers', requireWrite, async (c) => {
       schema: 'lmwares.commercial-terms.v1',
       maintenanceStartPolicy: 'on_go_live',
       implementationPayment: 'La implementación se cobra después de aceptar esta oferta.',
-      recurringStart: 'La mensualidad comienza al publicar el proyecto, no durante la construcción.',
+      recurringStart: input.monthlyAmountCents > 0
+        ? 'La mensualidad comienza al publicar el proyecto, no durante la construcción.'
+        : 'Esta oferta es de pago único y no crea una mensualidad de mantenimiento.',
       initialHosting: 'El proyecto inicia en un subdominio LMWares y puede migrar después a un dominio personalizado.',
-      cancellation: 'La cancelación de la mensualidad detiene el mantenimiento futuro; no revierte trabajo de implementación ya entregado.',
+      cancellation: input.monthlyAmountCents > 0
+        ? 'La cancelación de la mensualidad detiene el mantenimiento futuro; no revierte trabajo de implementación ya entregado.'
+        : 'No existen renovaciones automáticas ni cobros futuros asociados a esta oferta.',
       support: 'soporte@lmwares.com',
     },
     validUntil: input.validUntil,

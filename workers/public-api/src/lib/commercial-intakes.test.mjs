@@ -43,9 +43,10 @@ test('commercial intake requires a UUID idempotency key and computes prices on t
   assert.match(intakeSource, /c\.req\.header\('Idempotency-Key'\)/);
   assert.match(intakeSource, /4\[0-9a-f\]\{3\}/);
   assert.match(intakeSource, /normalizePaidPackageModules\(input\.plan, input\.modules\)/);
-  assert.match(intakeSource, /estimateCommercialPackage\(\{ \.\.\.input, modules \}\)/);
+  assert.match(intakeSource, /estimateCommercialPackage\(\{ \.\.\.input, modules, marketing \}\)/);
   assert.match(intakeSource, /estimatedImplementationCents: estimate\.implementationAmountCents/);
   assert.match(intakeSource, /estimatedMonthlyCents: estimate\.estimatedMonthlyAmountCents/);
+  assert.match(intakeSource, /normalizeCommercialMarketing\(input\.marketing\)/);
 });
 
 test('commercial intake freezes on-go-live maintenance and audits only a new record', () => {
@@ -144,11 +145,13 @@ test('a confirmed implementation payment creates one supervised Starter work ord
   assert.match(workOrderMigrationSource, /intake_id[\s\S]*?UNIQUE/);
 });
 
-test('Starter work cannot go live before the subscription gate', () => {
+test('Starter publication requires maintenance only when the accepted offer has a monthly amount', () => {
   assert.match(workOrderRepositorySource, /Primero enlaza un proyecto real de Oracle/);
   assert.match(workOrderRepositorySource, /if \(from === 'in_build'\) return to === 'client_review'/);
   assert.match(workOrderRepositorySource, /if \(from === 'client_review'\) return to === 'in_build' \|\| to === 'ready_to_publish'/);
-  assert.match(workOrderRepositorySource, /WHERE work_order_id = \? AND status = 'active'/);
+  assert.match(workOrderRepositorySource, /monthly_amount_cents > 0 && !publicationGate\.subscription_id/);
+  assert.match(workOrderRepositorySource, /o\.monthly_amount_cents = 0/);
+  assert.match(workOrderRepositorySource, /status = 'active'/);
   assert.match(workOrderRepositorySource, /SET status = 'live', published_url = \?/);
   assert.match(adminCommercialSource, /publishStarterWorkOrderSchema/);
   assert.match(adminCommercialSource, /lmwares\.starter_work_order\.go_live/);
@@ -157,8 +160,9 @@ test('Starter work cannot go live before the subscription gate', () => {
 test('Starter publication creates one idempotent account and email receipt', () => {
   assert.match(workOrderRepositorySource, /'email', 'starter-site-published'/);
   assert.match(workOrderRepositorySource, /starter-site-published:\$\{workOrder\.id\}/);
+  assert.match(workOrderRepositorySource, /LEFT JOIN lmw_maintenance_subscriptions s/);
   assert.match(workOrderRepositorySource, /'maintenanceSubscriptionId', s\.id/);
-  assert.match(workOrderRepositorySource, /'monthlyAmountCents', s\.amount_cents/);
+  assert.match(workOrderRepositorySource, /'monthlyAmountCents', o\.monthly_amount_cents/);
   assert.match(notificationDispatcherSource, /buildStarterPublishedEmail/);
   assert.match(notificationDispatcherSource, /notification\.template === 'starter-site-published'/);
 });

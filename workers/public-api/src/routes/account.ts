@@ -111,6 +111,7 @@ function toAccountNotification(notification: LmwaresNotification) {
   if (notification.template === 'starter-site-published') {
     const siteName = metadataString(notification.payload, 'siteName') ?? 'Tu sitio Starter';
     const publicUrl = safePublishedUrl(metadataString(notification.payload, 'publicUrl'));
+    const monthlyAmountCents = metadataNumber(notification.payload, 'monthlyAmountCents') ?? 0;
     return {
       id: notification.id,
       kind: notification.template,
@@ -118,7 +119,9 @@ function toAccountNotification(notification: LmwaresNotification) {
       summary: `${siteName} ya está en línea.`,
       body: [
         `Terminamos de publicar ${siteName}.`,
-        'Tu mensualidad de mantenimiento está activa desde esta publicación.',
+        monthlyAmountCents > 0
+          ? `Tu mantenimiento de ${formatMoney(monthlyAmountCents)} al mes está activo desde esta publicación.`
+          : 'Tu entrega fue contratada como pago único, sin mantenimiento mensual.',
         'Puedes conservar el enlace, copiarlo o abrir el sitio desde este mensaje.',
       ],
       plan: metadataString(notification.payload, 'plan') ?? 'starter',
@@ -142,7 +145,7 @@ function toAccountNotification(notification: LmwaresNotification) {
       body: [
         'Mercado Pago confirmó tu pago de implementación.',
         'Tu solicitud ya quedó registrada como trabajo contratado y comenzaremos la preparación del proyecto.',
-        'La mensualidad se autorizará por separado cuando el sitio esté listo para publicarse.',
+        'Si tu oferta incluye mantenimiento, se autorizará por separado cuando el sitio esté listo para publicarse.',
       ],
       plan: 'starter',
       siteName: 'Implementación LMWares',

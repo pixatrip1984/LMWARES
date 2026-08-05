@@ -8,7 +8,7 @@ export interface StarterPublishedEmailInput {
   projectId: string;
   billingOrderId: string;
   commercialOfferId: string;
-  maintenanceSubscriptionId: string;
+  maintenanceSubscriptionId: string | null;
   monthlyAmountCents: number;
   notificationId: string;
   recipientEmail: string;
@@ -26,7 +26,9 @@ export function buildStarterPublishedEmail(input: StarterPublishedEmailInput) {
   const projectId = cleanIdentifier(input.projectId);
   const billingOrderId = cleanIdentifier(input.billingOrderId);
   const commercialOfferId = cleanIdentifier(input.commercialOfferId);
-  const maintenanceSubscriptionId = cleanIdentifier(input.maintenanceSubscriptionId);
+  const maintenanceSubscriptionId = input.maintenanceSubscriptionId
+    ? cleanIdentifier(input.maintenanceSubscriptionId)
+    : null;
   const notificationId = cleanIdentifier(input.notificationId);
   const recipientEmail = cleanEmail(input.recipientEmail);
   const supportEmail = cleanEmail(input.supportEmail);
@@ -41,7 +43,7 @@ export function buildStarterPublishedEmail(input: StarterPublishedEmailInput) {
     projectId: escapeHtml(projectId),
     billingOrderId: escapeHtml(billingOrderId),
     commercialOfferId: escapeHtml(commercialOfferId),
-    maintenanceSubscriptionId: escapeHtml(maintenanceSubscriptionId),
+    maintenanceSubscriptionId: maintenanceSubscriptionId ? escapeHtml(maintenanceSubscriptionId) : null,
     notificationId: escapeHtml(notificationId),
     recipientEmail: escapeHtml(recipientEmail),
     supportEmail: escapeHtml(supportEmail),
@@ -55,7 +57,7 @@ export function buildStarterPublishedEmail(input: StarterPublishedEmailInput) {
     `Proyecto: ${projectId}`,
     `Pago de implementación: ${billingOrderId}`,
     `Oferta: ${commercialOfferId}`,
-    `Suscripción de mantenimiento: ${maintenanceSubscriptionId}`,
+    ...(maintenanceSubscriptionId ? [`Suscripción de mantenimiento: ${maintenanceSubscriptionId}`] : []),
     `Notificación: ${notificationId}`,
   ];
 
@@ -67,13 +69,17 @@ export function buildStarterPublishedEmail(input: StarterPublishedEmailInput) {
       `Tu sitio Starter ${siteName} ya está publicado:`,
       publicUrl,
       '',
-      `Mantenimiento mensual autorizado: ${monthlyAmount}`,
+      input.monthlyAmountCents > 0
+        ? `Mantenimiento mensual autorizado: ${monthlyAmount}`
+        : 'Mantenimiento mensual: no contratado',
       `Publicado: ${publishedAt}`,
       `Cuenta: ${recipientEmail}`,
       ...references,
       '',
       `Puedes consultar el sitio y el estado del servicio en ${accountUrl}.`,
-      `Para solicitar cambios, soporte o cancelación de cobros futuros, responde a este correo o escribe a ${supportEmail} desde la cuenta contratante. La cancelación detiene renovaciones futuras; no elimina automáticamente el sitio ni sustituye solicitudes de reembolso ya causadas.`,
+      input.monthlyAmountCents > 0
+        ? `Para solicitar cambios, soporte o cancelación de cobros futuros, responde a este correo o escribe a ${supportEmail} desde la cuenta contratante. La cancelación detiene renovaciones futuras; no elimina automáticamente el sitio ni sustituye solicitudes de reembolso ya causadas.`
+        : `Esta entrega no tiene mantenimiento mensual contratado. Para solicitar cambios o soporte, responde a este correo o escribe a ${supportEmail}.`,
       '',
       'LMWares',
     ].join('\n'),
@@ -91,7 +97,7 @@ export function buildStarterPublishedEmail(input: StarterPublishedEmailInput) {
         <p style="margin:0 0 12px;color:#55708f;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase">Datos del servicio</p>
         <table role="presentation" style="border-collapse:collapse;width:100%;font-size:13px;line-height:1.55">
           <tr><td style="padding:4px 12px 4px 0;color:#55708f">Plan</td><td style="padding:4px 0;font-weight:700">Starter</td></tr>
-          <tr><td style="padding:4px 12px 4px 0;color:#55708f">Mantenimiento</td><td style="padding:4px 0;font-weight:700">${safe.monthlyAmount} al mes</td></tr>
+          <tr><td style="padding:4px 12px 4px 0;color:#55708f">Mantenimiento</td><td style="padding:4px 0;font-weight:700">${input.monthlyAmountCents > 0 ? `${safe.monthlyAmount} al mes` : 'No contratado'}</td></tr>
           <tr><td style="padding:4px 12px 4px 0;color:#55708f">Publicada</td><td style="padding:4px 0">${safe.publishedAt}</td></tr>
           <tr><td style="padding:4px 12px 4px 0;color:#55708f">Cuenta</td><td style="padding:4px 0">${safe.recipientEmail}</td></tr>
           ${referenceRow('Orden de trabajo', safe.workOrderId)}
@@ -99,14 +105,14 @@ export function buildStarterPublishedEmail(input: StarterPublishedEmailInput) {
           ${referenceRow('Proyecto', safe.projectId)}
           ${referenceRow('Pago de implementación', safe.billingOrderId)}
           ${referenceRow('Oferta', safe.commercialOfferId)}
-          ${referenceRow('Suscripción', safe.maintenanceSubscriptionId)}
+          ${safe.maintenanceSubscriptionId ? referenceRow('Suscripción', safe.maintenanceSubscriptionId) : ''}
           ${referenceRow('Notificación', safe.notificationId)}
         </table>
       </div>
       <p style="margin:24px 0 0;color:#55708f;font-size:13px;line-height:1.65">
-        Para cambios, soporte o cancelación de cobros futuros, responde a este mensaje o escribe a
+        ${input.monthlyAmountCents > 0 ? 'Para cambios, soporte o cancelación de cobros futuros' : 'Para solicitar cambios o soporte'}, responde a este mensaje o escribe a
         <a href="mailto:${safe.supportEmail}" style="color:#1268e8">${safe.supportEmail}</a> desde la cuenta contratante.
-        La cancelación detiene renovaciones futuras; no elimina automáticamente el sitio ni sustituye solicitudes de reembolso ya causadas.
+        ${input.monthlyAmountCents > 0 ? 'La cancelación detiene renovaciones futuras; no elimina automáticamente el sitio ni sustituye solicitudes de reembolso ya causadas.' : 'Esta entrega no genera renovaciones ni cobros mensuales.'}
       </p>
       <p style="margin:14px 0 0"><a href="${safe.accountUrl}" style="color:#1268e8">Abrir mi cuenta LMWares</a></p>
     </div>
@@ -134,7 +140,7 @@ function cleanEmail(value: string): string {
 }
 
 function formatMoney(amountCents: number): string {
-  if (!Number.isSafeInteger(amountCents) || amountCents < 1) {
+  if (!Number.isSafeInteger(amountCents) || amountCents < 0) {
     throw new AppError('validation_error', 'La mensualidad de la notificación no es válida.');
   }
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })

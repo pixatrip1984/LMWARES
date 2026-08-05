@@ -52,13 +52,26 @@ test('escapes customer-controlled HTML', () => {
   assert.match(email.html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
-test('rejects external publication URLs and invalid amounts', () => {
+test('builds a one-time delivery receipt without a maintenance contract', () => {
+  const email = buildStarterPublishedEmail({
+    ...input,
+    maintenanceSubscriptionId: null,
+    monthlyAmountCents: 0,
+  });
+  assert.match(email.text, /Mantenimiento mensual: no contratado/);
+  assert.match(email.text, /no tiene mantenimiento mensual contratado/);
+  assert.doesNotMatch(email.text, /Suscripción de mantenimiento:/);
+  assert.match(email.html, /No contratado/);
+  assert.doesNotMatch(email.html, /subscription-123/);
+});
+
+test('rejects external publication URLs and negative amounts', () => {
   assert.throws(
     () => buildStarterPublishedEmail({ ...input, publicUrl: 'https://example.com/' }),
     /URL publicada válida/,
   );
   assert.throws(
-    () => buildStarterPublishedEmail({ ...input, monthlyAmountCents: 0 }),
+    () => buildStarterPublishedEmail({ ...input, monthlyAmountCents: -1 }),
     /mensualidad.*no es válida/,
   );
 });

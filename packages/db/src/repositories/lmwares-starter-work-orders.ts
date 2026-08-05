@@ -165,14 +165,21 @@ export class LmwaresStarterWorkOrdersRepository {
     if (current.status !== 'ready_to_publish' || !current.projectId) {
       throw new AppError('conflict', 'El proyecto todavía no está listo para publicar.');
     }
-    const subscription = await this.db
+    const publicationGate = await this.db
       .prepare(
-        `SELECT id FROM lmw_maintenance_subscriptions
-         WHERE work_order_id = ? AND status = 'active' LIMIT 1`,
+        `SELECT o.monthly_amount_cents,
+                (SELECT s.id FROM lmw_maintenance_subscriptions s
+                 WHERE s.work_order_id = w.id AND s.status = 'active' LIMIT 1) AS subscription_id
+         FROM lmw_starter_work_orders w
+         JOIN lmw_commercial_offers o ON o.id = w.commercial_offer_id
+         WHERE w.id = ? AND o.status = 'accepted' LIMIT 1`,
       )
       .bind(current.id)
-      .first<{ id: string }>();
-    if (!subscription) {
+      .first<{ monthly_amount_cents: number; subscription_id: string | null }>();
+    if (!publicationGate) {
+      throw new AppError('conflict', 'La publicación requiere una oferta aceptada vigente.');
+    }
+    if (publicationGate.monthly_amount_cents > 0 && !publicationGate.subscription_id) {
       throw new AppError('conflict', 'La publicación requiere una mensualidad activa.');
     }
     const now = nowIso();
@@ -181,10 +188,18 @@ export class LmwaresStarterWorkOrdersRepository {
         `UPDATE lmw_starter_work_orders
          SET status = 'live', published_url = ?, published_at = ?, updated_at = ?
          WHERE id = ? AND status = 'ready_to_publish' AND project_id IS NOT NULL
-           AND EXISTS (
-             SELECT 1 FROM lmw_maintenance_subscriptions s
-             WHERE s.work_order_id = lmw_starter_work_orders.id AND s.status = 'active'
-           )`,
+            AND EXISTS (
+              SELECT 1 FROM lmw_commercial_offers o
+              WHERE o.id = lmw_starter_work_orders.commercial_offer_id
+                AND o.status = 'accepted'
+                AND (
+                  o.monthly_amount_cents = 0
+                  OR EXISTS (
+                    SELECT 1 FROM lmw_maintenance_subscriptions s
+                    WHERE s.work_order_id = lmw_starter_work_orders.id AND s.status = 'active'
+                  )
+                )
+            )`,
       )
       .bind(input.publicUrl, now, now, current.id)
       .run();
@@ -207,7 +222,7 @@ export class LmwaresStarterWorkOrdersRepository {
       'billingOrderId', w.billing_order_id,
       'commercialOfferId', w.commercial_offer_id,
       'maintenanceSubscriptionId', s.id,
-      'monthlyAmountCents', s.amount_cents,
+      'monthlyAmountCents', o.monthly_amount_cents,
       'siteName', COALESCE(p.name, 'Tu sitio Starter'),
       'plan', json_extract(w.work_snapshot, '$.plan'),
       'publicUrl', w.published_url,
@@ -223,8 +238,9 @@ export class LmwaresStarterWorkOrdersRepository {
          FROM lmw_starter_work_orders w
          JOIN lmw_users u ON u.id = w.user_id
          LEFT JOIN lmwares_projects p ON p.id = w.project_id
-         JOIN lmw_maintenance_subscriptions s ON s.work_order_id = w.id
-         WHERE w.id = ? AND w.status = 'live'`,
+          JOIN lmw_commercial_offers o ON o.id = w.commercial_offer_id AND o.status = 'accepted'
+          LEFT JOIN lmw_maintenance_subscriptions s ON s.work_order_id = w.id AND s.status = 'active'
+          WHERE w.id = ? AND w.status = 'live'`,
       )
       .bind(
         newId(),

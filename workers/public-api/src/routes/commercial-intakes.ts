@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import {
   AppError,
   estimateCommercialPackage,
+  normalizeCommercialMarketing,
   normalizePaidPackageModules,
   type PackageIntake,
 } from '@starter/domain';
@@ -27,14 +28,15 @@ commercialIntakes.post('/', async (c) => {
   }
   const input = parseInput(createPackageIntakeSchema, await readJson(c));
   const modules = normalizePaidPackageModules(input.plan, input.modules);
-  const estimate = estimateCommercialPackage({ ...input, modules });
+  const marketing = normalizeCommercialMarketing(input.marketing);
+  const estimate = estimateCommercialPackage({ ...input, modules, marketing });
   const repos = createRepositories(c.env.DB);
   const result = await repos.lmwaresPackageIntakes.create({
     submissionKey,
     userId: session.user.id,
     plan: input.plan,
     modules,
-    marketing: input.marketing,
+    marketing,
     estimatedImplementationCents: estimate.implementationAmountCents,
     estimatedMonthlyCents: estimate.estimatedMonthlyAmountCents,
     pricingVersion: estimate.pricingVersion,
@@ -42,7 +44,7 @@ commercialIntakes.post('/', async (c) => {
       schema: 'lmwares.commercial-intake.v1',
       plan: input.plan,
       modules,
-      marketing: input.marketing,
+      marketing,
       estimate,
       maintenanceStartPolicy: 'on_go_live',
     },

@@ -3,6 +3,28 @@ import type { PaidPackageModuleId, PaidPackagePlan } from './package-payment';
 
 export const COMMERCIAL_PRICING_VERSION = 'public-estimate-mxn-2026-07-v1';
 
+/**
+ * Módulos anunciados para Pro que todavía no forman parte del alcance
+ * contratable del lanzamiento inicial. Mantener la compuerta en dominio evita
+ * que una petición manipulada pueda saltarse el estado visual del configurador.
+ */
+export const UPCOMING_PAID_PACKAGE_MODULES = ['cart', 'data'] as const satisfies readonly PaidPackageModuleId[];
+export const ASTRAMUSES_COMMERCIAL_AVAILABLE = false;
+
+export function isPaidPackageModuleAvailable(module: PaidPackageModuleId): boolean {
+  return !UPCOMING_PAID_PACKAGE_MODULES.some((upcoming) => upcoming === module);
+}
+
+export function normalizeCommercialMarketing(marketing: boolean): false {
+  if (marketing) {
+    throw new AppError(
+      'validation_error',
+      'AstraMuses estará disponible próximamente y no forma parte de las ofertas actuales.',
+    );
+  }
+  return false;
+}
+
 export const COMMERCIAL_PACKAGE_PRICING_CENTS = {
   implementation: {
     starterOneComplement: 790_000,
@@ -41,6 +63,13 @@ export function normalizePaidPackageModules(
       'Landing y Panel son obligatorios en los paquetes pagados.',
     );
   }
+  const unavailable = modules.filter((module) => !isPaidPackageModuleAvailable(module));
+  if (unavailable.length > 0) {
+    throw new AppError(
+      'validation_error',
+      'Carrito y Optimization estarán disponibles próximamente como ampliaciones de Pro.',
+    );
+  }
   if (plan === 'starter') {
     if (modules.includes('cart') || modules.includes('data')) {
       throw new AppError('validation_error', 'Carrito y Optimization requieren el plan Pro.');
@@ -58,6 +87,7 @@ export function estimateCommercialPackage(input: {
   marketing: boolean;
 }): CommercialPackageEstimate {
   const modules = normalizePaidPackageModules(input.plan, input.modules);
+  normalizeCommercialMarketing(input.marketing);
   const complements = paidComplements(modules);
   const hasCart = modules.includes('cart');
   const hasOptimization = modules.includes('data');
@@ -85,9 +115,7 @@ export function estimateCommercialPackage(input: {
           : hasOptimization
             ? 'Pro · optimización'
             : 'Pro base';
-  const astramusesAmountCents = input.marketing
-    ? COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.astramusesStaticFrom
-    : 0;
+  const astramusesAmountCents = 0;
   const maintenanceAmountCents = COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.maintenanceFrom;
 
   return {

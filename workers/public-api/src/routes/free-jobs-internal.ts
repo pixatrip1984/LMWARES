@@ -299,7 +299,7 @@ freeJobsInternal.post('/free-notifications/dispatch', async (c) => {
           projectId: readMetadataString(notification.payload, 'projectId'),
           billingOrderId: readMetadataString(notification.payload, 'billingOrderId'),
           commercialOfferId: readMetadataString(notification.payload, 'commercialOfferId'),
-          maintenanceSubscriptionId: readMetadataString(
+          maintenanceSubscriptionId: readOptionalMetadataString(
             notification.payload,
             'maintenanceSubscriptionId',
           ),

@@ -70,10 +70,13 @@ test('a live publication can recover its receipt after a concurrent cancellation
   const notificationStart = workOrderSource.indexOf('private async ensurePublishedNotifications');
   const notificationSource = workOrderSource.slice(notificationStart);
   assert.ok(notificationStart >= 0);
-  assert.match(notificationSource, /JOIN lmw_maintenance_subscriptions s ON s\.work_order_id = w\.id/);
+  assert.match(
+    notificationSource,
+    /LEFT JOIN lmw_maintenance_subscriptions s ON s\.work_order_id = w\.id AND s\.status = 'active'/,
+  );
   assert.doesNotMatch(
     notificationSource,
-    /JOIN lmw_maintenance_subscriptions s ON s\.work_order_id = w\.id AND s\.status = 'active'/,
+    /(?<!LEFT )JOIN lmw_maintenance_subscriptions s ON s\.work_order_id = w\.id/,
   );
   assert.match(notificationSource, /starter-site-published:\$\{workOrder\.id\}/);
   assert.match(notificationSource, /INSERT OR IGNORE INTO lmw_notifications/);
