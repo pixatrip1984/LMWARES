@@ -232,7 +232,7 @@ export function PaymentPage() {
               ))}
             </ul>
             <p className="lmw-payment-astra">
-              Astramuses: {proposal.marketing ? 'incluido para evaluación separada' : 'no incluido'}
+              AstraMuses: próximamente · no forma parte de esta propuesta
             </p>
           </section>
 

@@ -1404,6 +1404,14 @@ button {
   transform: translateY(-4px);
 }
 
+.lmw-solution-card.is-coming-soon {
+  filter: saturate(0.72);
+}
+
+.lmw-solution-card.is-coming-soon .lmw-solution-label span {
+  color: #ff9f5c;
+}
+
 .lmw-solution-label {
   align-items: center;
   background: linear-gradient(

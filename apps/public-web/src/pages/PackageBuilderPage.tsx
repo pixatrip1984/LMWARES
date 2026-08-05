@@ -40,6 +40,7 @@ import {
   formatMxPrice,
   getPackageLabel,
   getPlanSeed,
+  isPackageModuleAvailable,
   loadPackageDraft,
   savePackageDraft,
   togglePackageModule,
@@ -174,8 +175,8 @@ const PLAN_COPY: Record<PlanId, { name: string; eyebrow: string; description: st
   },
   pro: {
     name: 'Pro',
-    eyebrow: 'Capacidad completa',
-    description: 'Empieza en un subdominio LMWares y puede migrar a dominio personalizado, con todas las capacidades disponibles.',
+    eyebrow: 'Capacidad ampliada',
+    description: 'Combina los módulos Starter sin el límite de dos complementos. Carrito y Optimization podrán contratarse cuando estén disponibles.',
   },
 };
 
@@ -424,7 +425,12 @@ export function PackageBuilderPage() {
   };
 
   const updateDraft = (changes: Partial<PackageDraft>) => {
-    setDraft((current) => ({ ...current, ...changes, updatedAt: new Date().toISOString() }));
+    setDraft((current) => ({
+      ...current,
+      ...changes,
+      marketing: false,
+      updatedAt: new Date().toISOString(),
+    }));
     setSubmitted(false);
     const nextKey = crypto.randomUUID();
     localStorage.setItem(COMMERCIAL_SUBMISSION_KEY_STORAGE, nextKey);
@@ -522,13 +528,17 @@ export function PackageBuilderPage() {
     updateDraft({
       plan,
       modules: getPlanSeed(plan),
-      marketing: plan === 'free' ? false : draft.marketing,
+      marketing: false,
     });
     setView('package');
     flashNotice(`${PLAN_COPY[plan].name} cargado como punto de partida.`);
   };
 
   const toggleModule = (moduleId: PackageModuleId) => {
+    if (!isPackageModuleAvailable(moduleId)) {
+      flashNotice('Esta integración estará disponible próximamente como ampliación de Pro.');
+      return;
+    }
     if (FOUNDATION_MODULES.includes(moduleId)) {
       flashNotice('Landing y Panel ya están incluidos en este plan.');
       return;
@@ -565,11 +575,6 @@ export function PackageBuilderPage() {
     }
 
     updateDraft({ modules: result.modules });
-  };
-
-  const toggleMarketing = () => {
-    const marketing = !draft.marketing;
-    updateDraft({ marketing });
   };
 
   const addImages = (event: ChangeEvent<HTMLInputElement>) => {
@@ -677,7 +682,7 @@ export function PackageBuilderPage() {
         const result = await api.createCommercialPackageIntake({
           plan: draft.plan,
           modules: draft.modules,
-          marketing: draft.marketing,
+          marketing: false,
         }, commercialSubmissionKey);
         setSubmitted(true);
         flashNotice(`Solicitud ${result.intake.id.slice(0, 8)} enviada para revisión.`);
@@ -846,11 +851,14 @@ export function PackageBuilderPage() {
   const renderModuleCard = (module: PackageModule) => {
     const selected = draft.modules.includes(module.id);
     const included = FOUNDATION_MODULES.includes(module.id);
-    const locked = draft.plan === 'starter' && module.tier === 'pro';
+    const comingSoon = !isPackageModuleAvailable(module.id);
+    const locked = !comingSoon && draft.plan === 'starter' && module.tier === 'pro';
     const starterAtLimit = draft.plan === 'starter' && selectedComplements.length >= 2;
     const stateLabel = included
       ? 'Incluido en la base'
-      : locked
+      : comingSoon
+        ? 'Integración próxima'
+        : locked
         ? 'Bloqueado · requiere Pro'
         : draft.plan === 'starter'
           ? selected ? 'Seleccionado · quitar' : starterAtLimit ? 'Límite · quita uno' : 'Añadir complemento'
@@ -859,9 +867,9 @@ export function PackageBuilderPage() {
     return (
       <button
         aria-pressed={selected}
-        aria-disabled={locked}
-        className={`lmw-module-card lmw-module-card--${module.tier} lmw-module-card--${module.id}${selected ? ' is-selected' : ''}${included ? ' is-included' : ''}${locked ? ' is-locked' : ''}`}
-        disabled={included}
+        aria-disabled={locked || comingSoon}
+        className={`lmw-module-card lmw-module-card--${module.tier} lmw-module-card--${module.id}${selected ? ' is-selected' : ''}${included ? ' is-included' : ''}${locked ? ' is-locked' : ''}${comingSoon ? ' is-coming-soon' : ''}`}
+        disabled={included || comingSoon}
         key={module.id}
         onClick={() => toggleModule(module.id)}
         type="button"
@@ -874,7 +882,11 @@ export function PackageBuilderPage() {
           <strong>{module.name}</strong>
           <em>{module.description}</em>
         </span>
-        {locked ? <span className="lmw-module-lock" aria-hidden="true">Solo Pro</span> : null}
+        {comingSoon ? (
+          <span className="lmw-module-lock" aria-hidden="true">Próximamente</span>
+        ) : locked ? (
+          <span className="lmw-module-lock" aria-hidden="true">Solo Pro</span>
+        ) : null}
         <span className="lmw-module-state"><i />{stateLabel}</span>
       </button>
     );
@@ -964,7 +976,7 @@ export function PackageBuilderPage() {
                   ? 'Una presencia simple para comenzar.'
                   : draft.plan === 'starter'
                     ? 'La base está incluida. Elige hasta dos complementos.'
-                    : 'Todo está disponible. Activa sólo lo que usarás.'}
+                    : 'Combina los módulos disponibles. Amplía cuando tu operación lo pida.'}
               </h2>
             </div>
 
@@ -1295,7 +1307,7 @@ export function PackageBuilderPage() {
                     </div>
                     <span>
                       {draft.plan === 'starter'
-                        ? 'Carrito y Optimization se muestran bloqueados porque requieren Pro.'
+                        ? 'Selecciona los módulos que necesita tu primera versión.'
                         : 'Activa únicamente las capacidades que utilizarás.'}
                     </span>
                   </header>
@@ -1312,8 +1324,8 @@ export function PackageBuilderPage() {
                     </div>
                     <span>
                       {draft.plan === 'starter'
-                        ? 'Disponibles al cambiar a Pro.'
-                        : 'Activa únicamente las capacidades que formarán parte de tu sistema.'}
+                        ? 'Próximamente como ampliaciones para proyectos Pro.'
+                        : 'Podrás contratarlas cuando estén disponibles; no se incluyen ni se cobran ahora.'}
                     </span>
                   </header>
                   <div className="lmw-module-grid lmw-module-grid--pro">
@@ -1342,7 +1354,7 @@ export function PackageBuilderPage() {
                   <div><i>01</i><span><b>Landing + Panel</b><small>Base incluida, sin decisiones extra</small></span></div>
                   <div><i>02</i><span><b>Subdominio desde el inicio</b><small>Dominio propio opcional después</small></span></div>
                   <div><i>03</i><span><b>{selectedComplements.length} {selectedComplements.length === 1 ? 'complemento elegido' : 'complementos elegidos'}</b><small>{selectedComplements.length > 0 ? selectedComplements.map(({ name }) => name).join(' · ') : 'Todavía no has añadido ninguno'}</small></span></div>
-                  <div><i>04</i><span><b>{draft.plan === 'pro' ? 'Todas las capacidades' : 'Hasta 2 de 6 compatibles'}</b><small>{draft.plan === 'pro' ? 'Incluye Carrito y Optimization' : 'Carrito y Optimization requieren Pro'}</small></span></div>
+                  <div><i>04</i><span><b>{draft.plan === 'pro' ? 'Combinación Starter ampliada' : 'Hasta 2 de 6 compatibles'}</b><small>{draft.plan === 'pro' ? 'Carrito y Optimization estarán disponibles como ampliaciones de pago' : 'Puedes ampliar a Pro cuando tu operación lo requiera'}</small></span></div>
                 </>
               )}
             </div>
@@ -1367,16 +1379,14 @@ export function PackageBuilderPage() {
             </div>
 
             {draft.plan !== 'free' ? (
-              <button
-                aria-pressed={draft.marketing}
-                className={`lmw-marketing-toggle${draft.marketing ? ' is-active' : ''}`}
-                onClick={toggleMarketing}
-                type="button"
-              >
+              <div className="lmw-marketing-toggle is-coming-soon" aria-label="Marketing general próximamente">
                 <i>✦</i>
-                <span><b>Añadir marketing Astramuses</b><small>Desde {formatMxPrice(PACKAGE_PRICING.monthly.astramusesStaticFrom)}/mes · servicio separado</small></span>
-                <em><u /></em>
-              </button>
+                <span>
+                  <b>Marketing general · Próximamente</b>
+                  <small>Campañas para redes: posts y reels promocionales, anuncios clásicos y cinemáticos, y contenido UGC personalizado con influencers sintéticos para tu negocio.</small>
+                </span>
+                <em>EN PREPARACIÓN</em>
+              </div>
             ) : null}
 
             {draft.plan === 'free' && freeSubmit.publicUrl ? (
@@ -1404,6 +1414,23 @@ export function PackageBuilderPage() {
               Cloudflare.
             </p>
 
+            {draft.plan !== 'free' ? (
+              <section className="lmw-summary-visual" aria-label="Composición visual del paquete">
+                <header>
+                  <span>ARQUITECTURA SELECCIONADA</span>
+                  <b>{selectedModules.length} capacidades conectadas</b>
+                </header>
+                <div>
+                  {selectedModules.slice(0, 4).map((module) => (
+                    <figure key={module.id}>
+                      <img alt={`Vista de referencia del módulo ${module.name}`} src={module.visual} />
+                      <figcaption><i>{module.eyebrow}</i><strong>{module.name}</strong></figcaption>
+                    </figure>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <div className={`lmw-summary-plan lmw-summary-plan--${draft.plan}`}>
               <div>
                 <span>Plan elegido</span>
@@ -1424,10 +1451,10 @@ export function PackageBuilderPage() {
                 <strong>{draft.plan === 'free' ? 'No aplica' : `${formatMxPrice(priceEstimate.maintenanceFrom)}/mes`}</strong>
                 <p>{draft.plan === 'free' ? 'El plan Free entra a cola automatizada.' : `Operación con agente desde ${formatMxPrice(priceEstimate.operationalMaintenanceFrom)}/mes.`}</p>
               </article>
-              <article className={draft.marketing ? 'is-astra' : ''}>
-                <span>ASTRAMUSES</span>
-                <strong>{draft.marketing ? `${formatMxPrice(priceEstimate.astramusesMonthly)}/mes` : 'No incluido'}</strong>
-                <p>{draft.marketing ? 'Contenido estático inicial. Video y automatización se cotizan aparte.' : 'Puede añadirse antes de pagar.'}</p>
+              <article className="is-upcoming">
+                <span>MARKETING GENERAL</span>
+                <strong>Próximamente</strong>
+                <p>Disponible para cualquier negocio; todavía no forma parte de esta solicitud ni de su precio.</p>
               </article>
             </section>
 
@@ -1453,10 +1480,10 @@ export function PackageBuilderPage() {
                     : 'El proyecto se publica primero en LMWares; después puede migrarse a un dominio personalizado.'}
                 </p>
               </article>
-              <article className={draft.marketing ? 'is-astra' : ''}>
+              <article className="is-upcoming">
                 <span>MARKETING</span>
-                <h2>{draft.marketing ? 'Astramuses añadido' : 'No incluido'}</h2>
-                <p>{draft.marketing ? 'Se evaluará como servicio separado.' : 'Puedes añadirlo antes de enviar.'}</p>
+                <h2>Marketing general próximamente</h2>
+                <p>Será un servicio para todos. AstraMuses se estrenará produciendo las campañas SaaS UGC de LMWares.</p>
               </article>
             </div>
 

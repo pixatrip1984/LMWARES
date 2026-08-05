@@ -86,7 +86,7 @@ export function CommercialIntakesPage() {
       implementationDescription: 'Diseño, construcción, validación y publicación inicial del alcance acordado.',
       recurringDescription: 'Alojamiento administrado, mantenimiento base y soporte del servicio publicado.',
       modules: selected.modules,
-      marketing: selected.marketing,
+      marketing: false,
     });
     Promise.all([
       api.getCommercialPackageIntake(selected.id),
@@ -109,7 +109,7 @@ export function CommercialIntakesPage() {
             implementationDescription: latestOffer.implementationDescription,
             recurringDescription: latestOffer.recurringDescription,
             modules: latestOffer.modules,
-            marketing: latestOffer.marketing,
+            marketing: false,
           });
         }
       })
@@ -198,7 +198,7 @@ export function CommercialIntakesPage() {
       const result = await api.issueCommercialOffer(selected.id, {
         plan: selected.plan,
         modules: offerForm.modules,
-        marketing: offerForm.marketing,
+        marketing: false,
         implementationAmountCents,
         monthlyAmountCents,
         scopeSummary: offerForm.scopeSummary,
@@ -306,9 +306,9 @@ export function CommercialIntakesPage() {
                   </div>
                   <dl className="grid gap-4 text-sm sm:grid-cols-2">
                     <Info label="Implementación estimada" value={money(selected.estimatedImplementationCents)} />
-                    <Info label="Mantenimiento estimado" value={`${money(selected.estimatedMonthlyCents)}/mes`} />
+                    <Info label="Mantenimiento opcional estimado" value={`Desde ${money(selected.estimatedMonthlyCents)}/mes`} />
                     <Info label="Inicio de mensualidad" value="Al publicar el proyecto" />
-                    <Info label="Marketing AstraMuses" value={selected.marketing ? 'Incluido' : 'No incluido'} />
+                    <Info label="AstraMuses" value={selected.marketing ? 'Registro legado' : 'Próximamente'} />
                   </dl>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Módulos solicitados</p>
@@ -345,7 +345,7 @@ export function CommercialIntakesPage() {
                         <h3 className="mt-1 text-xl font-bold text-gray-900">
                           {offers.some((offer) => offer.status === 'issued') ? 'Emitir una revisión' : 'Preparar oferta final'}
                         </h3>
-                        <p className="mt-1 text-sm text-gray-500">Vigencia automática de 15 días. La mensualidad iniciará al publicar.</p>
+                        <p className="mt-1 text-sm text-gray-500">Vigencia automática de 15 días. Usa MXN $0 si el cliente contrata únicamente la implementación.</p>
                       </div>
                       {offers.length ? (
                         <div className="space-y-2">
@@ -370,7 +370,7 @@ export function CommercialIntakesPage() {
                       ) : null}
                       <div className="grid gap-4 sm:grid-cols-2">
                         <OfferInput label="Implementación (MXN)" value={offerForm.implementationPesos} onChange={(value) => setOfferForm((current) => ({ ...current, implementationPesos: value }))} />
-                        <OfferInput label="Mensualidad al publicar (MXN)" value={offerForm.monthlyPesos} onChange={(value) => setOfferForm((current) => ({ ...current, monthlyPesos: value }))} />
+                        <OfferInput label="Mantenimiento al publicar (MXN, 0 = no contratado)" value={offerForm.monthlyPesos} onChange={(value) => setOfferForm((current) => ({ ...current, monthlyPesos: value }))} />
                       </div>
                       <div>
                         <p className="mb-2 text-sm font-medium text-gray-700">Módulos finales</p>
@@ -388,10 +388,9 @@ export function CommercialIntakesPage() {
                           ))}
                         </div>
                       </div>
-                      <label className="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" checked={offerForm.marketing} onChange={(event) => setOfferForm((current) => ({ ...current, marketing: event.target.checked }))} />
-                        Incluir AstraMuses
-                      </label>
+                      <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                        AstraMuses está anunciado como Próximamente y no puede incluirse ni cobrarse en esta oferta.
+                      </p>
                       <OfferText label="Resumen de alcance" value={offerForm.scopeSummary} onChange={(value) => setOfferForm((current) => ({ ...current, scopeSummary: value }))} />
                       <OfferText label="Qué cubre la implementación" value={offerForm.implementationDescription} onChange={(value) => setOfferForm((current) => ({ ...current, implementationDescription: value }))} />
                       <OfferText label="Qué cubre la mensualidad" value={offerForm.recurringDescription} onChange={(value) => setOfferForm((current) => ({ ...current, recurringDescription: value }))} />
@@ -414,7 +413,14 @@ export function CommercialIntakesPage() {
                         <Info label="Trabajo" value={workOrder ? workOrderStatusLabel(workOrder.status) : 'Preparando orden'} />
                         <Info label="Proyecto Oracle" value={workOrder?.projectId ?? 'Sin enlazar'} />
                         <Info label="Asignado por" value={workOrder?.assignedBy ?? 'Pendiente'} />
-                        <Info label="Mensualidad" value={maintenanceSubscription ? subscriptionStatusLabel(maintenanceSubscription.status) : 'Sin autorizar'} />
+                        <Info
+                          label="Mensualidad"
+                          value={offers.find((offer) => offer.status === 'accepted')?.monthlyAmountCents === 0
+                            ? 'No contratada · pago único'
+                            : maintenanceSubscription
+                              ? subscriptionStatusLabel(maintenanceSubscription.status)
+                              : 'Sin autorizar'}
+                        />
                         <Info label="URL pública" value={workOrder?.publishedUrl ?? 'Sin publicar'} />
                       </dl>
                       {workOrder && !workOrder.projectId ? (
@@ -445,7 +451,8 @@ export function CommercialIntakesPage() {
                           {workOrder.status === 'ready_to_publish' ? (
                             <>
                               <Button variant="secondary" onClick={() => changeWorkStatus('client_review')} disabled={saving}>Volver a revisión</Button>
-                              {maintenanceSubscription?.status === 'active' ? (
+                              {offers.find((offer) => offer.status === 'accepted')?.monthlyAmountCents === 0
+                              || maintenanceSubscription?.status === 'active' ? (
                                 <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                                   <input
                                     aria-label="URL pública inicial"
@@ -457,7 +464,7 @@ export function CommercialIntakesPage() {
                                   <Button onClick={publishWorkOrder} disabled={saving || !publicUrl}>Confirmar publicación</Button>
                                 </div>
                               ) : (
-                                <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">Publicación bloqueada hasta autorizar la suscripción.</span>
+                                <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">Publicación bloqueada hasta autorizar la suscripción contratada.</span>
                               )}
                             </>
                           ) : null}

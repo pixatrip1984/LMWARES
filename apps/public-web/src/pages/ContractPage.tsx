@@ -434,7 +434,7 @@ function OperacionTab() {
       <div className="lmw-solutions-grid">
         {SOLUTION_MODULES.map((module, index) => (
           <article
-            className="lmw-solution-card"
+            className={`lmw-solution-card${'availability' in module && module.availability === 'coming-soon' ? ' is-coming-soon' : ''}`}
             key={module.title}
             style={{ '--solution-index': index } as CSSProperties}
           >
@@ -520,8 +520,8 @@ function PlanesTab() {
           acompañamiento necesitas.
         </>
       }
-      lead="La estructura está definida; precios, bolsas de trabajo y límites mensuales se cerrarán antes de publicar esta oferta."
-      quote="Contrata acompañamiento sólo cuando aporta valor al momento real del negocio."
+      lead="La implementación puede contratarse como pago único. El mantenimiento se añade sólo cuando el proyecto necesita operación continua."
+      quote="Paga acompañamiento únicamente cuando aporta valor al momento real del negocio."
     >
       <div className="lmw-plans-grid">
         <PlanCard
@@ -540,10 +540,10 @@ function PlanesTab() {
         />
         <PlanCard
           kind="astra"
-          eyebrow="Astramuses"
-          title="Marketing y producción"
-          items={['Campañas', 'Creatividades', 'Contenido', 'Adquisición']}
-          note="Servicio separado"
+          eyebrow="Marketing"
+          title="Marketing general"
+          items={['Campañas para cualquier negocio', 'Estrategia', 'Creatividades', 'Contenido']}
+          note="Próximamente · AstraMuses inicia con LMWares"
         />
       </div>
       <ProcessLine items={['Implementación', 'Cuidado', 'Crecimiento comercial']} />

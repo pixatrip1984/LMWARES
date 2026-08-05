@@ -1,6 +1,7 @@
 import {
   COMMERCIAL_PACKAGE_PRICING_CENTS,
   estimateCommercialPackage,
+  isPaidPackageModuleAvailable,
   type PaidPackageModuleId,
   type PaidPackagePlan,
 } from '@starter/domain';
@@ -25,6 +26,7 @@ export type PackageModule = {
   eyebrow: string;
   description: string;
   tier: 'base' | 'starter' | 'pro';
+  visual: string;
 };
 
 export type DraftImage = {
@@ -53,6 +55,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Base',
     description: 'Una página orientada a captar y convertir.',
     tier: 'base',
+    visual: '/assets/package-builder/landing-consulting.png',
   },
   {
     id: 'panel',
@@ -60,6 +63,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Base',
     description: 'Controla contenido y actividad del sistema.',
     tier: 'base',
+    visual: '/assets/package-builder/panel.png',
   },
   {
     id: 'blog',
@@ -67,6 +71,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Contenido',
     description: 'Publicaciones dentro de una estructura clara.',
     tier: 'starter',
+    visual: '/assets/package-builder/blog-frontier-lab.png',
   },
   {
     id: 'galleries',
@@ -74,6 +79,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Muestra',
     description: 'Colecciones visuales para proyectos y servicios.',
     tier: 'starter',
+    visual: '/assets/package-builder/galleries-paintings.png',
   },
   {
     id: 'catalog',
@@ -81,6 +87,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Orden',
     description: 'Productos o servicios organizados y consultables.',
     tier: 'starter',
+    visual: '/assets/package-builder/catalog.png',
   },
   {
     id: 'quote',
@@ -88,6 +95,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Solicitud',
     description: 'Recibe datos, referencias y solicitudes con claridad.',
     tier: 'starter',
+    visual: '/assets/package-builder/formulario.png',
   },
   {
     id: 'events',
@@ -95,6 +103,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Agenda',
     description: 'Fechas, registros y actividad programada.',
     tier: 'starter',
+    visual: '/assets/package-builder/events.png',
   },
   {
     id: 'docs',
@@ -102,6 +111,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Conocimiento',
     description: 'Información operativa y documentación navegable.',
     tier: 'starter',
+    visual: '/assets/package-builder/docs.png',
   },
   {
     id: 'cart',
@@ -109,6 +119,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Comercio',
     description: 'Selección, pedido y flujo comercial avanzado.',
     tier: 'pro',
+    visual: '/assets/package-builder/cart-premium-checkout.png',
   },
   {
     id: 'data',
@@ -116,6 +127,7 @@ export const PACKAGE_MODULES: PackageModule[] = [
     eyebrow: 'Evidencia',
     description: 'Ciclos de medición, decisión y mejora continua.',
     tier: 'pro',
+    visual: '/assets/package-builder/optimization-model-router.png',
   },
 ];
 
@@ -164,15 +176,15 @@ export type PackagePriceEstimate = {
 
 const DRAFT_KEY = 'lmwares.package-draft.v1';
 
-export function getRecommendedPlan(modules: PackageModuleId[], marketing: boolean): PlanId {
+export function getRecommendedPlan(modules: PackageModuleId[], _marketing: boolean): PlanId {
   if (modules.some((moduleId) => PRO_ONLY_MODULES.includes(moduleId))) return 'pro';
-  if (modules.length > 0 || marketing) return 'starter';
+  if (modules.length > 0) return 'starter';
   return 'free';
 }
 
 export function getPlanSeed(plan: PlanId): PackageModuleId[] {
   if (plan === 'free') return [];
-  if (plan === 'pro') return ['landing', 'panel', 'catalog', 'cart', 'data'];
+  if (plan === 'pro') return ['landing', 'panel', 'catalog'];
   return ['landing', 'panel', 'catalog'];
 }
 
@@ -182,7 +194,7 @@ export function getSelectedComplements(modules: PackageModuleId[]) {
 
 export function getPackageLabel(plan: PlanId, modules: PackageModuleId[]) {
   if (plan === 'free') return 'Página informativa · 5 imágenes';
-  if (plan === 'pro') return 'Capacidad completa habilitada';
+  if (plan === 'pro') return 'Pro base · módulos disponibles';
 
   const complementCount = getSelectedComplements(modules).length;
   if (complementCount === 0) return 'Hasta 2 complementos incluidos';
@@ -230,6 +242,12 @@ export function togglePackageModule(
   current: PackageModuleId[],
   moduleId: PackageModuleId,
 ): { modules: PackageModuleId[]; message?: string } {
+  if (!isPackageModuleAvailable(moduleId)) {
+    return {
+      modules: current,
+      message: 'Carrito y Optimization estarán disponibles próximamente como ampliaciones de Pro.',
+    };
+  }
   const selected = new Set(current);
   const foundationSelected = FOUNDATION_MODULES.every((id) => selected.has(id));
   const hasComplements = current.some((id) => !FOUNDATION_MODULES.includes(id));
@@ -265,12 +283,16 @@ export function loadPackageDraft(): PackageDraft {
     const parsed = JSON.parse(stored) as Partial<PackageDraft>;
     const validIds = new Set(PACKAGE_MODULES.map(({ id }) => id));
     const modules = Array.isArray(parsed.modules)
-      ? parsed.modules.filter((id): id is PackageModuleId => validIds.has(id as PackageModuleId))
+      ? parsed.modules.filter(
+          (id): id is PackageModuleId =>
+            validIds.has(id as PackageModuleId)
+            && isPackageModuleAvailable(id as PackageModuleId),
+        )
       : DEFAULT_DRAFT.modules;
 
     const plan = parsed.plan === 'free' || parsed.plan === 'starter' || parsed.plan === 'pro'
       ? parsed.plan
-      : getRecommendedPlan(modules, parsed.marketing === true);
+      : getRecommendedPlan(modules, false);
     const starterComplements = modules.filter(
       (id) => !FOUNDATION_MODULES.includes(id) && !PRO_ONLY_MODULES.includes(id),
     ).slice(0, 2);
@@ -283,7 +305,7 @@ export function loadPackageDraft(): PackageDraft {
     return {
       plan,
       modules: normalizedModules,
-      marketing: parsed.marketing === true,
+      marketing: false,
       // File objects cannot be restored from localStorage. Restoring only their
       // metadata would show stale images that the intake cannot actually upload.
       images: [],
@@ -292,6 +314,10 @@ export function loadPackageDraft(): PackageDraft {
   } catch {
     return DEFAULT_DRAFT;
   }
+}
+
+export function isPackageModuleAvailable(moduleId: PackageModuleId): boolean {
+  return isPaidPackageModuleAvailable(moduleId as PaidPackageModuleId);
 }
 
 export function savePackageDraft(draft: PackageDraft) {

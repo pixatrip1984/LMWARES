@@ -143,9 +143,10 @@ export const SOLUTION_MODULES = [
   },
   {
     title: 'Carrito',
-    subtitle: 'Comercio',
+    subtitle: 'Próximamente',
     visual: 'carrito',
     asset: '/assets/lmwares/operacion/carrito-visual.png?v=20260721',
+    availability: 'coming-soon',
   },
   {
     title: 'Cotizador',
@@ -160,10 +161,11 @@ export const SOLUTION_MODULES = [
     asset: '/assets/lmwares/operacion/panel-visual.png?v=20260721',
   },
   {
-    title: 'Datos',
-    subtitle: 'Evidencia',
+    title: 'Optimization',
+    subtitle: 'Próximamente',
     visual: 'datos',
     asset: '/assets/lmwares/operacion/datos-visual.png?v=20260721',
+    availability: 'coming-soon',
   },
   {
     title: 'Eventos',

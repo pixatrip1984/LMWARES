@@ -38,6 +38,17 @@ const SITE_STATUS_LABELS: Record<string, string> = {
   manual_review: 'En revisión manual',
 };
 
+const MODULE_PRESENTATION: Record<string, { label: string; visual: string }> = {
+  landing: { label: 'Landing', visual: '/assets/package-builder/landing-consulting.png' },
+  panel: { label: 'Panel', visual: '/assets/package-builder/panel.png' },
+  blog: { label: 'Blog', visual: '/assets/package-builder/blog-frontier-lab.png' },
+  galleries: { label: 'Galerías', visual: '/assets/package-builder/galleries-paintings.png' },
+  catalog: { label: 'Catálogo', visual: '/assets/package-builder/catalog.png' },
+  quote: { label: 'Formulario', visual: '/assets/package-builder/formulario.png' },
+  events: { label: 'Eventos', visual: '/assets/package-builder/events.png' },
+  docs: { label: 'Docs', visual: '/assets/package-builder/docs.png' },
+};
+
 export function AccountCenterModal({
   error,
   initialTab,
@@ -133,7 +144,7 @@ export function AccountCenterModal({
             onClick={() => setTab('notifications')}
             type="button"
           >
-            Notificaciones
+            <span><b>01</b> Notificaciones</span>
             {overview?.unreadCount ? <i>{overview.unreadCount}</i> : null}
           </button>
           <button
@@ -141,14 +152,15 @@ export function AccountCenterModal({
             onClick={() => setTab('sites')}
             type="button"
           >
-            Mis sitios <i>{(overview?.sites.length ?? 0) + (overview?.commercialIntakes.length ?? 0)}</i>
+            <span><b>02</b> Mis sitios</span>
+            <i>{(overview?.sites.length ?? 0) + (overview?.commercialIntakes.length ?? 0)}</i>
           </button>
           <button
             className={tab === 'account' ? 'is-active' : ''}
             onClick={() => setTab('account')}
             type="button"
           >
-            Perfil
+            <span><b>03</b> Perfil</span>
           </button>
         </nav>
 
@@ -206,16 +218,33 @@ function NotificationsPanel({
 }) {
   if (!notifications.length) {
     return (
-      <AccountState
-        copy="Aquí aparecerán las publicaciones, comprobantes y avisos importantes de tus servicios."
-        title="Aún no tienes notificaciones"
-      />
+      <section className="lmw-account-panel">
+        <AccountPanelHeader
+          copy="Publicaciones, ofertas y comprobantes, reunidos en una bandeja vinculada a tu cuenta."
+          eyebrow="CENTRO DE ACTIVIDAD"
+          index="01"
+          metric="0 mensajes"
+          title="Notificaciones"
+        />
+        <AccountState
+          copy="Aquí aparecerán las publicaciones, comprobantes y avisos importantes de tus servicios."
+          title="Aún no tienes notificaciones"
+        />
+      </section>
     );
   }
 
   return (
-    <div className="lmw-account-notifications">
-      <aside className="lmw-account-inbox">
+    <section className="lmw-account-panel lmw-account-panel--notifications">
+      <AccountPanelHeader
+        copy="Publicaciones, ofertas y comprobantes, reunidos en una bandeja vinculada a tu cuenta."
+        eyebrow="CENTRO DE ACTIVIDAD"
+        index="01"
+        metric={`${notifications.length} ${notifications.length === 1 ? 'mensaje' : 'mensajes'}`}
+        title="Notificaciones"
+      />
+      <div className="lmw-account-notifications">
+        <aside className="lmw-account-inbox">
         <header>
           <div><small>BANDEJA</small><b>{notifications.length} mensajes</b></div>
           {notifications.some(({ readAt }) => !readAt) ? (
@@ -238,10 +267,11 @@ function NotificationsPanel({
             </button>
           ))}
         </div>
-      </aside>
+        </aside>
 
-      {selected ? <NotificationReader notification={selected} /> : null}
-    </div>
+        {selected ? <NotificationReader notification={selected} /> : null}
+      </div>
+    </section>
   );
 }
 
@@ -338,11 +368,14 @@ function SitesPanel({
   }
 
   return (
-    <section className="lmw-account-sites">
-      <header>
-        <div><small>PROYECTOS DE TU CUENTA</small><h3>Mis sitios</h3></div>
-        <p>{sites.length + intakes.length} proyectos registrados</p>
-      </header>
+    <section className="lmw-account-panel lmw-account-sites">
+      <AccountPanelHeader
+        copy="Consulta solicitudes, ofertas, publicaciones y accesos de cada proyecto desde un solo lugar."
+        eyebrow="PROYECTOS DE TU CUENTA"
+        index="02"
+        metric={`${sites.length + intakes.length} proyectos registrados`}
+        title="Mis sitios"
+      />
       {intakes.length ? (
         <section className="lmw-account-intakes" aria-label="Solicitudes comerciales">
           <header>
@@ -356,16 +389,34 @@ function SitesPanel({
                   <span>{intake.plan.toUpperCase()}</span>
                   <i>{commercialIntakeStatus(intake.status)}</i>
                 </header>
+                <div className="lmw-account-intake-visual" aria-label="Módulos solicitados">
+                  {intake.modules.slice(0, 4).map((module) => {
+                    const presentation = MODULE_PRESENTATION[module];
+                    return presentation ? (
+                      <figure key={module}>
+                        <img alt={`Referencia visual de ${presentation.label}`} src={presentation.visual} />
+                        <figcaption>{presentation.label}</figcaption>
+                      </figure>
+                    ) : null;
+                  })}
+                </div>
+                <div className="lmw-account-intake-progress" aria-label={`Estado: ${commercialIntakeStatus(intake.status)}`}>
+                  {['Solicitud', 'Revisión', 'Oferta', 'Proyecto'].map((label, index) => (
+                    <span className={index < commercialIntakeProgress(intake.status) ? 'is-complete' : ''} key={label}>
+                      <i />{label}
+                    </span>
+                  ))}
+                </div>
                 <h4>{intake.modules.length} capacidades seleccionadas</h4>
-                <p>{intake.modules.join(' · ')}</p>
+                <p>{intake.modules.map((module) => MODULE_PRESENTATION[module]?.label ?? module).join(' · ')}</p>
                 <dl>
                   <div>
                     <dt>Implementación estimada</dt>
                     <dd>{formatMoney(intake.estimatedImplementationCents, intake.currency)}</dd>
                   </div>
                   <div>
-                    <dt>Mensualidad estimada</dt>
-                    <dd>{formatMoney(intake.estimatedMonthlyCents, intake.currency)}/mes</dd>
+                        <dt>Mantenimiento opcional estimado</dt>
+                        <dd>Desde {formatMoney(intake.estimatedMonthlyCents, intake.currency)}/mes</dd>
                   </div>
                 </dl>
                 {intake.currentOffer ? (
@@ -381,8 +432,10 @@ function SitesPanel({
                         <dd>{formatMoney(intake.currentOffer.implementationAmountCents, intake.currentOffer.currency)}</dd>
                       </div>
                       <div>
-                        <dt>Mensualidad al publicar</dt>
-                        <dd>{formatMoney(intake.currentOffer.monthlyAmountCents, intake.currentOffer.currency)}/mes</dd>
+                        <dt>Mantenimiento acordado</dt>
+                        <dd>{intake.currentOffer.monthlyAmountCents === 0
+                          ? 'No contratado'
+                          : `${formatMoney(intake.currentOffer.monthlyAmountCents, intake.currentOffer.currency)}/mes`}</dd>
                       </div>
                     </dl>
                     <p>{intake.currentOffer.implementationDescription}</p>
@@ -429,12 +482,17 @@ function SitesPanel({
                               : 'Continuar al pago'}
                           </a>
                         ) : null}
-                        {intake.workOrder && (
+                        {intake.currentOffer.monthlyAmountCents > 0 && intake.workOrder && (
                           intake.workOrder.status === 'ready_to_publish' || intake.maintenanceSubscription
                         ) ? (
                           <a href={`/suscripcion/${encodeURIComponent(intake.workOrder.id)}`}>
                             {maintenanceActionLabel(intake.maintenanceSubscription?.status ?? null)}
                           </a>
+                        ) : null}
+                        {intake.currentOffer.monthlyAmountCents === 0 && intake.workOrder?.status === 'ready_to_publish' ? (
+                          <strong className="lmw-account-offer__accepted">
+                            Pago único confirmado. El proyecto puede publicarse sin autorizar mensualidad.
+                          </strong>
                         ) : null}
                         {intake.workOrder?.status === 'live' && intake.workOrder.publishedUrl ? (
                           <a href={intake.workOrder.publishedUrl} rel="noreferrer" target="_blank">
@@ -446,7 +504,11 @@ function SitesPanel({
                   </section>
                 ) : null}
                 <footer>
-                  <span>Mensualidad desde la publicación · Ref. {intake.id.slice(0, 8)}</span>
+                  <span>
+                    {intake.currentOffer?.monthlyAmountCents === 0
+                      ? 'Pago único · sin mantenimiento mensual'
+                      : 'Mensualidad desde la publicación'} · Ref. {intake.id.slice(0, 8)}
+                  </span>
                 </footer>
               </article>
             ))}
@@ -569,6 +631,17 @@ function commercialIntakeStatus(status: PublicPackageIntake['status']): string {
   return labels[status];
 }
 
+function commercialIntakeProgress(status: PublicPackageIntake['status']): number {
+  const progress: Record<PublicPackageIntake['status'], number> = {
+    submitted: 1,
+    scope_review: 2,
+    offer_ready: 3,
+    declined: 1,
+    converted: 4,
+  };
+  return progress[status];
+}
+
 function formatMoney(amountCents: number, currency: string): string {
   return new Intl.NumberFormat('es-MX', {
     currency,
@@ -585,7 +658,14 @@ function ProfilePanel({
   overview: AccountOverview | null;
 }) {
   return (
-    <section className="lmw-account-profile">
+    <section className="lmw-account-panel lmw-account-profile">
+      <AccountPanelHeader
+        copy="Tu identidad de acceso, actividad registrada y canales de soporte de LMWares."
+        eyebrow="CUENTA Y CONTROL"
+        index="03"
+        metric="Google OIDC"
+        title="Perfil"
+      />
       <div className="lmw-account-profile__card">
         <span>{initials(overview?.user.name, overview?.user.email)}</span>
         <div>
@@ -611,6 +691,32 @@ function ProfilePanel({
         Cerrar sesión
       </button>
     </section>
+  );
+}
+
+function AccountPanelHeader({
+  copy,
+  eyebrow,
+  index,
+  metric,
+  title,
+}: {
+  copy: string;
+  eyebrow: string;
+  index: string;
+  metric: string;
+  title: string;
+}) {
+  return (
+    <header className="lmw-account-panel__header">
+      <span aria-hidden="true">{index}</span>
+      <div>
+        <small>{eyebrow}</small>
+        <h3>{title}</h3>
+        <p>{copy}</p>
+      </div>
+      <strong>{metric}</strong>
+    </header>
   );
 }
 
