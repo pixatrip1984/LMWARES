@@ -73,10 +73,24 @@ try {
   foreach ($requiredClause in @(
     'publicationGate.monthly_amount_cents > 0',
     'o.monthly_amount_cents = 0',
-    "s.status = 'active'"
+    "s.status = 'active'",
+    'PHASE_GATE_BY_TARGET_STATUS',
+    "bo.purpose = 'implementation' AND bo.phase = 4 AND bo.status <> 'paid'"
   )) {
     if (-not $workOrderRepositorySource.Contains($requiredClause)) {
       throw "El repositorio de publicación perdió la compuerta condicional: $requiredClause"
+    }
+  }
+
+  $billingRepositoryPath = Join-Path $workspace 'packages\db\src\repositories\lmwares-billing-orders.ts'
+  $billingRepositorySource = Get-Content -LiteralPath $billingRepositoryPath -Raw
+  foreach ($requiredClause in @(
+    'ensureImplementationPhases',
+    'splitImplementationIntoPhases',
+    "AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)"
+  )) {
+    if (-not $billingRepositorySource.Contains($requiredClause)) {
+      throw "El repositorio de pagos perdió la compuerta de fases: $requiredClause"
     }
   }
 

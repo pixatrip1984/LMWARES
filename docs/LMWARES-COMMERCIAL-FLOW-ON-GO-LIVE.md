@@ -10,15 +10,19 @@ oferta con MXN $0/mes es una implementación de pago único y no genera renovaci
 2. El configurador envía una solicitud comercial. No abre Mercado Pago ni crea un cobro.
 3. Oracle revisa alcance, módulos y viabilidad con participación humana.
 4. LMWares prepara una oferta final; la estimación pública no constituye todavía el precio contractual.
-5. El cliente acepta y paga la implementación.
-6. El pago confirmado crea una orden de trabajo Starter en
+5. El cliente acepta la oferta. Se crean de inmediato 4 órdenes de pago de
+   implementación (25% cada una, ver sección de fases) y paga la primera para
+   iniciar el proyecto; las siguientes pueden pagarse en orden o adelantarse,
+   nunca es obligatorio adelantarlas.
+6. El pago confirmado de la fase 1 crea una orden de trabajo Starter en
    `awaiting_provisioning`. El operador enlaza manualmente un proyecto real ya
    sincronizado en Oracle; no se inventa un repositorio ni se publica nada.
-7. El proyecto avanza de `in_build` a `client_review` y después a
-   `ready_to_publish`, mientras se construye y valida en un subdominio
-   `*.lmwares.com`.
-8. Al llegar a la compuerta de publicación, si la oferta incluye mantenimiento,
-   el cliente autoriza la mensualidad. Si la oferta fija MXN $0/mes, este paso no existe.
+7. El proyecto avanza de `in_build` a `client_review` (exige la fase 2 pagada)
+   y después a `ready_to_publish` (exige la fase 3 pagada), mientras se
+   construye y valida en un subdominio `*.lmwares.com`.
+8. Al llegar a la compuerta de publicación, se exige la fase 4 pagada y, si
+   la oferta incluye mantenimiento, el cliente autoriza además la mensualidad.
+   Si la oferta fija MXN $0/mes, este segundo requisito no existe.
 9. LMWares publica después de comprobar la suscripción activa sólo cuando el
    importe mensual es mayor que cero. Las ofertas de pago único se publican sin suscripción.
 10. Starter y Pro pueden migrar después a dominio personalizado.
@@ -67,6 +71,40 @@ oferta con MXN $0/mes es una implementación de pago único y no genera renovaci
   El outbox reutiliza los leases y reintentos del canal transaccional ya validado por Free.
 - Los checkouts técnicos de sandbox permanecen cerrados en producción mediante una puerta independiente.
 - La reconciliación del ensayo existente sigue activa para observar sus cobros programados.
+
+## Pago de implementación en 4 fases
+
+Desde la migración `0027_lmwares_billing_order_phases.sql`, cada oferta
+aceptada crea hasta 4 filas en `lmw_billing_orders` (`purpose = 'implementation'`,
+`phase` 1 a 4) en vez de una sola orden por el 100%. El importe total de la
+oferta se divide en 25% por fase (`splitImplementationIntoPhases`, la última
+fase absorbe el residuo del redondeo). Las 4 fases se mapean 1:1 con las
+transiciones del estado de la orden de trabajo Starter:
+
+| Fase | % | Transición que habilita |
+| --- | --- | --- |
+| 1 | 25% | Crea la orden de trabajo (`awaiting_provisioning`) |
+| 2 | 25% | `in_build` → `client_review` |
+| 3 | 25% | `client_review` → `ready_to_publish` |
+| 4 | 25% | `ready_to_publish` → `live` (publicación) |
+
+Reglas de negocio:
+
+- Las 4 órdenes se crean de golpe al aceptar la oferta; el cliente puede
+  pagarlas en orden o adelantar una fase posterior, nunca es obligatorio.
+- Cada compuerta de transición sólo exige que la fase correspondiente esté
+  `paid`; si esa fila no existe (órdenes de pago único históricas, previas a
+  esta migración) la compuerta se considera superada, preservando
+  compatibilidad hacia atrás sin necesidad de reescribir datos existentes.
+- Confirmar el pago de una fase nunca cancela ni marca en revisión a sus
+  fases hermanas de la misma oferta; la lógica de "pago duplicado" y
+  cancelación de órdenes obsoletas en `reconcilePayment()` sólo actúa sobre
+  órdenes de una versión de oferta *distinta* (revisiones supersedidas).
+- Reabrir una oferta expirada (`cancelExpiredImplementationAndReopen`) exige
+  que ninguna fase 2-4 tenga ya un pago o revisión pendiente; de lo contrario
+  requiere intervención manual porque hay dinero real comprometido.
+- Las fases ya pagadas no son reembolsables por defecto; un reembolso sólo
+  procede por decisión manual del operador si el proyecto se cancela a medio camino.
 
 ## Compuerta productiva del pago de implementación
 
