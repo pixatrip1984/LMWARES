@@ -41,14 +41,25 @@ export function RequestsPage() {
         <Card>
           <ul className="divide-y divide-surface-border">
             {items.map((r) => (
-              <li key={r.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <Link to={`/requests/${r.id}`} className="font-medium text-brand-700">
-                    {r.contactName}
-                  </Link>
-                  <p className="text-sm text-gray-500">{r.contactEmail} · {r.type}</p>
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link to={`/requests/${r.id}`} className="font-semibold text-brand-700 hover:underline">
+                      {r.contactName || 'Sin nombre'}
+                    </Link>
+                    <span className="font-mono text-xs text-gray-400">ID: {r.id.slice(0, 8)}…</span>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {r.contactEmail} {r.contactPhone ? `· 📞 ${r.contactPhone}` : ''} · <span className="font-medium text-gray-800">{r.type}</span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    📅 {formatDateTime(r.createdAt)}
+                  </p>
                 </div>
-                <StatusBadge status={r.status} />
+                <div className="flex flex-col items-end gap-1">
+                  <StatusBadge status={r.status} />
+                  <span className="text-xs text-gray-400">{r.source ?? 'public-web'}</span>
+                </div>
               </li>
             ))}
           </ul>
@@ -56,4 +67,16 @@ export function RequestsPage() {
       )}
     </div>
   );
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
 }

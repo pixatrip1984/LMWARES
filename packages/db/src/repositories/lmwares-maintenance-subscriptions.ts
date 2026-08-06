@@ -98,6 +98,19 @@ export class LmwaresMaintenanceSubscriptionsRepository {
     return result.results.map(mapMaintenanceSubscription);
   }
 
+  async countStuck(olderThanHours: number): Promise<number> {
+    const cutoff = new Date(Date.now() - olderThanHours * 3_600_000).toISOString();
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM lmw_maintenance_subscriptions
+         WHERE status IN ('pending_authorization', 'payment_attention')
+           AND updated_at < ?`,
+      )
+      .bind(cutoff)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
   async claimCreation(input: {
     workOrderId: string;
     userId: string;
@@ -166,10 +179,67 @@ export class LmwaresMaintenanceSubscriptionsRepository {
     return { subscription: existing, claimed: false };
   }
 
+  /**
+   * Cuando el cliente elige (por primera vez) un plan real de mantenimiento
+   * y ya existía un intento de suscripción creado con el monto viejo (p.ej.
+   * un monto tecleado por el admin antes de esta corrección), ese intento
+   * queda "congelado" con el precio equivocado y bloquearía para siempre la
+   * autorización con el precio correcto. Este método reinicia ese intento
+   * (nunca uno ya `active`/`paused`/`payment_attention`/`disputed`/`canceled`,
+   * es decir, nunca uno que ya cobró de verdad) para que se vuelva a crear
+   * desde cero con el monto ya correcto de la oferta.
+   */
+  async resetForPlanChange(workOrderId: string): Promise<MaintenanceSubscription | null> {
+    const existing = await this.getByWorkOrderId(workOrderId);
+    if (!existing) return null;
+    if (!['creating', 'creation_failed', 'pending_authorization'].includes(existing.status)) {
+      return existing;
+    }
+    const now = nowIso();
+    // Referencia externa nueva: si reusáramos la vieja, Mercado Pago
+    // encontraría la preapproval anterior (creada con el monto viejo) al
+    // buscarla por `external_reference` y el monto ya no coincidiría.
+    const freshReference = `lmw-maintenance:${newId()}`;
+    await this.db
+      .prepare(
+        `UPDATE lmw_maintenance_subscriptions
+         SET status = 'creation_failed',
+             external_reference = ?,
+             amount_cents = (SELECT o.monthly_amount_cents FROM lmw_commercial_offers o WHERE o.id = commercial_offer_id),
+             currency = (SELECT o.currency FROM lmw_commercial_offers o WHERE o.id = commercial_offer_id),
+             pricing_version = (SELECT 'commercial-offer:' || o.id || ':v' || o.version FROM lmw_commercial_offers o WHERE o.id = commercial_offer_id),
+             subscription_snapshot = (
+               SELECT json_object(
+                 'schema', 'lmwares.maintenance-subscription.v1',
+                 'workOrderId', ?,
+                 'offerId', o.id,
+                 'offerVersion', o.version,
+                 'plan', o.plan,
+                 'modules', json(o.modules),
+                 'monthlyAmountCents', o.monthly_amount_cents,
+                 'currency', o.currency,
+                 'maintenanceStartPolicy', o.maintenance_start_policy,
+                 'termsVersion', o.terms_version,
+                 'termsSnapshot', json(o.terms_snapshot)
+               )
+               FROM lmw_commercial_offers o WHERE o.id = commercial_offer_id
+             ),
+             provider_preapproval_id = NULL,
+             authorization_url = NULL,
+             provider_status = NULL,
+             next_payment_date = NULL,
+             updated_at = ?
+         WHERE id = ? AND status IN ('creating', 'creation_failed', 'pending_authorization')`,
+      )
+      .bind(freshReference, workOrderId, now, existing.id)
+      .run();
+    return this.getById(existing.id);
+  }
+
   async savePreapproval(input: {
     id: string;
     providerPreapprovalId: string;
-    authorizationUrl: string;
+    authorizationUrl: string | null;
     providerStatus: string;
     nextPaymentDate: string | null;
   }): Promise<MaintenanceSubscription> {
@@ -179,7 +249,7 @@ export class LmwaresMaintenanceSubscriptionsRepository {
       .prepare(
         `UPDATE lmw_maintenance_subscriptions
          SET status = CASE WHEN status IN ('canceled', 'disputed') THEN status ELSE ? END,
-             provider_preapproval_id = ?, authorization_url = ?,
+             provider_preapproval_id = ?, authorization_url = COALESCE(?, authorization_url),
              provider_status = ?, next_payment_date = ?,
              authorized_at = CASE
                WHEN status NOT IN ('canceled', 'disputed') AND ? = 'active'

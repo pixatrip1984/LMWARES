@@ -1,6 +1,14 @@
 import { Hono } from 'hono';
-import { AppError, type MaintenanceSubscription } from '@starter/domain';
+import {
+  AppError,
+  MAINTENANCE_PLAN_TIERS,
+  maintenancePlanTierAmountCents,
+  type CommercialOffer,
+  type MaintenanceSubscription,
+  type StarterWorkOrder,
+} from '@starter/domain';
 import { createRepositories } from '@starter/db';
+import { parseInput, selectMaintenancePlanSchema } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import {
   cancelMercadoPagoPreapproval,
@@ -22,10 +30,71 @@ export const maintenanceSubscriptions = new Hono<{
 maintenanceSubscriptions.get('/work-orders/:workOrderId', async (c) => {
   const session = await requirePublicSession(c);
   const workOrder = await ownedWorkOrder(c.env, c.req.param('workOrderId')!, session.user.id);
-  const subscription = await createRepositories(c.env.DB)
-    .lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id);
+  const repos = createRepositories(c.env.DB);
+  const [subscription, offer] = await Promise.all([
+    repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id),
+    repos.lmwaresCommercialOffers.getById(workOrder.commercialOfferId),
+  ]);
   c.header('Cache-Control', 'no-store');
-  return c.json({ subscription: subscription ? publicMaintenanceSubscription(subscription) : null });
+  return c.json({
+    subscription: subscription ? publicMaintenanceSubscription(subscription) : null,
+    maintenanceEnabled: c.env.MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED === '1',
+    maintenancePlan: buildMaintenancePlanInfo(workOrder, offer),
+  });
+});
+
+/**
+ * Solo aplica cuando el cliente eligió "configurar luego" en el intake: la
+ * oferta quedó con `maintenancePlanSelected = null`. El cliente elige aquí su
+ * plan real de mantenimiento (con precios reales), lo que fija el monto de la
+ * mensualidad antes de poder autorizarla.
+ */
+maintenanceSubscriptions.post('/work-orders/:workOrderId/maintenance-plan', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
+  const input = parseInput(selectMaintenancePlanSchema, await readJson(c));
+  const workOrder = await ownedWorkOrder(c.env, c.req.param('workOrderId')!, session.user.id);
+  const repos = createRepositories(c.env.DB);
+  const offer = await repos.lmwaresCommercialOffers.selectMaintenancePlan({
+    offerId: workOrder.commercialOfferId,
+    userId: session.user.id,
+    plan: input.plan,
+  });
+  // Si ya existía un intento de suscripción creado con el monto viejo (antes
+  // de que el cliente eligiera este plan real), reiniciarlo para que tome el
+  // precio correcto; nunca toca uno que ya esté activo/cobrando de verdad.
+  const staleSubscription = await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id);
+  if (
+    staleSubscription &&
+    ['creating', 'creation_failed', 'pending_authorization'].includes(staleSubscription.status) &&
+    staleSubscription.providerPreapprovalId
+  ) {
+    try {
+      await cancelMercadoPagoPreapproval({
+        accessToken: maintenanceAccessToken(c.env),
+        preapprovalId: staleSubscription.providerPreapprovalId,
+      });
+    } catch {
+      // Best-effort: si Mercado Pago no lo permite, igual reiniciamos nuestro
+      // registro para no dejar al cliente atorado con el precio viejo.
+    }
+  }
+  await repos.lmwaresMaintenanceSubscriptions.resetForPlanChange(workOrder.id);
+  await repos.audit.record({
+    actorType: 'public',
+    actorId: session.user.id,
+    action: 'lmwares.commercial_offer.select_maintenance_plan',
+    entityType: 'lmwares_commercial_offer',
+    entityId: offer.id,
+    metadata: {
+      workOrderId: workOrder.id,
+      plan: offer.maintenancePlanSelected,
+      monthlyAmountCents: offer.monthlyAmountCents,
+    },
+    ip: c.req.header('CF-Connecting-IP') ?? null,
+    userAgent: c.req.header('User-Agent') ?? null,
+  });
+  return c.json({ maintenancePlan: buildMaintenancePlanInfo(workOrder, offer) });
 });
 
 maintenanceSubscriptions.post('/work-orders/:workOrderId', async (c) => {
@@ -38,6 +107,10 @@ maintenanceSubscriptions.post('/work-orders/:workOrderId', async (c) => {
     throw new AppError('conflict', 'La mensualidad sólo se autoriza cuando el proyecto está listo para publicar.');
   }
   const repos = createRepositories(c.env.DB);
+  const offer = await repos.lmwaresCommercialOffers.getById(workOrder.commercialOfferId);
+  if (offer && offer.maintenancePlanSelected === null) {
+    throw new AppError('conflict', 'Elige tu plan de mantenimiento antes de autorizar la mensualidad.');
+  }
   const claim = await repos.lmwaresMaintenanceSubscriptions.claimCreation({
     workOrderId: workOrder.id,
     userId: session.user.id,
@@ -253,3 +326,31 @@ async function audit(
     userAgent: c.req.header('User-Agent') ?? null,
   });
 }
+
+async function readJson(c: Parameters<typeof requirePublicSession>[0]): Promise<unknown> {
+  try {
+    return await c.req.json();
+  } catch {
+    throw new AppError('validation_error', 'El cuerpo JSON es inválido.');
+  }
+}
+
+/**
+ * Info que necesita el cliente para saber si ya tiene un plan de
+ * mantenimiento decidido (heredado del intake o elegido después) o si
+ * todavía debe elegir uno real antes de poder autorizar/publicar.
+ */
+function buildMaintenancePlanInfo(workOrder: StarterWorkOrder, offer: CommercialOffer | null) {
+  const brief = (workOrder.workSnapshot as { brief?: { maintenancePlanPreference?: unknown } } | undefined)?.brief;
+  const preferenceRaw = brief?.maintenancePlanPreference;
+  const preference: 'later' | 'none' | 'basic' | 'advanced' =
+    preferenceRaw === 'none' || preferenceRaw === 'basic' || preferenceRaw === 'advanced' ? preferenceRaw : 'later';
+  const selected = offer?.maintenancePlanSelected ?? null;
+  return {
+    preference,
+    selected,
+    pending: selected === null,
+    options: MAINTENANCE_PLAN_TIERS.map((plan) => ({ plan, amountCents: maintenancePlanTierAmountCents(plan) })),
+  };
+}
+

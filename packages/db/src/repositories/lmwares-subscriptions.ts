@@ -91,6 +91,19 @@ export class LmwaresSubscriptionsRepository {
     return result.results.map(mapSubscription);
   }
 
+  async countStuck(olderThanHours: number): Promise<number> {
+    const cutoff = new Date(Date.now() - olderThanHours * 3_600_000).toISOString();
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM lmw_subscriptions
+         WHERE status IN ('pending_authorization', 'payment_attention')
+           AND updated_at < ?`,
+      )
+      .bind(cutoff)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
   async claimCreation(input: {
     proposalId: string;
     userId: string;
@@ -154,7 +167,7 @@ export class LmwaresSubscriptionsRepository {
   async savePreapproval(input: {
     id: string;
     providerPreapprovalId: string;
-    authorizationUrl: string;
+    authorizationUrl: string | null;
     providerStatus: string;
     nextPaymentDate: string | null;
   }): Promise<PackageSubscription> {
@@ -164,7 +177,7 @@ export class LmwaresSubscriptionsRepository {
       .prepare(
         `UPDATE lmw_subscriptions
          SET status = CASE WHEN status IN ('canceled', 'disputed') THEN status ELSE ? END,
-             provider_preapproval_id = ?, authorization_url = ?,
+             provider_preapproval_id = ?, authorization_url = COALESCE(?, authorization_url),
              provider_status = ?, next_payment_date = ?,
              authorized_at = CASE
                WHEN status NOT IN ('canceled', 'disputed') AND ? = 'active'

@@ -32,9 +32,35 @@ const STATUS_TONE: Record<string, Tone> = {
   approved: 'green',
   rejected: 'red',
   closed: 'gray',
+  // commercial intakes
+  submitted: 'blue',
+  scope_review: 'amber',
+  offer_ready: 'blue',
+  declined: 'red',
+  converted: 'green',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  // publicaciones
+  draft: 'Borrador',
+  published: 'Publicada',
+  archived: 'Archivada',
+  // solicitudes
+  new: 'Nueva',
+  in_review: 'En revisión',
+  approved: 'Aprobada',
+  rejected: 'Rechazada',
+  closed: 'Cerrada',
+  // commercial intakes
+  submitted: 'Recibida',
+  scope_review: 'En revisión',
+  offer_ready: 'Propuesta lista',
+  declined: 'No aprobada',
+  converted: 'Convertida',
 };
 
 /** Badge que colorea automáticamente según el estado de dominio. */
 export function StatusBadge({ status }: { status: string }) {
-  return <Badge tone={STATUS_TONE[status] ?? 'gray'}>{status}</Badge>;
+  const label = STATUS_LABELS[status] ?? status;
+  return <Badge tone={STATUS_TONE[status] ?? 'gray'}>{label}</Badge>;
 }

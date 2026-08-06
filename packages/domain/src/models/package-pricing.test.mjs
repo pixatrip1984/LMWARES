@@ -34,9 +34,9 @@ test('prices Starter estimates on the server contract', () => {
   });
 
   assert.equal(one.implementationAmountCents, 790_000);
-  assert.equal(one.estimatedMonthlyAmountCents, 90_000);
+  assert.equal(one.estimatedMonthlyAmountCents, 29_900);
   assert.equal(two.implementationAmountCents, 1_090_000);
-  assert.equal(two.estimatedMonthlyAmountCents, 90_000);
+  assert.equal(two.estimatedMonthlyAmountCents, 29_900);
   assert.throws(() => estimateCommercialPackage({
     plan: 'starter',
     modules: ['landing', 'panel', 'catalog'],

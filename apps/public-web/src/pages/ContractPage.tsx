@@ -379,7 +379,7 @@ function TesisTab() {
         <img
           alt="Sistema ligero LMWares, Cloudflare-first"
           className="lmw-core lmw-core--thesis lmw-core-image"
-          src="/assets/lmwares/tesis/core.png"
+          src="/assets/lmwares/tesis/core.webp"
         />
       </div>
       <TrustStrip
@@ -407,7 +407,7 @@ function ModeloTab() {
       <div className="lmw-ownership-grid">
         <VisualColumn title="Tus activos" tone="blue" items={OWNERSHIP_ASSETS} />
         <div className="lmw-license-core">
-          <img alt="Licencia de uso indefinida para tu negocio" src="/assets/lmwares/modelo/licencia.png" />
+          <img alt="Licencia de uso indefinida para tu negocio" src="/assets/lmwares/modelo/licencia.webp" />
         </div>
         <VisualColumn title="Base LMWares" tone="red" items={LMWARES_ASSETS} />
       </div>
@@ -451,7 +451,7 @@ function OperacionTab() {
         <img
           alt="Sistema LMWares a medida"
           className="lmw-core lmw-core--solutions lmw-core-image"
-          src="/assets/lmwares/operacion/core.png"
+          src="/assets/lmwares/operacion/core.webp"
         />
       </div>
       <ProcessLine
@@ -526,16 +526,16 @@ function PlanesTab() {
       <div className="lmw-plans-grid">
         <PlanCard
           kind="basic"
-          eyebrow="LMWares"
+          eyebrow="LMWares · desde $299/mes"
           title="Mantenimiento básico"
-          items={['Ajustes menores', 'Contenido esencial', 'Soporte básico']}
+          items={['Cambios ligeros', 'Actualizaciones mensuales', 'Soporte básico']}
           note="Para sitios estables"
         />
         <PlanCard
           kind="advanced"
-          eyebrow="LMWares"
+          eyebrow="LMWares · desde $599/mes"
           title="Mantenimiento avanzado"
-          items={['Catálogo activo', 'Cambios recurrentes', 'Auditoría de seguridad']}
+          items={['Cambios semanales', 'Mayor flexibilidad', 'Catálogo activo']}
           note="Para sistemas vivos"
         />
         <PlanCard

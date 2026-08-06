@@ -108,4 +108,15 @@ export class AuditRepository {
       .all<AuditEventRow>();
     return results.map(mapAuditEvent);
   }
+
+  /** Busca si una acción ya se registró después de cierta fecha (para deduplicar alertas). */
+  async existsSince(action: string, sinceIso: string): Promise<boolean> {
+    const row = await this.db
+      .prepare(
+        `SELECT id FROM audit_events WHERE action = ? AND created_at >= ? LIMIT 1`,
+      )
+      .bind(action, sinceIso)
+      .first<{ id: string }>();
+    return row !== null;
+  }
 }

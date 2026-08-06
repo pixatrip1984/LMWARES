@@ -631,6 +631,190 @@
   padding: 16px;
 }
 
+.lmw-account-offer__descriptions {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.lmw-account-offer__descriptions p {
+  color: #a3bcd9;
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.lmw-account-offer__descriptions strong {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.lmw-account-offer__phases-wrapper {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.lmw-account-offer__summary-status {
+  background: rgba(8, 25, 52, 0.7);
+  border-left: 3px solid #2d80ff;
+  border-radius: 0 4px 4px 0;
+  padding: 10px 14px;
+}
+
+.lmw-account-offer__summary-status strong {
+  display: block;
+  font-size: 11px;
+}
+
+.lmw-account-offer__summary-status strong.is-complete {
+  color: var(--account-green);
+}
+
+.lmw-account-offer__summary-status strong.is-pending {
+  color: #7ab2ff;
+}
+
+.lmw-account-offer__phase1-callout {
+  color: #ff9e80;
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.lmw-account-phase-cards {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .lmw-account-phase-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lmw-account-phase-card {
+  background: rgba(6, 20, 42, 0.85);
+  border: 1px solid rgba(80, 140, 220, 0.25);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  position: relative;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.lmw-account-phase-card.is-phase1-required {
+  background: linear-gradient(135deg, rgba(20, 50, 95, 0.95), rgba(8, 26, 52, 0.95));
+  border: 1px solid rgba(45, 128, 255, 0.75);
+  box-shadow: 0 4px 16px rgba(45, 128, 255, 0.2);
+}
+
+.lmw-account-phase-card.is-paid {
+  border-color: rgba(55, 232, 154, 0.3);
+  opacity: 0.85;
+}
+
+.lmw-account-phase-card__header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.lmw-account-phase-card__number {
+  color: #7ea3c8;
+  font-family: var(--builder-mono, monospace);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lmw-account-phase-card__badge {
+  border-radius: 3px;
+  font-family: var(--builder-mono, monospace);
+  font-size: 8px;
+  font-weight: 700;
+  padding: 3px 6px;
+  text-transform: uppercase;
+}
+
+.lmw-account-phase-card__badge.badge-required {
+  background: rgba(255, 104, 82, 0.2);
+  border: 1px solid rgba(255, 104, 82, 0.6);
+  color: #ff9d8c;
+}
+
+.lmw-account-phase-card__badge.badge-optional {
+  background: rgba(45, 128, 255, 0.15);
+  border: 1px solid rgba(45, 128, 255, 0.35);
+  color: #8bbaff;
+}
+
+.lmw-account-phase-card__badge.badge-paid {
+  background: rgba(55, 232, 154, 0.15);
+  border: 1px solid rgba(55, 232, 154, 0.4);
+  color: #5cf2b0;
+}
+
+.lmw-account-phase-card__amount {
+  color: #ffffff;
+  font-family: var(--builder-mono, monospace);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.lmw-account-phase-card__btn {
+  align-items: center;
+  border-radius: 4px;
+  display: inline-flex;
+  font-family: var(--builder-mono, monospace);
+  font-size: 9px;
+  font-weight: 800;
+  justify-content: center;
+  margin-top: auto;
+  min-height: 38px;
+  padding: 8px 10px;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.lmw-account-phase-card__btn.btn-primary-pay {
+  background: linear-gradient(135deg, #ff5036, #e62e15);
+  box-shadow: 0 4px 14px rgba(255, 80, 54, 0.35);
+  color: #ffffff;
+}
+
+.lmw-account-phase-card__btn.btn-primary-pay:hover {
+  background: linear-gradient(135deg, #ff6b54, #f5381d);
+  box-shadow: 0 6px 18px rgba(255, 80, 54, 0.5);
+  transform: translateY(-1px);
+}
+
+.lmw-account-phase-card__btn.btn-secondary-pay {
+  background: rgba(45, 128, 255, 0.2);
+  border: 1px solid rgba(45, 128, 255, 0.5);
+  color: #b9d7ff;
+}
+
+.lmw-account-phase-card__btn.btn-secondary-pay:hover {
+  background: var(--account-blue);
+  color: #ffffff;
+}
+
+.lmw-account-phase-card__btn.btn-paid {
+  background: transparent;
+  border: 1px solid rgba(55, 232, 154, 0.35);
+  color: #37e89a;
+}
+
+.lmw-account-phase-card__btn.btn-paid:hover {
+  background: rgba(55, 232, 154, 0.12);
+}
+
 .lmw-account-offer > header {
   align-items: center;
   display: flex;

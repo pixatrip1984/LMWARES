@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { PublicPackageProposal, PublicPackageSubscription } from '@starter/api-client';
 import { api } from '../lib/api';
 import { PACKAGE_MODULES } from '../features/package-builder/packageBuilderModel';
+import { friendlyPaymentErrorMessage } from '../lib/payment-error-messages';
 import './payment.css';
 
 type LoadState =
@@ -33,7 +34,7 @@ export function PaymentPage() {
       })
       .catch((error) => {
         if (!active) return;
-        setMessage(error instanceof Error ? error.message : 'No fue posible cargar la propuesta.');
+        setMessage(friendlyPaymentErrorMessage(error, 'No fue posible cargar la propuesta.'));
         setState('error');
       });
     return () => {
@@ -68,8 +69,7 @@ export function PaymentPage() {
       setState('ready');
     } catch (error) {
       checkoutWindow?.close();
-      const errorMessage =
-        error instanceof Error ? error.message : 'No fue posible preparar el checkout.';
+      const errorMessage = friendlyPaymentErrorMessage(error, 'No fue posible preparar el checkout.');
       try {
         const latest = await api.getPackageProposal(proposalId);
         setProposal(latest.proposal);
@@ -103,7 +103,7 @@ export function PaymentPage() {
       );
       setState('ready');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No fue posible verificar el pago.');
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible verificar el pago.'));
       setState('error');
     }
   };
@@ -131,9 +131,7 @@ export function PaymentPage() {
       setState('ready');
     } catch (error) {
       authorizationWindow?.close();
-      setMessage(
-        error instanceof Error ? error.message : 'No fue posible preparar la suscripción.',
-      );
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible preparar la suscripción.'));
       setState('error');
     }
   };
@@ -154,9 +152,7 @@ export function PaymentPage() {
       );
       setState('ready');
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'No fue posible verificar la suscripción.',
-      );
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible verificar la suscripción.'));
       setState('error');
     }
   };
@@ -172,9 +168,7 @@ export function PaymentPage() {
       setMessage('La suscripción técnica quedó cancelada en Mercado Pago.');
       setState('ready');
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'No fue posible cancelar la suscripción.',
-      );
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible cancelar la suscripción.'));
       setState('error');
     }
   };

@@ -165,7 +165,7 @@
 .lmw-preview-canvas {
   background:
     linear-gradient(90deg, rgba(7, 19, 43, 0.86), rgba(1, 5, 12, 0.42)),
-    url('/assets/upscale-panorama.png');
+    url('/assets/upscale-panorama.webp');
   background-position: center;
   background-size: cover;
   min-height: 0;
@@ -242,7 +242,7 @@
 }
 
 .lmw-concept-frame {
-  aspect-ratio: 1305 / 650;
+  aspect-ratio: 16 / 9;
   background: #f4eee7;
   overflow: hidden;
   position: relative;
@@ -250,23 +250,26 @@
 }
 
 .lmw-concept-frame--home {
-  aspect-ratio: 1305 / 535;
+  aspect-ratio: 16 / 9;
 }
 
 .lmw-concept-frame img {
-  height: auto;
-  left: -14.1%;
-  max-width: none;
-  position: absolute;
-  top: -31%;
+  display: block;
+  height: 100%;
+  left: 0;
+  max-width: 100%;
+  object-fit: cover;
+  object-position: center top;
+  position: relative;
+  top: 0;
   user-select: none;
-  width: 128.12%;
+  width: 100%;
 }
 
 .lmw-concept-frame--home img {
-  left: -19.5%;
-  top: -46.5%;
-  width: 175%;
+  left: 0;
+  top: 0;
+  width: 100%;
 }
 
 .lmw-catalog-concept {
@@ -575,7 +578,7 @@
 
 .lmw-live-catalog__art,
 .lmw-live-detail__art {
-  background-image: url('/assets/package-preview/concepts/public-inicio.png');
+  background-image: url('/assets/package-preview/concepts/public-inicio.webp');
   background-repeat: no-repeat;
   display: block;
 }
@@ -957,10 +960,10 @@
 }
 
 .lmw-admin-preview {
-  background: #08101b;
+  background: #040a14;
   color: #f6fbff;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 200px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
@@ -969,74 +972,166 @@
 
 .lmw-admin-preview__sidebar {
   background:
-    radial-gradient(circle at 80% 0%, rgba(255, 76, 26, 0.14), transparent 36%),
-    #030915;
-  border-right: 1px solid rgba(69, 142, 244, 0.24);
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 8px;
+    radial-gradient(circle at 10% 0%, rgba(255, 76, 26, 0.12), transparent 45%),
+    linear-gradient(180deg, #020712 0%, #050d1d 100%);
+  border-right: 1px solid rgba(69, 142, 244, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   min-height: 0;
   overflow: hidden;
-  padding: 24px 18px;
+  padding: 20px 14px;
 }
 
-.lmw-admin-preview__sidebar strong {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 22px;
-  font-weight: 500;
+.lmw-admin-preview__brand {
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  gap: 10px;
+  padding: 4px 6px 14px;
 }
 
-.lmw-admin-preview__sidebar > span {
-  color: rgba(197, 223, 255, 0.56);
+.lmw-admin-preview__badge {
+  background: linear-gradient(135deg, #ff5722, #146be2);
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(255, 87, 34, 0.4);
+  flex-shrink: 0;
+  height: 10px;
+  width: 10px;
+}
+
+.lmw-admin-preview__brand div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lmw-admin-preview__brand strong {
+  color: #ffffff;
   font-family: Inter, Arial, sans-serif;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lmw-admin-preview__brand small {
+  color: rgba(197, 223, 255, 0.48);
+  font-family: Inter, Arial, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
-.lmw-admin-preview__sidebar nav {
-  align-content: start;
-  display: grid;
-  gap: 6px;
-  margin-top: 18px;
+.lmw-admin-preview__nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
   min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
-  scrollbar-color: rgba(255, 78, 38, 0.6) rgba(3, 9, 21, 0.8);
-  scrollbar-width: thin;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
-.lmw-admin-preview__sidebar button {
+.lmw-admin-preview__nav::-webkit-scrollbar {
+  display: none;
+}
+
+.lmw-admin-nav-item {
+  align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  color: rgba(226, 239, 255, 0.68);
+  border-radius: 6px;
+  color: rgba(200, 222, 255, 0.65);
   cursor: pointer;
+  display: flex;
   font-family: Inter, Arial, sans-serif;
-  font-size: 12px;
-  font-weight: 900;
-  min-height: 42px;
-  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 10px;
+  position: relative;
   text-align: left;
   text-transform: uppercase;
+  transition: all 160ms ease;
 }
 
-.lmw-admin-preview__sidebar button:hover,
-.lmw-admin-preview__sidebar button.is-active {
-  background: rgba(20, 107, 226, 0.16);
-  border-color: rgba(55, 158, 255, 0.52);
+.lmw-admin-nav-item svg {
+  color: rgba(200, 222, 255, 0.45);
+  flex-shrink: 0;
+  transition: color 160ms ease;
+}
+
+.lmw-admin-nav-item span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lmw-admin-nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
   color: #ffffff;
+}
+
+.lmw-admin-nav-item:hover svg {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.lmw-admin-nav-item.is-active {
+  background: linear-gradient(90deg, rgba(255, 87, 34, 0.22), rgba(20, 107, 226, 0.15));
+  border-color: rgba(255, 87, 34, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 12px rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+}
+
+.lmw-admin-nav-item.is-active svg {
+  color: #ff6a38;
+}
+
+.lmw-admin-nav-item__indicator {
+  background: #ff5722;
+  border-radius: 2px;
+  box-shadow: 0 0 8px #ff5722;
+  height: 14px;
+  position: absolute;
+  right: 6px;
+  width: 3px;
 }
 
 .lmw-admin-preview__main {
   background:
-    linear-gradient(180deg, rgba(9, 20, 38, 0.96), rgba(2, 8, 17, 0.98)),
-    #06101c;
+    radial-gradient(circle at 50% 0%, rgba(15, 30, 60, 0.4), transparent 60%),
+    #030914;
+  display: block;
+  flex: 1;
   min-width: 0;
-  overflow: auto;
-  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px;
   position: relative;
-  scrollbar-color: rgba(255, 78, 38, 0.72) rgba(4, 12, 24, 0.9);
+  scrollbar-color: #146be2 #081220;
   scrollbar-width: thin;
+}
+
+.lmw-admin-preview__viewport {
+  background: #081220;
+  border: 1px solid rgba(69, 142, 244, 0.22);
+  border-radius: 8px;
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.6),
+    0 0 24px rgba(20, 107, 226, 0.12);
+  display: block;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
 }
 
 .lmw-admin-preview__screen {

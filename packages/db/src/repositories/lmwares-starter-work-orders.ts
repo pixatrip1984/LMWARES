@@ -35,8 +35,27 @@ export class LmwaresStarterWorkOrdersRepository {
           (id, billing_order_id, intake_id, commercial_offer_id, user_id, status,
            work_snapshot, created_at, updated_at)
          SELECT ?, b.id, b.intake_id, b.commercial_offer_id, b.user_id,
-                'awaiting_provisioning', b.order_snapshot, ?, ?
+                'awaiting_provisioning',
+                json_patch(
+                  b.order_snapshot,
+                  json_object(
+                    'brief', json_object(
+                      'contactName', i.contact_name,
+                      'contactPhone', i.contact_phone,
+                      'businessName', i.business_name,
+                      'businessSummary', i.business_summary,
+                      'siteGoal', i.site_goal,
+                      'stylePreference', i.style_preference,
+                      'referenceNotes', i.reference_notes,
+                      'customDomainPreference', i.custom_domain_preference,
+                      'maintenancePlanPreference', i.maintenance_plan_preference,
+                      'maintenanceSecurityAddOn', i.maintenance_security_add_on
+                    )
+                  )
+                ),
+                ?, ?
          FROM lmw_billing_orders b
+         JOIN lmw_package_intakes i ON i.id = b.intake_id
          WHERE b.id = ? AND b.purpose = 'implementation' AND b.phase = 1 AND b.status = 'paid'
            AND b.intake_id IS NOT NULL AND b.commercial_offer_id IS NOT NULL`,
       )

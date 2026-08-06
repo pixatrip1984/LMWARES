@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PACKAGE_MODULE_IDS, PAID_PACKAGE_PLANS } from '@starter/domain';
+import { MAINTENANCE_PLAN_TIERS, PACKAGE_MODULE_IDS, PAID_PACKAGE_PLANS } from '@starter/domain';
 
 export const issueCommercialOfferSchema = z.object({
   plan: z.enum(PAID_PACKAGE_PLANS),
@@ -21,3 +21,9 @@ export const acceptCommercialOfferSchema = z.object({
 });
 
 export type AcceptCommercialOfferInput = z.infer<typeof acceptCommercialOfferSchema>;
+
+export const selectMaintenancePlanSchema = z.object({
+  plan: z.enum(MAINTENANCE_PLAN_TIERS),
+});
+
+export type SelectMaintenancePlanInput = z.infer<typeof selectMaintenancePlanSchema>;

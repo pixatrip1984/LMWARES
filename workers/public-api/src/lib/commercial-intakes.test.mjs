@@ -56,6 +56,16 @@ test('commercial intake freezes on-go-live maintenance and audits only a new rec
   assert.match(intakeSource, /result\.created \? 201 : 200/);
 });
 
+test('closed commercial submission keys cannot masquerade as a fresh review request', () => {
+  const packageIntakeRepositorySource = readFileSync(
+    new URL('../../../../packages/db/src/repositories/lmwares-package-intakes.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(packageIntakeRepositorySource, /isOpenPackageIntakeStatus/);
+  assert.match(packageIntakeRepositorySource, /Esta solicitud ya fue cerrada/);
+  assert.match(packageIntakeRepositorySource, /submitted_at DESC/);
+});
+
 test('technical billing creation is closed independently in production', () => {
   assert.match(paymentsSource, /payments\.post\('\/proposals'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/);
   assert.match(paymentsSource, /payments\.post\('\/proposals\/:id\/checkout'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/);
@@ -208,6 +218,36 @@ test('commercial maintenance is frozen from the accepted offer and owner gated',
   assert.match(paymentsSource, /MERCADO_PAGO_MAINTENANCE_WEBHOOK_SECRET/);
   assert.match(paymentsSource, /lmwaresMaintenanceSubscriptions\.reconcileAuthorizedPayment/);
   assert.match(paymentsSource, /maintenanceSubscriptionId:/);
-  assert.match(wranglerSource, /MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED = "0"/);
+  assert.match(wranglerSource, /MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED = "1"/);
   assert.match(wranglerSource, /MERCADO_PAGO_MAINTENANCE_TEST_MODE = "0"/);
+});
+
+test('commercial intake captures a contact/business brief so a build agent has real context', () => {
+  const packageIntakeRepositorySource = readFileSync(
+    new URL('../../../../packages/db/src/repositories/lmwares-package-intakes.ts', import.meta.url),
+    'utf8',
+  );
+  const validationSource = readFileSync(
+    new URL('../../../../packages/validation/src/package-intake.ts', import.meta.url),
+    'utf8',
+  );
+  const domainModelSource = readFileSync(
+    new URL('../../../../packages/domain/src/models/package-intake.ts', import.meta.url),
+    'utf8',
+  );
+  const migrationSource = readFileSync(
+    new URL('../../../../infra/d1/migrations/0028_lmwares_package_intake_brief.sql', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(migrationSource, /ADD COLUMN contact_name/);
+  assert.match(migrationSource, /ADD COLUMN site_goal/);
+  assert.match(validationSource, /packageIntakeBriefSchema/);
+  assert.match(domainModelSource, /PackageIntakeBrief/);
+  assert.match(packageIntakeRepositorySource, /contact_name/);
+  assert.match(intakeSource, /input\.brief/);
+  assert.match(
+    workOrderRepositorySource,
+    /json_patch\(\s*b\.order_snapshot,\s*json_object\(\s*'brief', json_object\(/,
+  );
 });

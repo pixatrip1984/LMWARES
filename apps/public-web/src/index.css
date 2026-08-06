@@ -5052,3 +5052,82 @@ button {
     animation-duration: 7.5s !important;
   }
 }
+
+/* --- InfoTip: icono "i" reutilizable con panel informativo --- */
+.lmw-info-tip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 0.4em;
+}
+
+.lmw-info-tip__trigger {
+  width: 1.35em;
+  height: 1.35em;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 0.85em;
+  line-height: 1;
+  font-style: italic;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.lmw-info-tip__trigger:hover,
+.lmw-info-tip__trigger[aria-expanded='true'] {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.lmw-info-tip__panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  width: min(320px, 80vw);
+  background: #10131a;
+  color: #f4f6fb;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.lmw-info-tip__panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.lmw-info-tip__panel-header strong {
+  font-size: 0.9rem;
+}
+
+.lmw-info-tip__close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.lmw-info-tip__close:hover {
+  opacity: 1;
+}
+
+.lmw-info-tip__panel-body p + p {
+  margin-top: 0.5rem;
+}

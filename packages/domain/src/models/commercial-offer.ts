@@ -1,6 +1,7 @@
 import type { Id, IsoDateTime, Metadata, Timestamps } from '../common';
 import type { MaintenanceStartPolicy } from './package-intake';
 import type { PaidPackageModuleId, PaidPackagePlan } from './package-payment';
+import type { MaintenancePlanTier } from './package-pricing';
 
 export const COMMERCIAL_OFFER_STATUSES = [
   'issued',
@@ -23,6 +24,12 @@ export interface CommercialOffer extends Timestamps {
   marketing: boolean;
   implementationAmountCents: number;
   monthlyAmountCents: number;
+  /**
+   * Plan de mantenimiento ya decidido (`null` mientras el cliente eligió
+   * "configurar luego" y todavía no elige un plan real). Cuando no es `null`,
+   * `monthlyAmountCents` se deriva de este plan, no de un monto libre.
+   */
+  maintenancePlanSelected: MaintenancePlanTier | null;
   currency: 'MXN';
   scopeSummary: string;
   implementationDescription: string;

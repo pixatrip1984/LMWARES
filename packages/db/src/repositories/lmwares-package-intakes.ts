@@ -3,6 +3,7 @@ import {
   AppError,
   type Metadata,
   type PackageIntake,
+  type PackageIntakeBrief,
   type PackageIntakeStatus,
   type PaidPackageModuleId,
   type PaidPackagePlan,
@@ -16,6 +17,16 @@ interface PackageIntakeRow {
   plan: string;
   modules: string;
   marketing: number;
+  contact_name: string;
+  contact_phone: string;
+  business_name: string;
+  business_summary: string;
+  site_goal: string;
+  style_preference: string | null;
+  reference_notes: string | null;
+  custom_domain_preference: string | null;
+  maintenance_plan_preference: string;
+  maintenance_security_add_on: number;
   status: string;
   estimated_implementation_cents: number;
   estimated_monthly_cents: number;
@@ -41,21 +52,41 @@ export class LmwaresPackageIntakesRepository {
     plan: PaidPackagePlan;
     modules: PaidPackageModuleId[];
     marketing: boolean;
+    brief: PackageIntakeBrief;
     estimatedImplementationCents: number;
     estimatedMonthlyCents: number;
     pricingVersion: string;
     packageSnapshot: Metadata;
   }): Promise<{ intake: PackageIntake; created: boolean }> {
+    const existing = await this.getBySubmissionKey(input.submissionKey);
+    if (existing) {
+      if (existing.userId !== input.userId) {
+        throw new AppError('conflict', 'La clave de envío ya pertenece a otra solicitud.');
+      }
+      // Idempotent retry only while the request is still open for review/offer.
+      if (isOpenPackageIntakeStatus(existing.status)) {
+        return { intake: existing, created: false };
+      }
+      // A closed intake must not be returned as a successful new submission.
+      throw new AppError(
+        'conflict',
+        'Esta solicitud ya fue cerrada. Genera un nuevo envío para volver a pedir revisión.',
+      );
+    }
+
     const id = newId();
     const now = nowIso();
     const result = await this.db
       .prepare(
         `INSERT OR IGNORE INTO lmw_package_intakes
-          (id, submission_key, user_id, plan, modules, marketing, status,
+          (id, submission_key, user_id, plan, modules, marketing,
+           contact_name, contact_phone, business_name, business_summary, site_goal,
+           style_preference, reference_notes, custom_domain_preference,
+           maintenance_plan_preference, maintenance_security_add_on, status,
            estimated_implementation_cents, estimated_monthly_cents, currency,
            pricing_version, maintenance_start_policy, package_snapshot,
            submitted_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'submitted', ?, ?, 'MXN', ?, 'on_go_live', ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, 'MXN', ?, 'on_go_live', ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -64,6 +95,16 @@ export class LmwaresPackageIntakesRepository {
         input.plan,
         JSON.stringify(input.modules),
         boolToDb(input.marketing),
+        input.brief.contactName,
+        input.brief.contactPhone,
+        input.brief.businessName,
+        input.brief.businessSummary,
+        input.brief.siteGoal,
+        input.brief.stylePreference,
+        input.brief.referenceNotes,
+        input.brief.customDomainPreference,
+        input.brief.maintenancePlanPreference,
+        boolToDb(input.brief.maintenanceSecurityAddOn),
         input.estimatedImplementationCents,
         input.estimatedMonthlyCents,
         input.pricingVersion,
@@ -77,8 +118,15 @@ export class LmwaresPackageIntakesRepository {
     if (!intake || intake.userId !== input.userId) {
       throw new AppError('conflict', 'La clave de envío ya pertenece a otra solicitud.');
     }
+    if ((result.meta.changes ?? 0) !== 1 && !isOpenPackageIntakeStatus(intake.status)) {
+      throw new AppError(
+        'conflict',
+        'Esta solicitud ya fue cerrada. Genera un nuevo envío para volver a pedir revisión.',
+      );
+    }
     return { intake, created: (result.meta.changes ?? 0) === 1 };
   }
+
 
   async getById(id: string): Promise<PackageIntake | null> {
     const row = await this.db
@@ -116,8 +164,13 @@ export class LmwaresPackageIntakesRepository {
       .prepare(
         `SELECT * FROM lmw_package_intakes
          WHERE (? IS NULL OR status = ?)
-         ORDER BY CASE status WHEN 'submitted' THEN 0 WHEN 'scope_review' THEN 1 ELSE 2 END,
-                  updated_at ASC
+         ORDER BY CASE status
+                    WHEN 'submitted' THEN 0
+                    WHEN 'scope_review' THEN 1
+                    WHEN 'offer_ready' THEN 2
+                    ELSE 3
+                  END,
+                  submitted_at DESC
          LIMIT ?`,
       )
       .bind(status, status, safeLimit(input.limit ?? 50))
@@ -149,6 +202,10 @@ export class LmwaresPackageIntakesRepository {
   }
 }
 
+function isOpenPackageIntakeStatus(status: PackageIntakeStatus | string): boolean {
+  return status === 'submitted' || status === 'scope_review' || status === 'offer_ready';
+}
+
 function mapPackageIntake(row: PackageIntakeRow): PackageIntake {
   return {
     id: row.id,
@@ -157,6 +214,18 @@ function mapPackageIntake(row: PackageIntakeRow): PackageIntake {
     plan: row.plan as PaidPackagePlan,
     modules: parseModules(row.modules),
     marketing: boolFromDb(row.marketing),
+    brief: {
+      contactName: row.contact_name,
+      contactPhone: row.contact_phone,
+      businessName: row.business_name,
+      businessSummary: row.business_summary,
+      siteGoal: row.site_goal,
+      stylePreference: row.style_preference,
+      referenceNotes: row.reference_notes,
+      customDomainPreference: row.custom_domain_preference,
+      maintenancePlanPreference: row.maintenance_plan_preference as PackageIntakeBrief['maintenancePlanPreference'],
+      maintenanceSecurityAddOn: boolFromDb(row.maintenance_security_add_on),
+    },
     status: row.status as PackageIntakeStatus,
     estimatedImplementationCents: row.estimated_implementation_cents,
     estimatedMonthlyCents: row.estimated_monthly_cents,

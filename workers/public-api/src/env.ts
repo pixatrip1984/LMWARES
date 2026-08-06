@@ -72,6 +72,8 @@ export interface Bindings {
   FREE_JOBS_QUEUE: Env['FREE_JOBS_QUEUE'];
   EMAIL_FROM: string;
   EMAIL_REPLY_TO: string;
+  /** Destino de alertas operativas (pagos atascados, etc). Vacío = alertas deshabilitadas. */
+  ADMIN_ALERT_EMAIL?: string;
   /** "1" para saltar la verificación de Turnstile (solo local). */
   TURNSTILE_DISABLED: string;
   /** Secreto de Turnstile (server-side). Inyectado como secret. */

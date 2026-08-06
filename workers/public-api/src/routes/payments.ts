@@ -753,7 +753,7 @@ payments.post('/orders/:id/checkout', async (c) => {
   const repos = createRepositories(c.env.DB);
   let order = await ownedBillingOrder(c.env, c.req.param('id'), session.user.id);
   if (checkoutBlocked(order)) throw new AppError('conflict', 'Esta orden ya no admite otro pago.');
-  if (order.checkoutUrl && order.providerPreferenceId) {
+  if (order.checkoutUrl && order.providerPreferenceId && order.status !== 'payment_failed') {
     if (billingCheckoutExpired(order)) {
       throw new AppError('conflict', 'Este checkout venció. Contacta a soporte para renovarlo.');
     }
@@ -827,7 +827,7 @@ function checkoutExpired(proposal: PackageProposal): boolean {
   return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
-function paymentTimestamp(value: string | null): number {
+export function paymentTimestamp(value: string | null): number {
   if (!value) return Number.MAX_SAFE_INTEGER;
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
@@ -861,7 +861,7 @@ async function tryExpirePaidPreference(env: Bindings, proposal: PackageProposal)
   }
 }
 
-function assertPaymentMatchesProposal(
+export function assertPaymentMatchesProposal(
   payment: {
     externalReference: string;
     currency: string;
@@ -891,7 +891,7 @@ function assertPaymentMatchesProposal(
   }
 }
 
-function assertPaymentMatchesBillingOrder(
+export function assertPaymentMatchesBillingOrder(
   payment: { externalReference: string; currency: string; amount: number },
   order: BillingOrder,
 ): void {
@@ -1038,7 +1038,7 @@ function mercadoPagoWebhookSecrets(
   return [];
 }
 
-function mercadoPagoCommercialAccessToken(env: Bindings): string {
+export function mercadoPagoCommercialAccessToken(env: Bindings): string {
   const token = env.MERCADO_PAGO_COMMERCIAL_ACCESS_TOKEN?.trim();
   if (!token) throw new AppError('internal_error', 'Falta configurar el Access Token comercial de Mercado Pago.');
   return token;

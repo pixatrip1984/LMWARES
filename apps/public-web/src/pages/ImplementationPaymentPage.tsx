@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { PublicBillingOrder } from '@starter/api-client';
 import { api } from '../lib/api';
+import { friendlyPaymentErrorMessage } from '../lib/payment-error-messages';
 import './payment.css';
 
 type State = 'loading' | 'ready' | 'preparing' | 'checking' | 'error';
@@ -22,7 +23,7 @@ export function ImplementationPaymentPage() {
       })
       .catch((error) => {
         if (!active) return;
-        setMessage(error instanceof Error ? error.message : 'No fue posible cargar la orden.');
+        setMessage(friendlyPaymentErrorMessage(error, 'No fue posible cargar la orden.'));
         setState('error');
       });
     return () => { active = false; };
@@ -42,7 +43,7 @@ export function ImplementationPaymentPage() {
       setState('ready');
     } catch (error) {
       checkoutWindow?.close();
-      setMessage(error instanceof Error ? error.message : 'No fue posible preparar el pago.');
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible preparar el pago.'));
       setState('error');
     }
   };
@@ -64,7 +65,7 @@ export function ImplementationPaymentPage() {
       );
       setState('ready');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No fue posible verificar el pago.');
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible verificar el pago.'));
       setState('error');
     }
   };

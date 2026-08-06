@@ -39,14 +39,14 @@ const SITE_STATUS_LABELS: Record<string, string> = {
 };
 
 const MODULE_PRESENTATION: Record<string, { label: string; visual: string }> = {
-  landing: { label: 'Landing', visual: '/assets/package-builder/landing-consulting.png' },
-  panel: { label: 'Panel', visual: '/assets/package-builder/panel.png' },
-  blog: { label: 'Blog', visual: '/assets/package-builder/blog-frontier-lab.png' },
-  galleries: { label: 'Galerías', visual: '/assets/package-builder/galleries-paintings.png' },
-  catalog: { label: 'Catálogo', visual: '/assets/package-builder/catalog.png' },
-  quote: { label: 'Formulario', visual: '/assets/package-builder/formulario.png' },
-  events: { label: 'Eventos', visual: '/assets/package-builder/events.png' },
-  docs: { label: 'Docs', visual: '/assets/package-builder/docs.png' },
+  landing: { label: 'Sitio web', visual: '/assets/package-builder/landing-consulting.webp' },
+  panel: { label: 'Panel', visual: '/assets/package-builder/panel.webp' },
+  blog: { label: 'Blog', visual: '/assets/package-builder/blog-frontier-lab.webp' },
+  galleries: { label: 'Galerías', visual: '/assets/package-builder/galleries-paintings.webp' },
+  catalog: { label: 'Catálogo', visual: '/assets/package-builder/catalog.webp' },
+  quote: { label: 'Formulario', visual: '/assets/package-builder/formulario.webp' },
+  events: { label: 'Eventos', visual: '/assets/package-builder/events.webp' },
+  docs: { label: 'Docs', visual: '/assets/package-builder/docs.webp' },
 };
 
 export function AccountCenterModal({
@@ -438,8 +438,10 @@ function SitesPanel({
                           : `${formatMoney(intake.currentOffer.monthlyAmountCents, intake.currentOffer.currency)}/mes`}</dd>
                       </div>
                     </dl>
-                    <p>{intake.currentOffer.implementationDescription}</p>
-                    <p>{intake.currentOffer.recurringDescription}</p>
+                    <div className="lmw-account-offer__descriptions">
+                      {formatOfferText(intake.currentOffer.implementationDescription)}
+                      {formatOfferText(intake.currentOffer.recurringDescription)}
+                    </div>
                     <ul>
                       <li>{intake.currentOffer.terms.implementationPayment}</li>
                       <li>{intake.currentOffer.terms.recurringStart}</li>
@@ -476,36 +478,94 @@ function SitesPanel({
                             .sort((a, b) => a.phase - b.phase);
                           const paidCount = phases.filter((phase) => phase.status === 'paid').length;
                           const allPaid = phases.length > 0 && paidCount === phases.length;
+                          const phase1 = phases.find((p) => p.phase === 1);
+                          const isPhase1Paid = phase1?.status === 'paid';
+
                           return (
-                            <>
-                              <strong className="lmw-account-offer__accepted">
-                                {allPaid
-                                  ? 'Pago de implementación confirmado (4/4 fases).'
-                                  : `Oferta aceptada. Fases de pago: ${paidCount}/${phases.length || 4} confirmadas.`}
-                              </strong>
+                            <div className="lmw-account-offer__phases-wrapper">
+                              <div className="lmw-account-offer__summary-status">
+                                <strong className={allPaid ? 'is-complete' : 'is-pending'}>
+                                  {allPaid
+                                    ? '✓ Pago de implementación completado (4/4 fases).'
+                                    : `Oferta aceptada · Fases pagadas: ${paidCount}/4`}
+                                </strong>
+                                {!isPhase1Paid && (
+                                  <p className="lmw-account-offer__phase1-callout">
+                                    <b>Atención:</b> Debes realizar el pago de la <b>Fase 1</b> para iniciar la construcción del proyecto.
+                                  </p>
+                                )}
+                              </div>
+
                               {phases.length ? (
-                                <ul className="lmw-account-offer__phases">
-                                  {phases.map((phase) => (
-                                    <li key={phase.id}>
-                                      Fase {phase.phase} de 4 · {formatMoney(phase.amountCents, phase.currency)}{' '}
-                                      <a href={`/pago/implementacion/${encodeURIComponent(phase.id)}`}>
-                                        {phase.status === 'paid' ? 'Ver comprobación' : 'Pagar esta fase (opcional adelantarla)'}
-                                      </a>
-                                    </li>
-                                  ))}
-                                </ul>
+                                <div className="lmw-account-offer__phase-cards">
+                                  {phases.map((phase) => {
+                                    const isPaid = phase.status === 'paid';
+                                    const isPhase1 = phase.phase === 1;
+
+                                    return (
+                                      <div
+                                        key={phase.id}
+                                        className={`lmw-account-phase-card ${
+                                          isPaid
+                                            ? 'is-paid'
+                                            : isPhase1
+                                              ? 'is-phase1-required'
+                                              : 'is-optional'
+                                        }`}
+                                      >
+                                        <div className="lmw-account-phase-card__header">
+                                          <span className="lmw-account-phase-card__number">
+                                            FASE {phase.phase} DE 4
+                                          </span>
+                                          <span className={`lmw-account-phase-card__badge ${isPaid ? 'badge-paid' : isPhase1 ? 'badge-required' : 'badge-optional'}`}>
+                                            {isPaid ? '✓ Pagada' : isPhase1 ? 'Requerida para iniciar' : 'Opcional adelantar'}
+                                          </span>
+                                        </div>
+
+                                        <div className="lmw-account-phase-card__amount">
+                                          {formatMoney(phase.amountCents, phase.currency)}
+                                        </div>
+
+                                        {isPaid ? (
+                                          <a
+                                            className="lmw-account-phase-card__btn btn-paid"
+                                            href={`/pago/implementacion/${encodeURIComponent(phase.id)}`}
+                                          >
+                                            Ver comprobación ✓
+                                          </a>
+                                        ) : isPhase1 ? (
+                                          <a
+                                            className="lmw-account-phase-card__btn btn-primary-pay"
+                                            href={`/pago/implementacion/${encodeURIComponent(phase.id)}`}
+                                          >
+                                            PAGAR FASE 1 PARA INICIAR PROYECTO →
+                                          </a>
+                                        ) : (
+                                          <a
+                                            className="lmw-account-phase-card__btn btn-secondary-pay"
+                                            href={`/pago/implementacion/${encodeURIComponent(phase.id)}`}
+                                          >
+                                            Adelantar pago Fase {phase.phase} →
+                                          </a>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               ) : null}
-                            </>
+                            </div>
                           );
                         })()}
-                        {intake.currentOffer.monthlyAmountCents > 0 && intake.workOrder && (
+                        {(intake.currentOffer.monthlyAmountCents > 0 || intake.currentOffer.maintenancePlanSelected === null) && intake.workOrder && (
                           intake.workOrder.status === 'ready_to_publish' || intake.maintenanceSubscription
                         ) ? (
                           <a href={`/suscripcion/${encodeURIComponent(intake.workOrder.id)}`}>
-                            {maintenanceActionLabel(intake.maintenanceSubscription?.status ?? null)}
+                            {intake.currentOffer.maintenancePlanSelected === null
+                              ? 'Elige tu plan de mantenimiento →'
+                              : maintenanceActionLabel(intake.maintenanceSubscription?.status ?? null)}
                           </a>
                         ) : null}
-                        {intake.currentOffer.monthlyAmountCents === 0 && intake.workOrder?.status === 'ready_to_publish' ? (
+                        {intake.currentOffer.maintenancePlanSelected === 'none' && intake.workOrder?.status === 'ready_to_publish' ? (
                           <strong className="lmw-account-offer__accepted">
                             Pago único confirmado. El proyecto puede publicarse sin autorizar mensualidad.
                           </strong>
@@ -783,4 +843,22 @@ function deliveryLabel(status: string) {
   if (status === 'sent') return 'Enviado';
   if (status === 'failed') return 'Entrega pendiente';
   return 'Procesando';
+}
+
+function formatOfferText(text: string | null | undefined): React.ReactNode {
+  if (!text) return null;
+  const paragraphs = text.split('\n\n').filter(Boolean);
+  return paragraphs.map((para, i) => {
+    const parts = para.split(/(\*\*.*?\*\*)/g);
+    return (
+      <p key={i}>
+        {parts.map((part, j) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={j}>{part.slice(2, -2)}</strong>;
+          }
+          return part;
+        })}
+      </p>
+    );
+  });
 }

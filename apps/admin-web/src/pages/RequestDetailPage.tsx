@@ -61,13 +61,37 @@ export function RequestDetailPage() {
       </div>
 
       <Card>
-        <CardHeader>Datos</CardHeader>
+        <CardHeader>Datos de la solicitud</CardHeader>
         <CardBody>
-          <dl className="grid grid-cols-2 gap-2 text-sm">
-            <dt className="text-gray-500">Email</dt><dd>{request.contactEmail}</dd>
-            <dt className="text-gray-500">Teléfono</dt><dd>{request.contactPhone ?? '—'}</dd>
-            <dt className="text-gray-500">Tipo</dt><dd>{request.type}</dd>
-            <dt className="text-gray-500">Mensaje</dt><dd className="whitespace-pre-line">{request.message ?? '—'}</dd>
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">ID de Solicitud</dt>
+              <dd className="mt-1 font-mono text-gray-900">{request.id}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Fecha y Hora de Recepción</dt>
+              <dd className="mt-1 font-medium text-gray-900">{formatDateTime(request.createdAt)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Email</dt>
+              <dd className="mt-1 font-medium text-gray-900">{request.contactEmail}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Teléfono</dt>
+              <dd className="mt-1 font-medium text-gray-900">{request.contactPhone ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Tipo / Origen</dt>
+              <dd className="mt-1 font-medium text-gray-900">{request.type} ({request.source ?? 'public-web'})</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Estado Actual</dt>
+              <dd className="mt-1 font-medium text-gray-900"><StatusBadge status={request.status} /></dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Mensaje / Detalle</dt>
+              <dd className="mt-1 whitespace-pre-line rounded-lg border border-surface-border bg-surface-muted p-3 text-gray-800">{request.message ?? '—'}</dd>
+            </div>
           </dl>
         </CardBody>
       </Card>
@@ -123,4 +147,16 @@ export function RequestDetailPage() {
       </Card>
     </div>
   );
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
 }

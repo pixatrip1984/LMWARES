@@ -1,8 +1,10 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import {
   AppError,
+  maintenancePlanTierAmountCents,
   type CommercialOffer,
   type CommercialOfferStatus,
+  type MaintenancePlanTier,
   type Metadata,
   type PaidPackageModuleId,
   type PaidPackagePlan,
@@ -20,6 +22,7 @@ interface CommercialOfferRow {
   marketing: number;
   implementation_amount_cents: number;
   monthly_amount_cents: number;
+  maintenance_plan_selected: string | null;
   currency: string;
   scope_summary: string;
   implementation_description: string;
@@ -54,13 +57,37 @@ export class LmwaresCommercialOffersRepository {
     issuedBy: string;
   }): Promise<CommercialOffer> {
     const intake = await this.db
-      .prepare(`SELECT user_id, status FROM lmw_package_intakes WHERE id = ? LIMIT 1`)
+      .prepare(`SELECT user_id, status, maintenance_plan_preference FROM lmw_package_intakes WHERE id = ? LIMIT 1`)
       .bind(input.intakeId)
-      .first<{ user_id: string; status: string }>();
+      .first<{ user_id: string; status: string; maintenance_plan_preference: string }>();
     if (!intake) throw AppError.notFound('Solicitud comercial');
     if (!['scope_review', 'offer_ready'].includes(intake.status)) {
       throw new AppError('conflict', 'La solicitud debe estar en revisión antes de emitir una oferta.');
     }
+    // El cliente ya decidió un plan real de mantenimiento en el configurador:
+    // el monto mensual se deriva de ese plan, no del número que teclee el
+    // operador. Si el cliente eligió "configurar luego", la mensualidad queda
+    // pendiente (monto 0, sin plan) hasta que el cliente elija en su pantalla
+    // de autorización.
+    const preference = intake.maintenance_plan_preference;
+    const maintenancePlanSelected: MaintenancePlanTier | null =
+      preference === 'none' || preference === 'basic' || preference === 'advanced' ? preference : null;
+    const monthlyAmountCents = maintenancePlanSelected
+      ? maintenancePlanTierAmountCents(maintenancePlanSelected)
+      : 0;
+    // El texto legal debe reflejar el monto real derivado del plan del
+    // cliente, no el que el operador haya tecleado en el formulario.
+    const termsSnapshot: Metadata = {
+      ...input.termsSnapshot,
+      recurringStart: monthlyAmountCents > 0
+        ? 'La mensualidad comienza al publicar el proyecto, no durante la construcción.'
+        : preference === 'later'
+          ? 'El cliente eligió decidir su plan de mantenimiento más adelante; lo elegirá en su pantalla de autorización antes de publicar.'
+          : 'Esta oferta es de pago único y no crea una mensualidad de mantenimiento.',
+      cancellation: monthlyAmountCents > 0
+        ? 'La cancelación de la mensualidad detiene el mantenimiento futuro; no revierte trabajo de implementación ya entregado.'
+        : 'No existen renovaciones automáticas ni cobros futuros asociados a esta oferta.',
+    };
     const accepted = await this.db
       .prepare(`SELECT id FROM lmw_commercial_offers WHERE intake_id = ? AND status = 'accepted' LIMIT 1`)
       .bind(input.intakeId)
@@ -82,7 +109,8 @@ export class LmwaresCommercialOffersRepository {
       plan: input.plan,
       version,
       implementationAmountCents: input.implementationAmountCents,
-      monthlyAmountCents: input.monthlyAmountCents,
+      monthlyAmountCents,
+      maintenancePlanSelected,
       currency: 'MXN',
       validUntil: input.validUntil,
     });
@@ -103,11 +131,11 @@ export class LmwaresCommercialOffersRepository {
         .prepare(
           `INSERT INTO lmw_commercial_offers
             (id, intake_id, user_id, version, status, plan, modules, marketing,
-             implementation_amount_cents, monthly_amount_cents, currency,
+             implementation_amount_cents, monthly_amount_cents, maintenance_plan_selected, currency,
              scope_summary, implementation_description, recurring_description,
              maintenance_start_policy, terms_version, terms_snapshot, valid_until,
              issued_by, issued_at, created_at, updated_at)
-           SELECT ?, id, user_id, ?, 'issued', ?, ?, ?, ?, ?, 'MXN', ?, ?, ?,
+           SELECT ?, id, user_id, ?, 'issued', ?, ?, ?, ?, ?, ?, 'MXN', ?, ?, ?,
                   'on_go_live', ?, ?, ?, ?, ?, ?, ?
            FROM lmw_package_intakes
            WHERE id = ? AND status IN ('scope_review', 'offer_ready')`,
@@ -119,12 +147,13 @@ export class LmwaresCommercialOffersRepository {
           JSON.stringify(input.modules),
           boolToDb(input.marketing),
           input.implementationAmountCents,
-          input.monthlyAmountCents,
+          monthlyAmountCents,
+          maintenancePlanSelected,
           input.scopeSummary,
           input.implementationDescription,
           input.recurringDescription,
           input.termsVersion,
-          JSON.stringify(input.termsSnapshot),
+          JSON.stringify(termsSnapshot),
           input.validUntil,
           input.issuedBy,
           now,
@@ -244,6 +273,42 @@ export class LmwaresCommercialOffersRepository {
       return true;
     });
   }
+
+  /**
+   * El cliente eligió "configurar luego" al llenar el brief, así que la
+   * oferta aceptada quedó con `maintenance_plan_selected = NULL` y monto 0.
+   * Esta es la única vía para fijar el plan real: solo funciona una vez
+   * (mientras siga pendiente) y solo sobre la oferta aceptada del cliente.
+   */
+  async selectMaintenancePlan(input: {
+    offerId: string;
+    userId: string;
+    plan: MaintenancePlanTier;
+  }): Promise<CommercialOffer> {
+    const current = await this.getById(input.offerId);
+    if (!current || current.userId !== input.userId) {
+      throw AppError.notFound('Oferta comercial');
+    }
+    if (current.status !== 'accepted') {
+      throw new AppError('conflict', 'La oferta todavía no está aceptada.');
+    }
+    if (current.maintenancePlanSelected !== null) {
+      return current;
+    }
+    const amountCents = maintenancePlanTierAmountCents(input.plan);
+    const result = await this.db
+      .prepare(
+        `UPDATE lmw_commercial_offers
+         SET maintenance_plan_selected = ?, monthly_amount_cents = ?, updated_at = ?
+         WHERE id = ? AND user_id = ? AND status = 'accepted' AND maintenance_plan_selected IS NULL`,
+      )
+      .bind(input.plan, amountCents, nowIso(), input.offerId, input.userId)
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      throw new AppError('conflict', 'El plan de mantenimiento ya fue decidido.');
+    }
+    return (await this.getById(input.offerId))!;
+  }
 }
 
 function mapCommercialOffer(row: CommercialOfferRow): CommercialOffer {
@@ -258,6 +323,7 @@ function mapCommercialOffer(row: CommercialOfferRow): CommercialOffer {
     marketing: boolFromDb(row.marketing),
     implementationAmountCents: row.implementation_amount_cents,
     monthlyAmountCents: row.monthly_amount_cents,
+    maintenancePlanSelected: (row.maintenance_plan_selected as MaintenancePlanTier | null) ?? null,
     currency: 'MXN',
     scopeSummary: row.scope_summary,
     implementationDescription: row.implementation_description,

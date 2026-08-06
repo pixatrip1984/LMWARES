@@ -39,7 +39,7 @@ export function StarterSitePreviewPage() {
       <header className="starter-site-preview__hero">
         <span>LMWARES · PREVIEW STARTER</span>
         <p>Proyecto {projectId}</p>
-        <h1>Landing base y módulos públicos en un mismo sitio.</h1>
+        <h1>Sitio web dinámico y módulos públicos en un mismo lugar.</h1>
         <nav aria-label="Módulos habilitados">
           {modules.map((moduleKey) => (
             <a href={`#module-${moduleKey}`} key={moduleKey}>

@@ -48,6 +48,17 @@ export interface LmwaresProjectRegistryResponse {
   upserted?: number;
 }
 
+export interface StuckPaymentsSummary {
+  total: number;
+  thresholdHours: number;
+  byType: {
+    billingOrders: number;
+    packageProposals: number;
+    packageSubscriptions: number;
+    maintenanceSubscriptions: number;
+  };
+}
+
 /**
  * Cliente del Admin API Worker. Usa credenciales (cookie de Cloudflare Access)
  * en cada petición. Nunca incluye secretos: la identidad la maneja Access.
@@ -234,6 +245,11 @@ export function createAdminClient(baseUrl: string) {
     // ── Auditoría ────────────────────────────────────────────
     listAudit() {
       return http.get<AuditEvent[]>('/admin/audit');
+    },
+
+    // ── Pagos atascados ──────────────────────────────────────
+    getStuckPayments() {
+      return http.get<StuckPaymentsSummary>('/admin/stuck-payments');
     },
   };
 }

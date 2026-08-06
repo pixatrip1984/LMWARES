@@ -9,13 +9,14 @@ import {
 } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { AccountOverview } from '@starter/api-client';
-import type { PublicUser } from '@starter/domain';
+import { AppError, type PublicUser } from '@starter/domain';
 import {
   FREE_LAYOUT_PRESETS,
   FREE_PALETTE_PRESETS,
   createFreeIntakeSchema,
 } from '@starter/validation';
 import { Turnstile } from '../components/Turnstile';
+import { InfoTip } from '../components/InfoTip';
 import {
   AccountCenterModal,
   type AccountCenterTab,
@@ -38,13 +39,17 @@ import {
   estimatePackagePrice,
   formatFileSize,
   formatMxPrice,
+  getMaintenancePlanOptions,
   getPackageLabel,
   getPlanSeed,
+  isPackageBriefComplete,
   isPackageModuleAvailable,
   loadPackageDraft,
+  MAINTENANCE_SECURITY_ADD_ON,
   savePackageDraft,
   togglePackageModule,
   type DraftImage,
+  type PackageBrief,
   type PackageDraft,
   type PackageModule,
   type PackageModuleId,
@@ -138,6 +143,21 @@ const FREE_PALETTE_OPTIONS: Array<{
 
 const COMMERCIAL_SUBMISSION_KEY_STORAGE = 'lmwares.commercial-submission-key.v1';
 
+function normalizeBriefForSubmit(brief: PackageBrief) {
+  return {
+    contactName: brief.contactName.trim(),
+    contactPhone: brief.contactPhone.trim(),
+    businessName: brief.businessName.trim(),
+    businessSummary: brief.businessSummary.trim(),
+    siteGoal: brief.siteGoal.trim(),
+    stylePreference: brief.stylePreference.trim() || null,
+    referenceNotes: brief.referenceNotes.trim() || null,
+    customDomainPreference: brief.customDomainPreference.trim() || null,
+    maintenancePlanPreference: brief.maintenancePlanPreference,
+    maintenanceSecurityAddOn: brief.maintenanceSecurityAddOn,
+  };
+}
+
 function formatFreeValidationIssue(issue: {
   code: string;
   message: string;
@@ -166,31 +186,31 @@ const PLAN_COPY: Record<PlanId, { name: string; eyebrow: string; description: st
   free: {
     name: 'Free',
     eyebrow: 'Presencia inicial',
-    description: 'Página informativa en un subdominio LMWares.',
+    description: 'Landing Page en un subdominio LMWares.',
   },
   starter: {
     name: 'Starter',
     eyebrow: 'Operación ligera',
-    description: 'Empieza en un subdominio LMWares y puede migrar a dominio personalizado, con Landing, Panel y hasta dos complementos.',
+    description: 'Empieza en un subdominio LMWares y puede migrar a dominio personalizado, con Sitio web, Panel y hasta dos complementos.',
   },
   pro: {
     name: 'Pro',
     eyebrow: 'Capacidad ampliada',
-    description: 'Combina los módulos Starter sin el límite de dos complementos. Carrito y Optimization podrán contratarse cuando estén disponibles.',
+    description: 'Combina los módulos Starter sin el límite de dos complementos. E-Commerce y AI Optimization podrán contratarse cuando estén disponibles.',
   },
 };
 
 const MODULE_IMAGE_PATHS: Record<PackageModuleId, string> = {
-  landing: '/assets/package-builder/landing-consulting.png',
-  panel: '/assets/package-builder/panel.png',
-  blog: '/assets/package-builder/blog-frontier-lab.png',
-  galleries: '/assets/package-builder/galleries-paintings.png',
-  catalog: '/assets/package-builder/catalog.png',
-  quote: '/assets/package-builder/formulario.png?v=20260722',
-  events: '/assets/package-builder/events.png',
-  docs: '/assets/package-builder/docs.png',
-  cart: '/assets/package-builder/cart-premium-checkout.png',
-  data: '/assets/package-builder/optimization-model-router.png',
+  landing: '/assets/package-builder/landing-consulting.webp?v=20260805_editorial',
+  panel: '/assets/package-builder/panel.webp?v=20260805_editorial',
+  blog: '/assets/package-builder/blog-frontier-lab.webp?v=20260805_editorial',
+  galleries: '/assets/package-builder/galleries-paintings.webp?v=20260805_editorial',
+  catalog: '/assets/package-builder/catalog.webp?v=20260805_editorial',
+  quote: '/assets/package-builder/formulario.webp?v=20260805_editorial',
+  events: '/assets/package-builder/events.webp?v=20260805_editorial',
+  docs: '/assets/package-builder/docs.webp?v=20260805_editorial',
+  cart: '/assets/package-builder/cart-ecommerce.webp?v=20260806_ecommerce',
+  data: '/assets/package-builder/optimization-model-router.webp?v=20260805_editorial',
 };
 
 export function PackageBuilderPage() {
@@ -437,6 +457,15 @@ export function PackageBuilderPage() {
     setCommercialSubmissionKey(nextKey);
   };
 
+  const updateBrief = (changes: Partial<PackageBrief>) => {
+    setDraft((current) => ({
+      ...current,
+      brief: { ...current.brief, ...changes },
+      updatedAt: new Date().toISOString(),
+    }));
+    setSubmitted(false);
+  };
+
   const updateFreeForm = (changes: Partial<typeof freeForm>) => {
     setFreeForm((current) => ({ ...current, ...changes }));
     setSubmitted(false);
@@ -540,7 +569,7 @@ export function PackageBuilderPage() {
       return;
     }
     if (FOUNDATION_MODULES.includes(moduleId)) {
-      flashNotice('Landing y Panel ya están incluidos en este plan.');
+      flashNotice('Sitio web y Panel ya están incluidos en este plan.');
       return;
     }
 
@@ -674,18 +703,69 @@ export function PackageBuilderPage() {
     if (!accountOverview && !accountLoading) void loadAccount();
   };
 
+  const rotateCommercialSubmissionKey = () => {
+    const nextKey = crypto.randomUUID();
+    localStorage.setItem(COMMERCIAL_SUBMISSION_KEY_STORAGE, nextKey);
+    setCommercialSubmissionKey(nextKey);
+    return nextKey;
+  };
+
   const submitDraft = async () => {
     if (draft.plan !== 'free') {
+      if (!isPackageBriefComplete(draft.brief)) {
+        setFileError('Completa contacto, teléfono, negocio, resumen y objetivo del sitio antes de enviar.');
+        return;
+      }
       setFileError('');
       setSubmitting(true);
       try {
-        const result = await api.createCommercialPackageIntake({
-          plan: draft.plan,
-          modules: draft.modules,
-          marketing: false,
-        }, commercialSubmissionKey);
+        let submissionKey = commercialSubmissionKey;
+        let result;
+        try {
+          result = await api.createCommercialPackageIntake({
+            plan: draft.plan,
+            modules: draft.modules,
+            marketing: false,
+            brief: normalizeBriefForSubmit(draft.brief),
+          }, submissionKey);
+        } catch (error) {
+          // Closed/idempotent keys must not fake a successful new review request.
+          if (
+            error instanceof AppError
+            && error.code === 'conflict'
+            && /ya fue cerrada|clave de envío/i.test(error.message)
+          ) {
+            submissionKey = rotateCommercialSubmissionKey();
+            result = await api.createCommercialPackageIntake({
+              plan: draft.plan,
+              modules: draft.modules,
+              marketing: false,
+              brief: normalizeBriefForSubmit(draft.brief),
+            }, submissionKey);
+          } else {
+            throw error;
+          }
+        }
+
+        const openStatuses = new Set(['submitted', 'scope_review', 'offer_ready']);
+        if (!openStatuses.has(result.intake.status)) {
+          rotateCommercialSubmissionKey();
+          setSubmitted(false);
+          setFileError(
+            result.intake.status === 'declined'
+              ? 'Esa solicitud ya fue marcada como no aprobada. Vuelve a enviar para crear una revisión nueva.'
+              : 'Esa solicitud ya está convertida. Configura un paquete nuevo si necesitas otra revisión.',
+          );
+          return;
+        }
+
         setSubmitted(true);
-        flashNotice(`Solicitud ${result.intake.id.slice(0, 8)} enviada para revisión.`);
+        void loadAccount();
+        flashNotice(
+          result.intake.status === 'submitted'
+            ? `Solicitud ${result.intake.id.slice(0, 8)} enviada. Aparece en Paquetes del panel Oracle.`
+            : `Solicitud ${result.intake.id.slice(0, 8)} ya estaba en revisión (${result.intake.status}).`,
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud.';
         setFileError(message);
@@ -986,7 +1066,7 @@ export function PackageBuilderPage() {
                   <span className="lmw-free-capability__glyph">▤</span>
                   <div>
                     <small>Incluido en Free</small>
-                    <h3>Página informativa</h3>
+                    <h3>Landing Page</h3>
                   <p>Una página única, clara y publicada temporalmente en un subdominio de LMWares.</p>
                   </div>
                   <ul>
@@ -1290,7 +1370,7 @@ export function PackageBuilderPage() {
                   <header>
                     <div>
                       <p className="lmw-builder-eyebrow">Base incluida</p>
-                      <h3>Landing + Panel</h3>
+                      <h3>Sitio web + Panel</h3>
                     </div>
                     <span>No tienes que seleccionarlos. Ambos forman parte del plan.</span>
                   </header>
@@ -1332,6 +1412,7 @@ export function PackageBuilderPage() {
                     {proCapabilities.map(renderModuleCard)}
                   </div>
                 </section>
+
               </div>
             )}
           </section>
@@ -1345,16 +1426,16 @@ export function PackageBuilderPage() {
             <div className="lmw-recommendation__selection">
               {draft.plan === 'free' ? (
                 <>
-                  <div><i>01</i><span><b>Página informativa</b><small>Única capacidad del plan</small></span></div>
+                  <div><i>01</i><span><b>Landing Page</b><small>Única capacidad del plan</small></span></div>
                   <div><i>02</i><span><b>Subdominio LMWares</b><small>Durante esta etapa inicial</small></span></div>
                   <div><i>03</i><span><b>5 imágenes</b><small>Máximo 5 MB por archivo</small></span></div>
                 </>
               ) : (
                 <>
-                  <div><i>01</i><span><b>Landing + Panel</b><small>Base incluida, sin decisiones extra</small></span></div>
+                  <div><i>01</i><span><b>Sitio web + Panel</b><small>Base incluida, sin decisiones extra</small></span></div>
                   <div><i>02</i><span><b>Subdominio desde el inicio</b><small>Dominio propio opcional después</small></span></div>
                   <div><i>03</i><span><b>{selectedComplements.length} {selectedComplements.length === 1 ? 'complemento elegido' : 'complementos elegidos'}</b><small>{selectedComplements.length > 0 ? selectedComplements.map(({ name }) => name).join(' · ') : 'Todavía no has añadido ninguno'}</small></span></div>
-                  <div><i>04</i><span><b>{draft.plan === 'pro' ? 'Combinación Starter ampliada' : 'Hasta 2 de 6 compatibles'}</b><small>{draft.plan === 'pro' ? 'Carrito y Optimization estarán disponibles como ampliaciones de pago' : 'Puedes ampliar a Pro cuando tu operación lo requiera'}</small></span></div>
+                  <div><i>04</i><span><b>{draft.plan === 'pro' ? 'Combinación Starter ampliada' : 'Hasta 2 de 6 compatibles'}</b><small>{draft.plan === 'pro' ? 'E-Commerce y AI Optimization estarán disponibles como ampliaciones de pago' : 'Puedes ampliar a Pro cuando tu operación lo requiera'}</small></span></div>
                 </>
               )}
             </div>
@@ -1362,6 +1443,54 @@ export function PackageBuilderPage() {
             <strong className="lmw-recommendation__label">
               {getPackageLabel(draft.plan, draft.modules)}
             </strong>
+
+            {draft.plan !== 'free' ? (
+              <section className="lmw-recommendation-maintenance" aria-labelledby="maintenance-preference-title">
+                <header>
+                  <p className="lmw-builder-eyebrow" id="maintenance-preference-title">
+                    Mantenimiento
+                    <InfoTip title="¿Necesito contratar mantenimiento?">
+                      <p>El mantenimiento es opcional. Puedes no contratar ningún plan y conservar tu sitio como versión definitiva; el último paso sería indexarlo en Google Search Console sobre tu dominio propio.</p>
+                      <p>O puedes elegir un plan mensual según lo que necesites. Si no estás seguro, elige «Configurar luego»: podrás decidir más adelante, pero deberás configurarlo antes de publicar tu sitio.</p>
+                    </InfoTip>
+                  </p>
+                  <span>¿Cómo quieres cuidar tu sitio después de publicarlo? Es solo una preferencia; el precio final se confirma en tu propuesta.</span>
+                </header>
+                <div className="lmw-maintenance-grid lmw-maintenance-grid--compact">
+                  {getMaintenancePlanOptions().map((option) => {
+                    const isSelected = draft.brief.maintenancePlanPreference === option.id;
+                    return (
+                      <button
+                        aria-pressed={isSelected}
+                        className={`lmw-maintenance-card lmw-maintenance-card--${option.id}${isSelected ? ' is-selected' : ''}`}
+                        key={option.id}
+                        onClick={() => updateBrief({
+                          maintenancePlanPreference: option.id,
+                          maintenanceSecurityAddOn: option.id === 'basic' || option.id === 'advanced' ? draft.brief.maintenanceSecurityAddOn : false,
+                        })}
+                        type="button"
+                      >
+                        <strong>{option.name}</strong>
+                        <em>{option.priceLabel}</em>
+                        <span>{option.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {draft.brief.maintenancePlanPreference === 'basic' || draft.brief.maintenancePlanPreference === 'advanced' ? (
+                  <label className="lmw-maintenance-addon">
+                    <input
+                      checked={draft.brief.maintenanceSecurityAddOn}
+                      onChange={(event) => updateBrief({ maintenanceSecurityAddOn: event.target.checked })}
+                      type="checkbox"
+                    />
+                    <span>
+                      <b>Add-on de seguridad</b> ({MAINTENANCE_SECURITY_ADD_ON.priceLabel}) — {MAINTENANCE_SECURITY_ADD_ON.description}
+                    </span>
+                  </label>
+                ) : null}
+              </section>
+            ) : null}
 
             <div className="lmw-price-card" aria-label="Estimación de precio">
               <span>Implementación inicial</span>
@@ -1408,10 +1537,15 @@ export function PackageBuilderPage() {
         <main className="lmw-package-summary">
           <section className="lmw-summary-main">
             <p className="lmw-builder-eyebrow">04 / Resumen</p>
-            <h1>Tu paquete está listo para evaluación.</h1>
+            <h1>
+              {submitted
+                ? 'Solicitud enviada para revisión humana.'
+                : 'Revisa tu paquete antes de enviarlo.'}
+            </h1>
             <p>
-              Éste es un borrador operativo. Todavía no genera un cobro, contrato o recurso de
-              Cloudflare.
+              {submitted
+                ? 'Ya congelamos este alcance en Oracle. Todavía no genera un cobro, contrato ni recurso de Cloudflare.'
+                : 'Éste es un borrador operativo. Sólo se envía a revisión cuando pulses el botón de abajo. Todavía no genera un cobro, contrato o recurso de Cloudflare.'}
             </p>
 
             {draft.plan !== 'free' ? (
@@ -1431,61 +1565,105 @@ export function PackageBuilderPage() {
               </section>
             ) : null}
 
-            <div className={`lmw-summary-plan lmw-summary-plan--${draft.plan}`}>
-              <div>
-                <span>Plan elegido</span>
-                <strong>{PLAN_COPY[draft.plan].name}</strong>
-                <small>{getPackageLabel(draft.plan, draft.modules)}</small>
-              </div>
-              <i>{draft.plan === 'free' ? '○' : draft.plan === 'starter' ? '★' : '♢'}</i>
-            </div>
-
-            <section className="lmw-summary-pricing" aria-label="Estimación comercial">
-              <article>
-                <span>IMPLEMENTACIÓN INICIAL</span>
-                <strong>{formatMxPrice(priceEstimate.implementation)}</strong>
-                <p>{priceEstimate.implementationLabel}</p>
-              </article>
-              <article>
-                <span>MANTENIMIENTO OPCIONAL</span>
-                <strong>{draft.plan === 'free' ? 'No aplica' : `${formatMxPrice(priceEstimate.maintenanceFrom)}/mes`}</strong>
-                <p>{draft.plan === 'free' ? 'El plan Free entra a cola automatizada.' : `Operación con agente desde ${formatMxPrice(priceEstimate.operationalMaintenanceFrom)}/mes.`}</p>
-              </article>
-              <article className="is-upcoming">
-                <span>MARKETING GENERAL</span>
-                <strong>Próximamente</strong>
-                <p>Disponible para cualquier negocio; todavía no forma parte de esta solicitud ni de su precio.</p>
-              </article>
-            </section>
-
-            <div className="lmw-summary-grid">
-              <article>
-                <span>ALCANCE</span>
-                <h2>{draft.plan === 'free' ? 'Página informativa' : `${selectedModules.length} capacidades`}</h2>
-                <ul>
-                  {draft.plan === 'free' ? <li>Página única en subdominio LMWares</li> : null}
-                  {selectedModules.map((module) => <li key={module.id}>{module.name}</li>)}
-                </ul>
-              </article>
-              <article>
-                <span>PUBLICACIÓN</span>
-                <h2>
-                  {draft.plan === 'free'
-                    ? `${normalizeFreeSlug(freeForm.slug) || 'tu-negocio'}.lmwares.com`
-                    : 'Subdominio primero'}
-                </h2>
-                <p>
-                  {draft.plan === 'free'
-                    ? `${draft.images.length}/${FREE_IMAGE_LIMIT} imágenes preparadas.`
-                    : 'El proyecto se publica primero en LMWares; después puede migrarse a un dominio personalizado.'}
-                </p>
-              </article>
-              <article className="is-upcoming">
-                <span>MARKETING</span>
-                <h2>Marketing general próximamente</h2>
-                <p>Será un servicio para todos. AstraMuses se estrenará produciendo las campañas SaaS UGC de LMWares.</p>
-              </article>
-            </div>
+            {draft.plan !== 'free' ? (
+              <section className="lmw-summary-brief" aria-labelledby="commercial-brief-title">
+                <header>
+                  <strong id="commercial-brief-title">Contacto y contexto del negocio</strong>
+                  <small>
+                    Con esto evaluamos tu solicitud y arrancamos el proyecto. El detalle fino de
+                    catálogo/galería se define después, ya con el proyecto aceptado.
+                  </small>
+                </header>
+                <div className="lmw-summary-brief-grid">
+                  <label>
+                    <span>Nombre de contacto *</span>
+                    <input
+                      onChange={(event) => updateBrief({ contactName: event.target.value })}
+                      placeholder="Ej. Juan Pérez (Fundador o encargado)"
+                      type="text"
+                      value={draft.brief.contactName}
+                    />
+                    <small>Persona directa con la que coordinaremos la propuesta y validación de alcance.</small>
+                  </label>
+                  <label>
+                    <span>Teléfono de contacto *</span>
+                    <input
+                      onChange={(event) => updateBrief({ contactPhone: event.target.value })}
+                      placeholder="Ej. 55 1234 5678 (WhatsApp preferido)"
+                      type="tel"
+                      value={draft.brief.contactPhone}
+                    />
+                    <small>Número directo para contacto rápido por WhatsApp o llamada.</small>
+                  </label>
+                  <label>
+                    <span>Nombre del negocio *</span>
+                    <input
+                      onChange={(event) => updateBrief({ businessName: event.target.value })}
+                      placeholder="Ej. AstraMed / Clínica Dental Astra"
+                      type="text"
+                      value={draft.brief.businessName}
+                    />
+                    <small>Nombre comercial o marca principal como aparecerá en el sitio.</small>
+                  </label>
+                  <label className="lmw-summary-brief-full">
+                    <span>¿A qué se dedica el negocio? *</span>
+                    <textarea
+                      onChange={(event) => updateBrief({ businessSummary: event.target.value })}
+                      placeholder="Ej. Somos una clínica dental especializada en ortodoncia e implantes en CDMX. Ofrecemos consulta de diagnóstico, tratamientos estéticos y atención directa con especialistas."
+                      rows={3}
+                      value={draft.brief.businessSummary}
+                    />
+                    <small>Describe los productos, servicios principales o la actividad de tu empresa.</small>
+                  </label>
+                  <label className="lmw-summary-brief-full">
+                    <span>¿Qué quieres lograr con el sitio? *</span>
+                    <textarea
+                      onChange={(event) => updateBrief({ siteGoal: event.target.value })}
+                      placeholder="Ej. Queremos proyectar seriedad, captar clientes locales por WhatsApp, mostrar nuestro catálogo de tratamientos y permitir agendar citas de valoración."
+                      rows={3}
+                      value={draft.brief.siteGoal}
+                    />
+                    <small>Indica los objetivos comerciales principales (ej. prospectos, cotizaciones, presencia profesional, catálogo).</small>
+                  </label>
+                  <label className="lmw-summary-brief-full">
+                    <span>
+                      Dominio personalizado deseado (opcional)
+                      <InfoTip title="¿Cómo funciona el dominio propio?">
+                        <p>El dominio es propiedad tuya: se compra y configura a través de un proveedor de reventa de dominios, no de LMWares. Quedará registrado a tu nombre.</p>
+                        <p>LMWares solo configura el DNS/hosting sobre el dominio que ya adquiriste, para publicar ahí tu sitio en la etapa final (indexación en Google Search Console).</p>
+                      </InfoTip>
+                    </span>
+                    <input
+                      onChange={(event) => updateBrief({ customDomainPreference: event.target.value })}
+                      placeholder="Ej. miclinicadental.mx"
+                      type="text"
+                      value={draft.brief.customDomainPreference}
+                    />
+                    <small>Si aún no tienes uno o no estás seguro, déjalo en blanco; lo definimos antes de publicar.</small>
+                  </label>
+                  <label className="lmw-summary-brief-full">
+                    <span>Estilo o referencia visual (opcional)</span>
+                    <input
+                      onChange={(event) => updateBrief({ stylePreference: event.target.value })}
+                      placeholder="Ej. Estilo médico moderno, azul marino y blanco, limpio (ej. inspirarse en clinica-ejemplo.com)"
+                      type="text"
+                      value={draft.brief.stylePreference}
+                    />
+                    <small>Colores de preferencia, tono de marca o enlaces a sitios que te gusten como referencia.</small>
+                  </label>
+                  <label className="lmw-summary-brief-full">
+                    <span>Notas adicionales (opcional)</span>
+                    <textarea
+                      onChange={(event) => updateBrief({ referenceNotes: event.target.value })}
+                      placeholder="Ej. Ya contamos con logotipo en vectores, necesitamos tener el sitio listo antes del 20 de este mes y requerimos facturación."
+                      rows={2}
+                      value={draft.brief.referenceNotes}
+                    />
+                    <small>Fechas de entrega deseadas, material existente (logo, fotos) o requisitos especiales.</small>
+                  </label>
+                </div>
+              </section>
+            ) : null}
 
             {draft.plan === 'free' ? (
               <>
@@ -1539,14 +1717,69 @@ export function PackageBuilderPage() {
             </div>
           </section>
 
-          <aside className="lmw-summary-next">
-            <p className="lmw-builder-eyebrow">Qué ocurre después</p>
-            <ol>
-              <li><span>01</span><div><b>Revisamos la combinación</b><p>Confirmamos dependencias y evitamos capacidad innecesaria.</p></div></li>
-              <li><span>02</span><div><b>Fijamos el alcance</b><p>Contenido, límites, dominio, tiempos y acompañamiento.</p></div></li>
-              <li><span>03</span><div><b>Preparamos la propuesta</b><p>Separando implementación, licencia, alojamiento y mantenimiento.</p></div></li>
-            </ol>
-            <div><i />{draft.plan === 'free' ? 'Free envía una solicitud real a la cola automatizada.' : 'El alcance original queda congelado para revisión humana. No se habilita ningún cobro todavía.'}</div>
+          <aside className="lmw-summary-sidebar">
+            <section className={`lmw-summary-ticket lmw-summary-ticket--${draft.plan}`}>
+              <div className="lmw-summary-ticket__header">
+                <div>
+                  <span className="lmw-summary-ticket__eyebrow">RESUMEN DEL PAQUETE</span>
+                  <strong className="lmw-summary-ticket__title">{PLAN_COPY[draft.plan].name}</strong>
+                  <small className="lmw-summary-ticket__subtitle">{getPackageLabel(draft.plan, draft.modules)}</small>
+                </div>
+                <i className="lmw-summary-ticket__icon">{draft.plan === 'free' ? '○' : draft.plan === 'starter' ? '★' : '♢'}</i>
+              </div>
+
+              <div className="lmw-summary-ticket__pricing">
+                <article>
+                  <span>IMPLEMENTACIÓN INICIAL</span>
+                  <strong>{formatMxPrice(priceEstimate.implementation)}</strong>
+                  <p>{priceEstimate.implementationLabel}</p>
+                </article>
+                <article>
+                  <span>MANTENIMIENTO OPCIONAL</span>
+                  <strong>{draft.plan === 'free' ? 'No aplica' : `${formatMxPrice(priceEstimate.maintenanceFrom)}/mes`}</strong>
+                  <p>{draft.plan === 'free' ? 'El plan Free entra a cola automatizada.' : `Operación con agente desde ${formatMxPrice(priceEstimate.operationalMaintenanceFrom)}/mes.`}</p>
+                </article>
+                <article className="is-upcoming">
+                  <span>MARKETING GENERAL</span>
+                  <strong>Próximamente</strong>
+                  <p>Disponible para cualquier negocio; todavía no forma parte de esta solicitud ni de su precio.</p>
+                </article>
+              </div>
+
+              <div className="lmw-summary-ticket__scope">
+                <article>
+                  <span>ALCANCE</span>
+                  <h4>{draft.plan === 'free' ? 'Landing Page' : `${selectedModules.length} capacidades conectadas`}</h4>
+                  <ul>
+                    {draft.plan === 'free' ? <li>Página única en subdominio LMWares</li> : null}
+                    {selectedModules.map((module) => <li key={module.id}>{module.name}</li>)}
+                  </ul>
+                </article>
+                <article>
+                  <span>PUBLICACIÓN</span>
+                  <h4>
+                    {draft.plan === 'free'
+                      ? `${normalizeFreeSlug(freeForm.slug) || 'tu-negocio'}.lmwares.com`
+                      : 'Subdominio primero'}
+                  </h4>
+                  <p>
+                    {draft.plan === 'free'
+                      ? `${draft.images.length}/${FREE_IMAGE_LIMIT} imágenes preparadas.`
+                      : 'El proyecto se publica primero en LMWares; después puede migrarse a un dominio personalizado.'}
+                  </p>
+                </article>
+              </div>
+            </section>
+
+            <section className="lmw-summary-next">
+              <p className="lmw-builder-eyebrow">Qué ocurre después</p>
+              <ol>
+                <li><span>01</span><div><b>Revisamos la combinación</b><p>Confirmamos dependencias y evitamos capacidad innecesaria.</p></div></li>
+                <li><span>02</span><div><b>Fijamos el alcance</b><p>Contenido, límites, dominio, tiempos y acompañamiento.</p></div></li>
+                <li><span>03</span><div><b>Preparamos la propuesta</b><p>Separando implementación, licencia, alojamiento y mantenimiento.</p></div></li>
+              </ol>
+              <div><i />{draft.plan === 'free' ? 'Free envía una solicitud real a la cola automatizada.' : 'El alcance original queda congelado para revisión humana. No se habilita ningún cobro todavía.'}</div>
+            </section>
           </aside>
         </main>
       )}

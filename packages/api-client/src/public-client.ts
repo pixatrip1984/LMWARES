@@ -139,11 +139,25 @@ export interface PublicPackageProposal {
   updatedAt: string;
 }
 
+export interface PublicPackageIntakeBrief {
+  contactName: string;
+  contactPhone: string;
+  businessName: string;
+  businessSummary: string;
+  siteGoal: string;
+  stylePreference: string | null;
+  referenceNotes: string | null;
+  customDomainPreference: string | null;
+  maintenancePlanPreference: 'later' | 'none' | 'basic' | 'advanced';
+  maintenanceSecurityAddOn: boolean;
+}
+
 export interface PublicPackageIntake {
   id: string;
   plan: 'starter' | 'pro';
   modules: string[];
   marketing: boolean;
+  brief: PublicPackageIntakeBrief;
   status: 'submitted' | 'scope_review' | 'offer_ready' | 'declined' | 'converted';
   estimatedImplementationCents: number;
   estimatedMonthlyCents: number;
@@ -211,6 +225,7 @@ export interface PublicCommercialOffer {
   marketing: boolean;
   implementationAmountCents: number;
   monthlyAmountCents: number;
+  maintenancePlanSelected: 'none' | 'basic' | 'advanced' | null;
   currency: 'MXN';
   scopeSummary: string;
   implementationDescription: string;
@@ -276,6 +291,24 @@ export interface PublicMaintenanceSubscription {
   canceledAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type PublicMaintenancePlanTier = 'none' | 'basic' | 'advanced';
+
+/**
+ * Estado de la decisión de mantenimiento para un work order:
+ * - `preference`: lo que el cliente marcó en el configurador (informativo).
+ * - `selected`: el plan ya decidido y congelado en la oferta (`null` mientras
+ *   siga pendiente de elegir, solo posible si `preference === 'later'`).
+ * - `pending`: si es `true`, el cliente debe elegir un plan real antes de
+ *   poder autorizar la mensualidad.
+ * - `options`: precios reales disponibles para elegir cuando está pendiente.
+ */
+export interface PublicMaintenancePlanInfo {
+  preference: 'later' | PublicMaintenancePlanTier;
+  selected: PublicMaintenancePlanTier | null;
+  pending: boolean;
+  options: { plan: PublicMaintenancePlanTier; amountCents: number }[];
 }
 
 /** Cliente del Public API Worker. Solo expone datos/acciones públicas. */
@@ -461,8 +494,19 @@ export function createPublicClient(baseUrl: string) {
     },
 
     getMaintenanceSubscription(workOrderId: string) {
-      return http.get<{ subscription: PublicMaintenanceSubscription | null }>(
+      return http.get<{
+        subscription: PublicMaintenanceSubscription | null;
+        maintenanceEnabled: boolean;
+        maintenancePlan: PublicMaintenancePlanInfo;
+      }>(
         `/maintenance-subscriptions/work-orders/${encodeURIComponent(workOrderId)}`,
+      );
+    },
+
+    selectMaintenancePlan(workOrderId: string, plan: PublicMaintenancePlanTier) {
+      return http.post<{ maintenancePlan: PublicMaintenancePlanInfo }>(
+        `/maintenance-subscriptions/work-orders/${encodeURIComponent(workOrderId)}/maintenance-plan`,
+        { plan },
       );
     },
 

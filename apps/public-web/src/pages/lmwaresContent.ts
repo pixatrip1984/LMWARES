@@ -45,28 +45,28 @@ export const THESIS_STEPS = [
     title: 'Diagnóstico',
     text: 'Una necesidad concreta',
     visual: 'diagnostico',
-    asset: '/assets/lmwares/tesis/diagnostico-visual.png?v=20260721b',
+    asset: '/assets/lmwares/tesis/diagnostico-visual.webp?v=20260721b',
   },
   {
     number: '02',
     title: 'Sistema',
     text: 'La herramienta exacta',
     visual: 'sistema',
-    asset: '/assets/lmwares/tesis/sistema-visual.png?v=20260721b',
+    asset: '/assets/lmwares/tesis/sistema-visual.webp?v=20260721b',
   },
   {
     number: '03',
     title: 'Publicación',
     text: 'Operación en la web',
     visual: 'publicacion',
-    asset: '/assets/lmwares/tesis/publicacion-visual.png?v=20260721b',
+    asset: '/assets/lmwares/tesis/publicacion-visual.webp?v=20260721b',
   },
   {
     number: '04',
     title: 'Evolución',
     text: 'Crece cuando aporta valor',
     visual: 'evolucion',
-    asset: '/assets/lmwares/tesis/evolucion-visual.png?v=20260721b',
+    asset: '/assets/lmwares/tesis/evolucion-visual.webp?v=20260721b',
   },
 ] as const;
 
@@ -74,22 +74,22 @@ export const OWNERSHIP_ASSETS = [
   {
     title: 'Marca',
     visual: 'marca',
-    asset: '/assets/lmwares/modelo/marca-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/marca-visual.webp?v=20260721',
   },
   {
     title: 'Datos',
     visual: 'datos',
-    asset: '/assets/lmwares/modelo/datos-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/datos-visual.webp?v=20260721',
   },
   {
     title: 'Dominio',
     visual: 'dominio',
-    asset: '/assets/lmwares/modelo/dominio-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/dominio-visual.webp?v=20260721',
   },
   {
     title: 'Contenido',
     visual: 'contenido',
-    asset: '/assets/lmwares/modelo/contenido-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/contenido-visual.webp?v=20260721',
   },
 ] as const;
 
@@ -97,87 +97,87 @@ export const LMWARES_ASSETS = [
   {
     title: 'Código',
     visual: 'codigo',
-    asset: '/assets/lmwares/modelo/codigo-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/codigo-visual.webp?v=20260721',
   },
   {
     title: 'Componentes',
     visual: 'componentes',
-    asset: '/assets/lmwares/modelo/componentes-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/componentes-visual.webp?v=20260721',
   },
   {
     title: 'Arquitectura',
     visual: 'arquitectura',
-    asset: '/assets/lmwares/modelo/arquitectura-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/arquitectura-visual.webp?v=20260721',
   },
   {
     title: 'Herramientas',
     visual: 'herramientas',
-    asset: '/assets/lmwares/modelo/herramientas-visual.png?v=20260721',
+    asset: '/assets/lmwares/modelo/herramientas-visual.webp?v=20260721',
   },
 ] as const;
 
 export const SOLUTION_MODULES = [
   {
-    title: 'Landing',
+    title: 'Sitio web',
     subtitle: 'Captación',
     visual: 'landing',
-    asset: '/assets/lmwares/operacion/landing-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/landing-visual.webp?v=20260721',
   },
   {
     title: 'Blog',
     subtitle: 'Contenido',
     visual: 'blog',
-    asset: '/assets/lmwares/operacion/blog-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/blog-visual.webp?v=20260721',
   },
   {
     title: 'Galerías',
     subtitle: 'Muestra',
     visual: 'galeria',
-    asset: '/assets/lmwares/operacion/galerias-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/galerias-visual.webp?v=20260721',
   },
   {
     title: 'Catálogo',
     subtitle: 'Orden',
     visual: 'catalogo',
-    asset: '/assets/lmwares/operacion/catalogo-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/catalogo-visual.webp?v=20260721',
   },
   {
-    title: 'Carrito',
+    title: 'E-Commerce',
     subtitle: 'Próximamente',
     visual: 'carrito',
-    asset: '/assets/lmwares/operacion/carrito-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/carrito-visual.webp?v=20260721',
     availability: 'coming-soon',
   },
   {
     title: 'Cotizador',
     subtitle: 'Ventas',
     visual: 'cotizador',
-    asset: '/assets/lmwares/operacion/cotizador-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/cotizador-visual.webp?v=20260721',
   },
   {
     title: 'Panel',
     subtitle: 'Control',
     visual: 'panel',
-    asset: '/assets/lmwares/operacion/panel-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/panel-visual.webp?v=20260721',
   },
   {
-    title: 'Optimization',
+    title: 'AI Optimization',
     subtitle: 'Próximamente',
     visual: 'datos',
-    asset: '/assets/lmwares/operacion/datos-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/datos-visual.webp?v=20260721',
     availability: 'coming-soon',
   },
   {
     title: 'Eventos',
     subtitle: 'Automatización',
     visual: 'eventos',
-    asset: '/assets/lmwares/operacion/eventos-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/eventos-visual.webp?v=20260721',
   },
   {
     title: 'Docs',
     subtitle: 'Conocimiento',
     visual: 'docs',
-    asset: '/assets/lmwares/operacion/docs-visual.png?v=20260721',
+    asset: '/assets/lmwares/operacion/docs-visual.webp?v=20260721',
   },
 ] as const;
 
@@ -185,10 +185,10 @@ export const SCALE_LEVELS = [
   {
     number: '01',
     title: 'Base',
-    description: 'Landing o catálogo inicial',
+    description: 'Sitio web o catálogo inicial',
     signal: 'Tráfico moderado',
     pattern: 'dots',
-    asset: '/assets/lmwares/capacidad/base-visual.jpg?v=20260721d',
+    asset: '/assets/lmwares/capacidad/base-visual.webp?v=20260721d',
   },
   {
     number: '02',
@@ -196,7 +196,7 @@ export const SCALE_LEVELS = [
     description: 'Más contenido y archivos',
     signal: 'Mayor frecuencia',
     pattern: 'streams',
-    asset: '/assets/lmwares/capacidad/activo-visual.jpg?v=20260721d',
+    asset: '/assets/lmwares/capacidad/activo-visual.webp?v=20260721d',
   },
   {
     number: '03',
@@ -204,7 +204,7 @@ export const SCALE_LEVELS = [
     description: 'Usuarios y automatización',
     signal: 'Uso cotidiano',
     pattern: 'circuits',
-    asset: '/assets/lmwares/capacidad/operativo-visual.jpg?v=20260721d',
+    asset: '/assets/lmwares/capacidad/operativo-visual.webp?v=20260721d',
   },
   {
     number: '04',
@@ -212,7 +212,7 @@ export const SCALE_LEVELS = [
     description: 'Más datos e integraciones',
     signal: 'Capacidad dedicada',
     pattern: 'dense',
-    asset: '/assets/lmwares/capacidad/ampliado-visual.jpg?v=20260721d',
+    asset: '/assets/lmwares/capacidad/ampliado-visual.webp?v=20260721d',
   },
 ] as const;
 
@@ -426,7 +426,7 @@ export const FAQ_GROUPS: readonly FaqGroup[] = [
   },
 ] as const;
 
-const INTRO_ASSETS = TABS.map((tab) => `/assets/lmwares/intro/${tab.id}.png`);
+const INTRO_ASSETS = TABS.map((tab) => `/assets/lmwares/intro/${tab.id}.webp`);
 const FAQ_VISUAL_ASSETS = FAQ_GROUPS.flatMap((group) => [
   ...group.questions.map(
     (_, questionIndex) =>
@@ -442,16 +442,16 @@ export const LMWARES_PRELOAD_ASSETS = Array.from(
   new Set([
     ...INTRO_ASSETS,
     ...THESIS_STEPS.map((step) => step.asset),
-    '/assets/lmwares/tesis/core.png',
+    '/assets/lmwares/tesis/core.webp',
     ...OWNERSHIP_ASSETS.map((asset) => asset.asset),
     ...LMWARES_ASSETS.map((asset) => asset.asset),
-    '/assets/lmwares/modelo/licencia.png',
+    '/assets/lmwares/modelo/licencia.webp',
     ...SOLUTION_MODULES.map((module) => module.asset),
-    '/assets/lmwares/operacion/core.png',
+    '/assets/lmwares/operacion/core.webp',
     ...SCALE_LEVELS.map((level) => level.asset),
-    '/assets/lmwares/planes/basic.png',
-    '/assets/lmwares/planes/advanced.png',
-    '/assets/lmwares/planes/astra.png',
+    '/assets/lmwares/planes/basic.webp',
+    '/assets/lmwares/planes/advanced.webp',
+    '/assets/lmwares/planes/astra.webp',
     ...FAQ_VISUAL_ASSETS,
   ]),
 );

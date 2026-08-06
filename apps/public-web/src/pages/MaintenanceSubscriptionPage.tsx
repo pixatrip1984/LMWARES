@@ -1,26 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import type { PublicMaintenanceSubscription } from '@starter/api-client';
+import type { PublicMaintenancePlanInfo, PublicMaintenancePlanTier, PublicMaintenanceSubscription } from '@starter/api-client';
 import { api } from '../lib/api';
-import { maintenancePresentation, reconciliationMessage } from '../lib/maintenance-ui';
+import { InfoTip } from '../components/InfoTip';
+import { maintenancePresentation, maintenanceTierLabel, reconciliationMessage } from '../lib/maintenance-ui';
+import { friendlyPaymentErrorMessage } from '../lib/payment-error-messages';
 import './payment.css';
 
-type State = 'loading' | 'ready' | 'preparing' | 'checking' | 'canceling' | 'error';
+type State = 'loading' | 'ready' | 'preparing' | 'checking' | 'canceling' | 'selecting-plan' | 'error';
 
 export function MaintenanceSubscriptionPage() {
   const { workOrderId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const returnedPreapprovalId = searchParams.get('preapproval_id');
   const [subscription, setSubscription] = useState<PublicMaintenanceSubscription | null>(null);
+  const [maintenancePlan, setMaintenancePlan] = useState<PublicMaintenancePlanInfo | null>(null);
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(true);
   const [state, setState] = useState<State>('loading');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     let active = true;
     api.getMaintenanceSubscription(workOrderId)
-      .then(async ({ subscription: loaded }) => {
+      .then(async ({ subscription: loaded, maintenanceEnabled: enabled, maintenancePlan: plan }) => {
         if (!active) return;
         setSubscription(loaded);
+        setMaintenanceEnabled(enabled);
+        setMaintenancePlan(plan);
         if (loaded && returnedPreapprovalId) {
           setState('checking');
           const result = await api.reconcileMaintenanceSubscription(loaded.id);
@@ -37,11 +43,24 @@ export function MaintenanceSubscriptionPage() {
       })
       .catch((error) => {
         if (!active) return;
-        setMessage(error instanceof Error ? error.message : 'No fue posible cargar la mensualidad.');
+        setMessage(friendlyPaymentErrorMessage(error, 'No fue posible cargar la mensualidad.'));
         setState('error');
       });
     return () => { active = false; };
   }, [returnedPreapprovalId, setSearchParams, workOrderId]);
+
+  const choosePlan = async (plan: PublicMaintenancePlanTier) => {
+    setState('selecting-plan');
+    setMessage('');
+    try {
+      const result = await api.selectMaintenancePlan(workOrderId, plan);
+      setMaintenancePlan(result.maintenancePlan);
+      setState('ready');
+    } catch (error) {
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible guardar tu plan de mantenimiento.'));
+      setState('error');
+    }
+  };
 
   const authorize = async () => {
     const authorizationWindow = window.open('about:blank', '_blank');
@@ -59,7 +78,7 @@ export function MaintenanceSubscriptionPage() {
       setState('ready');
     } catch (error) {
       authorizationWindow?.close();
-      setMessage(error instanceof Error ? error.message : 'No fue posible preparar la mensualidad.');
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible preparar la mensualidad.'));
       setState('error');
     }
   };
@@ -74,7 +93,7 @@ export function MaintenanceSubscriptionPage() {
       setMessage(reconciliationMessage(result.subscription.status, result.subscription.providerStatus));
       setState('ready');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No fue posible verificar la mensualidad.');
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible verificar la mensualidad.'));
       setState('error');
     }
   };
@@ -89,27 +108,95 @@ export function MaintenanceSubscriptionPage() {
       setMessage('La mensualidad quedó cancelada. No se programarán cobros futuros.');
       setState('ready');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No fue posible cancelar la mensualidad.');
+      setMessage(friendlyPaymentErrorMessage(error, 'No fue posible cancelar la mensualidad.'));
       setState('error');
     }
   };
 
-  const presentation = maintenancePresentation(subscription?.status ?? null);
-  const canAuthorize = !subscription || ['creation_failed', 'pending_authorization'].includes(subscription.status);
+  // Pendiente de elegir plan real: solo ocurre cuando el cliente marcó
+  // "configurar luego" en el intake y todavía no ha elegido nada aquí.
+  // Mientras esto sea true, no mostramos autorización: mostramos el
+  // selector de planes reales.
+  const planPending = maintenancePlan?.pending ?? false;
+  const planAlreadyDecided = maintenancePlan ? !maintenancePlan.pending : false;
+  const presentation = maintenancePresentation(subscription?.status ?? null, planAlreadyDecided);
+  const canAuthorize =
+    !planPending &&
+    maintenanceEnabled &&
+    (!subscription || ['creation_failed', 'pending_authorization', 'payment_attention'].includes(subscription.status));
   const canCancel = Boolean(
     subscription && !['canceled', 'creating', 'creation_failed'].includes(subscription.status),
   );
+
+  if (state === 'loading') {
+    return (
+      <main className="lmw-payment-page">
+        <section className="lmw-payment-shell">
+          <p className="lmw-payment-message">Cargando tu mensualidad…</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (planPending && maintenancePlan) {
+    return (
+      <main className="lmw-payment-page">
+        <section className="lmw-payment-shell">
+          <header className="lmw-payment-header">
+            <div>
+              <p className="lmw-payment-eyebrow">
+                ELIGE TU PLAN DE MANTENIMIENTO
+                <InfoTip title="¿Cómo funciona el mantenimiento?">
+                  <p>Elegiste "configurar luego" al llenar tu solicitud. El proyecto ya está listo, así que ahora es el momento de decidir: puedes no contratar ningún plan y conservar esta versión como definitiva, o elegir un plan mensual real.</p>
+                  <p>El monto que elijas aquí es el que se autoriza con Mercado Pago; ya no puede cambiarse desde el navegador después.</p>
+                </InfoTip>
+              </p>
+              <h1>Elige tu plan de mantenimiento</h1>
+              <p>El proyecto ya está construido. Elige cómo quieres cuidarlo después de publicarlo; esta decisión fija el monto real de tu mensualidad.</p>
+            </div>
+          </header>
+          <div className="lmw-payment-grid">
+            {maintenancePlan.options.map((option) => {
+              const label = maintenanceTierLabel(option.plan);
+              return (
+                <button
+                  className="lmw-payment-card"
+                  disabled={state === 'selecting-plan'}
+                  key={option.plan}
+                  onClick={() => choosePlan(option.plan)}
+                  type="button"
+                >
+                  <p className="lmw-payment-label">{label.name.toUpperCase()}</p>
+                  <h2>{formatMoney(option.amountCents)}{option.amountCents > 0 ? '/mes' : ''}</h2>
+                  <p>{label.description}</p>
+                </button>
+              );
+            })}
+          </div>
+          {message ? <p className={`lmw-payment-message ${state === 'error' ? 'is-error' : ''}`}>{message}</p> : null}
+          <Link className="lmw-payment-back" to="/configurar">← Volver a mi cuenta</Link>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="lmw-payment-page">
       <section className="lmw-payment-shell">
         <header className="lmw-payment-header">
           <div>
-            <p className="lmw-payment-eyebrow">COMPUERTA DE PUBLICACIÓN · MENSUALIDAD</p>
+            <p className="lmw-payment-eyebrow">
+              {planAlreadyDecided ? 'MANTENIMIENTO' : 'MANTENIMIENTO OPCIONAL'}
+              <InfoTip title="¿Cómo funciona el mantenimiento?">
+                <p>El mantenimiento es opcional. Puedes no contratar ningún plan y conservar esta versión como definitiva; el siguiente paso sería indexarla en Google Search Console sobre tu dominio propio.</p>
+                <p>O bien, puedes elegir un plan mensual según lo que necesites. Si no estás seguro, coméntalo con tu asesor: la decisión final se confirma junto con LMWares antes de publicar.</p>
+              </InfoTip>
+            </p>
             <h1>{presentation.heading}</h1>
             <p>{presentation.description}</p>
           </div>
           <span className={`lmw-payment-status is-${subscription?.status ?? 'ready'}`}>
-            {subscription ? statusLabel(subscription.status) : 'Lista para autorizar'}
+            {subscription ? statusLabel(subscription.status) : 'Lista para decidir'}
           </span>
         </header>
         <div className="lmw-payment-grid">
@@ -120,7 +207,7 @@ export function MaintenanceSubscriptionPage() {
             <small>Orden: {workOrderId}</small>
           </section>
           <section className="lmw-payment-card is-total">
-            <p className="lmw-payment-label">MENSUALIDAD CONGELADA</p>
+            <p className="lmw-payment-label">{planAlreadyDecided ? 'MENSUALIDAD ACORDADA' : 'MENSUALIDAD CONGELADA'}</p>
             <strong>{subscription ? formatMoney(subscription.amountCents) : 'Según tu oferta'}</strong>
             <span>Cada mes</span>
             {subscription?.nextPaymentDate ? <small>Próximo cobro: {formatDateTime(subscription.nextPaymentDate)}</small> : null}
@@ -129,8 +216,10 @@ export function MaintenanceSubscriptionPage() {
         <section className="lmw-payment-actions">
           {canAuthorize ? (
             <button className="lmw-payment-primary" disabled={state === 'preparing'} onClick={authorize} type="button">
-              {state === 'preparing' ? 'Preparando…' : subscription?.authorizationUrl ? 'Abrir Mercado Pago →' : 'Autorizar mensualidad →'}
+              {state === 'preparing' ? 'Preparando…' : subscription?.authorizationUrl ? 'Abrir Mercado Pago →' : 'Activar mantenimiento →'}
             </button>
+          ) : !maintenanceEnabled && (!subscription || ['creation_failed', 'pending_authorization'].includes(subscription.status)) ? (
+            <button className="lmw-payment-primary" disabled type="button">Disponible próximamente</button>
           ) : null}
           {subscription ? (
             <button className="lmw-payment-secondary" disabled={state === 'checking'} onClick={reconcile} type="button">
@@ -148,7 +237,7 @@ export function MaintenanceSubscriptionPage() {
         {subscription?.status === 'canceled' ? (
           <p className="lmw-payment-message">Esta autorización fue cancelada. Para reactivar el mantenimiento sin duplicar contratos, contacta a soporte@lmwares.com.</p>
         ) : null}
-        <aside className="lmw-payment-note">El importe, la moneda y la frecuencia provienen de la oferta final aceptada y no pueden cambiarse desde el navegador.</aside>
+        <aside className="lmw-payment-note">El importe, la moneda y la frecuencia provienen de la oferta final aceptada y no pueden cambiarse desde el navegador. Si prefieres no contratar mantenimiento, contacta a tu asesor para confirmar la publicación sin plan mensual.</aside>
       </section>
     </main>
   );

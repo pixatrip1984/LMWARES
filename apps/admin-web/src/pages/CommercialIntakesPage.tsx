@@ -273,7 +273,10 @@ export function CommercialIntakesPage() {
       {!items ? (
         <Spinner />
       ) : items.length === 0 ? (
-        <EmptyState title="No hay solicitudes comerciales" />
+        <EmptyState
+          title={status ? 'No hay paquetes con ese estado' : 'No hay solicitudes comerciales'}
+          hint="Los paquetes Starter/Pro aparecen aquí al pulsar «Enviar para revisión» en contratar.lmwares.com. La bandeja Solicitudes es solo Free/contacto."
+        />
       ) : (
         <div className="grid gap-5 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.4fr)]">
           <Card>
@@ -286,13 +289,18 @@ export function CommercialIntakesPage() {
                     className={`w-full px-5 py-4 text-left ${item.id === selectedId ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}
                   >
                     <span className="flex items-center justify-between gap-3">
-                      <span className="font-semibold text-gray-900">{item.plan}</span>
+                      <span className="font-semibold text-gray-900">
+                        {item.brief?.businessName || item.brief?.contactName || `Paquete ${item.plan}`}
+                      </span>
                       <span className="text-xs font-medium text-brand-700">{STATUS_LABELS[item.status]}</span>
                     </span>
-                    <span className="mt-1 block text-sm text-gray-500">
+                    <span className="mt-1 block font-mono text-xs text-gray-500">
+                      ID: {item.id.slice(0, 8)}… · Plan {item.plan.toUpperCase()}
+                    </span>
+                    <span className="mt-1 block text-sm text-gray-600">
                       {money(item.estimatedImplementationCents)} + {money(item.estimatedMonthlyCents)}/mes
                     </span>
-                    <span className="mt-1 block text-xs text-gray-400">{formatDate(item.submittedAt)}</span>
+                    <span className="mt-1 block text-xs text-gray-400">📅 {formatDate(item.submittedAt)}</span>
                   </button>
                 </li>
               ))}
@@ -309,6 +317,8 @@ export function CommercialIntakesPage() {
                     <p className="mt-1 text-sm text-gray-500">Referencia {selected.id}</p>
                   </div>
                   <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                    <Info label="ID de solicitud" value={selected.id} />
+                    <Info label="Fecha y Hora de envío" value={formatDate(selected.submittedAt)} />
                     <Info label="Implementación estimada" value={money(selected.estimatedImplementationCents)} />
                     <Info label="Mantenimiento opcional estimado" value={`Desde ${money(selected.estimatedMonthlyCents)}/mes`} />
                     <Info label="Inicio de mensualidad" value="Al publicar el proyecto" />
@@ -322,6 +332,27 @@ export function CommercialIntakesPage() {
                       ))}
                     </div>
                   </div>
+                  <div className="rounded-xl border border-surface-border bg-surface-muted/60 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Contacto y contexto del negocio</p>
+                    <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
+                      <Info label="Contacto" value={selected.brief.contactName || '—'} />
+                      <Info label="Teléfono" value={selected.brief.contactPhone || '—'} />
+                      <Info label="Negocio" value={selected.brief.businessName || '—'} />
+                      <Info label="Estilo/referencia" value={selected.brief.stylePreference || '—'} />
+                    </dl>
+                    <div className="mt-4 grid gap-3 text-sm">
+                      <Info label="¿A qué se dedica?" value={selected.brief.businessSummary || '—'} />
+                      <Info label="Objetivo del sitio" value={selected.brief.siteGoal || '—'} />
+                      <Info label="Dominio personalizado deseado" value={selected.brief.customDomainPreference || 'No indicado'} />
+                      <Info label="Preferencia de mantenimiento" value={maintenancePreferenceLabel(selected.brief.maintenancePlanPreference)} />
+                      {selected.brief.maintenanceSecurityAddOn ? (
+                        <Info label="Add-on de seguridad" value="Solicitado" />
+                      ) : null}
+                      {selected.brief.referenceNotes ? (
+                        <Info label="Notas adicionales" value={selected.brief.referenceNotes} />
+                      ) : null}
+                    </div>
+                  </div>
                   <div>
                     <label htmlFor="commercial-review-notes" className="mb-2 block text-sm font-medium text-gray-700">Notas internas de alcance</label>
                     <Textarea
@@ -333,13 +364,22 @@ export function CommercialIntakesPage() {
                     />
                   </div>
                   {selected.status === 'submitted' || selected.status === 'scope_review' ? (
-                    <div className="flex flex-wrap gap-3">
-                      <Button onClick={() => review('scope_review')} disabled={saving}>
-                        {saving ? 'Guardando…' : selected.status === 'submitted' ? 'Tomar revisión' : 'Guardar revisión'}
-                      </Button>
-                      <Button variant="secondary" onClick={() => review('declined')} disabled={saving}>
-                        No aprobar
-                      </Button>
+                    <div className="space-y-2">
+                      {selected.status === 'submitted' ? (
+                        <p className="text-xs text-gray-500">
+                          Tomar revisión es la evaluación Fase 0: no tiene costo para el cliente y no
+                          arranca ningún trabajo todavía. El proyecto pagado (Fase 1) empieza cuando
+                          el cliente acepta la oferta y paga el primer 25%.
+                        </p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-3">
+                        <Button onClick={() => review('scope_review')} disabled={saving}>
+                          {saving ? 'Guardando…' : selected.status === 'submitted' ? 'Tomar revisión' : 'Guardar revisión'}
+                        </Button>
+                        <Button variant="secondary" onClick={() => review('declined')} disabled={saving}>
+                          No aprobar
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
                   {selected.status === 'scope_review' || selected.status === 'offer_ready' ? (
@@ -535,6 +575,16 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function money(cents: number): string {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(cents / 100);
+}
+
+function maintenancePreferenceLabel(preference: 'later' | 'none' | 'basic' | 'advanced'): string {
+  const labels: Record<typeof preference, string> = {
+    later: 'Configurar luego (sin decisión)',
+    none: 'Sin mantenimiento',
+    basic: 'Interesado en Básico',
+    advanced: 'Interesado en Avanzado',
+  };
+  return labels[preference];
 }
 
 function formatDate(value: string): string {

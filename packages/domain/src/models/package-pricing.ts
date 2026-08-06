@@ -72,12 +72,36 @@ export const COMMERCIAL_PACKAGE_PRICING_CENTS = {
     proFull: 2_490_000,
   },
   monthly: {
-    maintenanceFrom: 90_000,
-    operationalMaintenanceFrom: 290_000,
-    securityAddOnFrom: 190_000,
+    // Mantenimiento base: cambios ligeros y actualizaciones mensuales.
+    maintenanceFrom: 29_900,
+    // Mantenimiento avanzado: cambios semanales, mayor flexibilidad.
+    operationalMaintenanceFrom: 59_900,
+    // Add-on de seguridad: revisiones periódicas, auditorías y pruebas diarias de salud.
+    securityAddOnFrom: 69_900,
     astramusesStaticFrom: 10_000,
   },
 } as const;
+
+/**
+ * Plan de mantenimiento ya decidido (a diferencia de `'later'`, que solo
+ * existe en el intake mientras el cliente no ha elegido). Estos tres valores
+ * son los únicos que puede tener una mensualidad real: sin mantenimiento,
+ * básico o avanzado.
+ */
+export const MAINTENANCE_PLAN_TIERS = ['none', 'basic', 'advanced'] as const;
+export type MaintenancePlanTier = (typeof MAINTENANCE_PLAN_TIERS)[number];
+
+/** Monto mensual congelado para cada plan real de mantenimiento. */
+export function maintenancePlanTierAmountCents(tier: MaintenancePlanTier): number {
+  switch (tier) {
+    case 'none':
+      return 0;
+    case 'basic':
+      return COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.maintenanceFrom;
+    case 'advanced':
+      return COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.operationalMaintenanceFrom;
+  }
+}
 
 export interface CommercialPackageEstimate {
   implementationAmountCents: number;

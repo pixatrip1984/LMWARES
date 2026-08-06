@@ -31,11 +31,12 @@ export type PackagePreviewScreen = {
 };
 
 const ASSET_ROOT = '/assets/package-preview/concepts';
+const ASSET_VER = '?v=20260805_editorial';
 
 export const PUBLIC_HOME_SCREEN: PackagePreviewScreen = {
   id: 'public-inicio',
   label: 'Inicio',
-  image: `${ASSET_ROOT}/public-inicio.png`,
+  image: `${ASSET_ROOT}/public-inicio.png${ASSET_VER}`,
   mode: 'public',
   moduleId: 'landing',
 };
@@ -43,7 +44,7 @@ export const PUBLIC_HOME_SCREEN: PackagePreviewScreen = {
 export const PUBLIC_CATALOG_DETAIL_SCREEN: PackagePreviewScreen = {
   id: 'public-catalogo-detalle',
   label: 'Detalle de catálogo',
-  image: `${ASSET_ROOT}/public-catalogo-detalle.png`,
+  image: `${ASSET_ROOT}/public-catalogo-detalle.png${ASSET_VER}`,
   mode: 'public',
   moduleId: 'catalog',
 };
@@ -52,49 +53,49 @@ const PUBLIC_SCREEN_BY_MODULE: Partial<Record<PackageModuleId, PackagePreviewScr
   blog: {
     id: 'public-blog',
     label: 'Blog',
-    image: `${ASSET_ROOT}/public-blog.png`,
+    image: `${ASSET_ROOT}/public-blog.png${ASSET_VER}`,
     mode: 'public',
     moduleId: 'blog',
   },
   galleries: {
     id: 'public-galerias',
     label: 'Galerías',
-    image: `${ASSET_ROOT}/public-galerias.png`,
+    image: `${ASSET_ROOT}/public-galerias.png${ASSET_VER}`,
     mode: 'public',
     moduleId: 'galleries',
   },
   catalog: {
     id: 'public-catalogo',
     label: 'Catálogo',
-    image: `${ASSET_ROOT}/public-catalogo.png`,
+    image: `${ASSET_ROOT}/public-catalogo.png${ASSET_VER}`,
     mode: 'public',
     moduleId: 'catalog',
   },
   quote: {
     id: 'public-formulario',
     label: 'Formulario',
-    image: `${ASSET_ROOT}/public-formulario.png`,
+    image: `${ASSET_ROOT}/public-formulario.png${ASSET_VER}`,
     mode: 'public',
     moduleId: 'quote',
   },
   events: {
     id: 'public-eventos',
     label: 'Eventos',
-    image: `${ASSET_ROOT}/public-eventos.png`,
+    image: `${ASSET_ROOT}/public-eventos.png${ASSET_VER}`,
     mode: 'public',
     moduleId: 'events',
   },
   cart: {
     id: 'public-carrito',
-    label: 'Carrito',
-    image: `${ASSET_ROOT}/public-carrito.png`,
+    label: 'E-Commerce',
+    image: `${ASSET_ROOT}/public-carrito.png${ASSET_VER}`,
     mode: 'public',
     moduleId: 'cart',
   },
   docs: {
     id: 'public-docs',
     label: 'Docs',
-    image: `${ASSET_ROOT}/public-docs.png`,
+    image: `${ASSET_ROOT}/public-docs.png${ASSET_VER}`,
     mode: 'public',
     moduleId: 'docs',
   },

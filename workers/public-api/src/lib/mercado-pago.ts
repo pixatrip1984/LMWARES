@@ -23,7 +23,7 @@ export interface MercadoPagoPreapproval {
   id: string;
   externalReference: string;
   status: string;
-  authorizationUrl: string;
+  authorizationUrl: string | null;
   amount: number;
   currency: string;
   frequency: number;
@@ -266,6 +266,9 @@ export async function createMercadoPagoPreapproval(input: {
   if (!preapproval) {
     throw new AppError('internal_error', 'Mercado Pago devolvió una suscripción inválida.');
   }
+  if (!preapproval.authorizationUrl) {
+    throw new AppError('internal_error', 'Mercado Pago no devolvió una URL de autorización.');
+  }
   assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
   return preapproval;
 }
@@ -289,7 +292,10 @@ export async function getMercadoPagoPreapproval(input: {
   if (!preapproval) {
     throw new AppError('internal_error', 'Mercado Pago devolvió una suscripción inválida.');
   }
-  assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
+  // Mercado Pago sólo garantiza `init_point` en la respuesta de creación; al
+  // consultar (GET) una preapproval existente suele omitirlo. No lo exigimos
+  // aquí para no romper la re-consulta/reintento de suscripciones ya creadas.
+  if (preapproval.authorizationUrl) assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
   return preapproval;
 }
 
@@ -324,7 +330,7 @@ export async function findMercadoPagoPreapproval(input: {
       'Mercado Pago devolvió más de una suscripción para la misma referencia.',
     );
   }
-  if (matches[0]) assertMercadoPagoCheckoutUrl(matches[0].authorizationUrl);
+  if (matches[0]?.authorizationUrl) assertMercadoPagoCheckoutUrl(matches[0].authorizationUrl);
   return matches[0] ?? null;
 }
 
@@ -409,7 +415,7 @@ export async function cancelMercadoPagoPreapproval(input: {
   if (!preapproval) {
     throw new AppError('internal_error', 'Mercado Pago devolvió una suscripción inválida.');
   }
-  assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
+  if (preapproval.authorizationUrl) assertMercadoPagoCheckoutUrl(preapproval.authorizationUrl);
   return preapproval;
 }
 
@@ -590,7 +596,6 @@ function parsePreapproval(value: unknown): MercadoPagoPreapproval | null {
     !id ||
     !externalReference ||
     !status ||
-    !authorizationUrl ||
     amount === null ||
     !currency ||
     frequency === null ||

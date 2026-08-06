@@ -11,6 +11,7 @@ export function publicCommercialOffer(offer: CommercialOffer) {
     marketing: offer.marketing,
     implementationAmountCents: offer.implementationAmountCents,
     monthlyAmountCents: offer.monthlyAmountCents,
+    maintenancePlanSelected: offer.maintenancePlanSelected,
     currency: offer.currency,
     scopeSummary: offer.scopeSummary,
     implementationDescription: offer.implementationDescription,

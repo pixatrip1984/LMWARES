@@ -10,10 +10,11 @@ const NAV = [
   { to: '/publications', label: 'Publicaciones' },
   { to: '/requests', label: 'Solicitudes' },
   { to: '/commercial-intakes', label: 'Paquetes' },
-];
+] as const;
 
 export function AdminLayout() {
   const [me, setMe] = useState<AdminMe | null>(null);
+  const [pendingPackages, setPendingPackages] = useState(0);
   const { pathname } = useLocation();
   const isProjectsWorkspace = pathname.startsWith('/projects');
   const isImmersiveWorkspace = pathname === '/projects/prepare';
@@ -24,6 +25,21 @@ export function AdminLayout() {
       .then(setMe)
       .catch(() => setMe(null));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listCommercialPackageIntakes({ status: 'submitted', limit: 100 })
+      .then((result) => {
+        if (!cancelled) setPendingPackages(result.intakes.length);
+      })
+      .catch(() => {
+        if (!cancelled) setPendingPackages(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -43,7 +59,14 @@ export function AdminLayout() {
                         : 'text-gray-600 hover:text-gray-900'
                     }
                   >
-                    {n.label}
+                    <span className="inline-flex items-center gap-2">
+                      {n.label}
+                      {n.to === '/commercial-intakes' && pendingPackages > 0 ? (
+                        <span className="rounded-full bg-brand-700 px-2 py-0.5 text-[11px] font-semibold leading-none text-white">
+                          {pendingPackages}
+                        </span>
+                      ) : null}
+                    </span>
                   </Link>
                 ))}
               </nav>

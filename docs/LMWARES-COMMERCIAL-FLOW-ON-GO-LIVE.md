@@ -4,25 +4,59 @@ Decisión vigente: **el mantenimiento es opcional**. Cuando se contrata, la
 mensualidad comienza al publicar el proyecto, no durante la construcción. Una
 oferta con MXN $0/mes es una implementación de pago único y no genera renovación.
 
+## Fase 0: evaluación sin costo (antes de la Fase 1)
+
+"Tomar revisión" en Paquetes (pasar un intake de `submitted` a `scope_review`)
+es la **Fase 0**: una evaluación interna sin costo para el cliente. En esta
+fase todavía no se cobra nada, no se crea ninguna orden de trabajo y no se
+arranca ningún proyecto real. Fase 1 (25% pagado) sólo empieza después de que
+el cliente acepta la oferta emitida en esta fase y paga el primer tramo.
+
+Desde la migración de brief, el intake ya trae, además de plan/módulos:
+`contact_name`, `contact_phone`, `business_name`, `business_summary`,
+`site_goal` (obligatorios) y `style_preference`, `reference_notes`,
+`custom_domain_preference`, `maintenance_plan_preference` (`later` por
+defecto, o `none`/`basic`/`advanced`) y `maintenance_security_add_on`
+(opcionales). Los últimos tres son **preferencias informativas** capturadas
+en el propio armador de paquetes junto a los módulos Pro — orientan al
+operador al redactar la oferta, pero **no fijan el precio contractual**:
+ese sigue emitiéndose manualmente en la oferta, igual que hoy. Es el mínimo
+para poder evaluar y, si se aprueba, redactar una oferta y arrancar el
+proyecto con contexto real. El contenido fino de catálogo/galería (ej.
+pólizas, clasificador de un seguro) se sigue
+recabando en un segundo contacto con el cliente, ya con el proyecto aceptado
+— el brief no reemplaza esa conversación, sólo evita arrancar a ciegas.
+
 ## Secuencia autorizada
 
 1. El cliente inicia sesión y arma Starter o Pro.
 2. El configurador envía una solicitud comercial. No abre Mercado Pago ni crea un cobro.
-3. Oracle revisa alcance, módulos y viabilidad con participación humana.
+   La bandeja operativa es **Paquetes** (`/commercial-intakes`), no **Solicitudes**
+   (Free/contacto). El resumen del configurador no cuenta como envío hasta que el
+   botón confirme una solicitud abierta (`submitted` / `scope_review` / `offer_ready`).
+   Reutilizar la clave de idempotencia de una solicitud ya `declined` o `converted`
+   debe fallar y forzar un envío nuevo; no puede reaparecer como “enviada”.
+3. Oracle revisa alcance, módulos, brief y viabilidad con participación humana
+   (Fase 0, sin costo). El panel muestra un contador de paquetes `submitted`
+   en la navegación de Paquetes.
 4. LMWares prepara una oferta final; la estimación pública no constituye todavía el precio contractual.
 5. El cliente acepta la oferta. Se crean de inmediato 4 órdenes de pago de
    implementación (25% cada una, ver sección de fases) y paga la primera para
    iniciar el proyecto; las siguientes pueden pagarse en orden o adelantarse,
    nunca es obligatorio adelantarlas.
 6. El pago confirmado de la fase 1 crea una orden de trabajo Starter en
-   `awaiting_provisioning`. El operador enlaza manualmente un proyecto real ya
-   sincronizado en Oracle; no se inventa un repositorio ni se publica nada.
+   `awaiting_provisioning`, con el brief ya incluido en su `work_snapshot`.
+   El operador enlaza manualmente un proyecto real ya sincronizado en Oracle;
+   no se inventa un repositorio ni se publica nada.
 7. El proyecto avanza de `in_build` a `client_review` (exige la fase 2 pagada)
    y después a `ready_to_publish` (exige la fase 3 pagada), mientras se
    construye y valida en un subdominio `*.lmwares.com`.
 8. Al llegar a la compuerta de publicación, se exige la fase 4 pagada y, si
-   la oferta incluye mantenimiento, el cliente autoriza además la mensualidad.
-   Si la oferta fija MXN $0/mes, este segundo requisito no existe.
+   la oferta incluye mantenimiento, el cliente elige/activa su plan de
+   mantenimiento (ya no se presenta como una "autorización" obligatoria: el
+   mantenimiento es opcional y el cliente puede conservar la versión
+   entregada sin contratarlo). Si la oferta fija MXN $0/mes, este segundo
+   paso no existe.
 9. LMWares publica después de comprobar la suscripción activa sólo cuando el
    importe mensual es mayor que cero. Las ofertas de pago único se publican sin suscripción.
 10. Starter y Pro pueden migrar después a dominio personalizado.

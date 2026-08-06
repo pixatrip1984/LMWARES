@@ -195,13 +195,40 @@ export class LmwaresBillingOrdersRepository {
     return result.results.map(mapBillingOrder);
   }
 
+  async listForReconciliation(limit = 25): Promise<BillingOrder[]> {
+    const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM lmw_billing_orders
+         WHERE provider_preference_id IS NOT NULL
+           AND status IN ('checkout_creating', 'payment_pending', 'payment_failed')
+         ORDER BY updated_at ASC, id ASC LIMIT ?`,
+      )
+      .bind(safeLimit)
+      .all<BillingOrderRow>();
+    return result.results.map(mapBillingOrder);
+  }
+
+  async countStuck(olderThanHours: number): Promise<number> {
+    const cutoff = new Date(Date.now() - olderThanHours * 3_600_000).toISOString();
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM lmw_billing_orders
+         WHERE status IN ('checkout_creating', 'payment_pending', 'payment_failed')
+           AND updated_at < ?`,
+      )
+      .bind(cutoff)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
   async claimCheckout(id: string): Promise<boolean> {
     const result = await this.db
       .prepare(
         `UPDATE lmw_billing_orders
-         SET status = 'checkout_creating', updated_at = ?
-         WHERE id = ? AND provider_preference_id IS NULL
-           AND status IN ('ready', 'checkout_failed')
+         SET status = 'checkout_creating', provider_preference_id = NULL, checkout_url = NULL, updated_at = ?
+         WHERE id = ?
+           AND status IN ('ready', 'checkout_failed', 'payment_failed')
            AND payment_review_required = 0`,
       )
       .bind(nowIso(), id)

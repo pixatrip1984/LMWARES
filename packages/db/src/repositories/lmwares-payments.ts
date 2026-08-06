@@ -91,6 +91,33 @@ export class LmwaresPaymentsRepository {
     return row ? mapPackageProposal(row) : null;
   }
 
+  async listForReconciliation(limit = 25): Promise<PackageProposal[]> {
+    const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM lmw_package_proposals
+         WHERE provider_preference_id IS NOT NULL
+           AND status IN ('checkout_creating', 'payment_pending', 'payment_failed')
+         ORDER BY updated_at ASC, id ASC LIMIT ?`,
+      )
+      .bind(safeLimit)
+      .all<PackageProposalRow>();
+    return result.results.map(mapPackageProposal);
+  }
+
+  async countStuck(olderThanHours: number): Promise<number> {
+    const cutoff = new Date(Date.now() - olderThanHours * 3_600_000).toISOString();
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM lmw_package_proposals
+         WHERE status IN ('checkout_creating', 'payment_pending', 'payment_failed')
+           AND updated_at < ?`,
+      )
+      .bind(cutoff)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
   async claimCheckout(id: string): Promise<boolean> {
     const result = await this.db
       .prepare(
