@@ -35,6 +35,24 @@ app.use('*', async (c, next) => {
   await next();
 });
 
+// `www.lmwares.com` y `contratar.lmwares.com` no deben servir contenido
+// duplicado del apex: aunque el DNS/Custom Domain de Pages podría servir el
+// mismo build, el wildcard de rutas de este Worker (`*.lmwares.com/*`) puede
+// ganarle la precedencia de enrutamiento de Cloudflare en algunos casos, así
+// que redirigimos explícitamente aquí para no depender de esa precedencia.
+// 301 permanente, preserva path y query. Dominio único canónico: lmwares.com.
+const LEGACY_APEX_ALIASES = new Set(['www.lmwares.com', 'contratar.lmwares.com']);
+app.use('*', async (c, next) => {
+  const host = ((c.req.header('Host') ?? '').toLowerCase().split(':')[0] ?? '');
+  if (LEGACY_APEX_ALIASES.has(host)) {
+    const url = new URL(c.req.url);
+    url.hostname = 'lmwares.com';
+    url.protocol = 'https:';
+    return c.redirect(url.toString(), 301);
+  }
+  await next();
+});
+
 // CORS dinámico según ALLOWED_ORIGINS (lista separada por comas)
 app.use('*', (c, next) => {
   const allowed = parseList(c.env.ALLOWED_ORIGINS);
