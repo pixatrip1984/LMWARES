@@ -17,10 +17,10 @@ Desde la migración de brief, el intake ya trae, además de plan/módulos:
 `site_goal` (obligatorios) y `style_preference`, `reference_notes`,
 `custom_domain_preference`, `maintenance_plan_preference` (`later` por
 defecto, o `none`/`basic`/`advanced`) y `maintenance_security_add_on`
-(opcionales). Los últimos tres son **preferencias informativas** capturadas
-en el propio armador de paquetes junto a los módulos Pro — orientan al
-operador al redactar la oferta, pero **no fijan el precio contractual**:
-ese sigue emitiéndose manualmente en la oferta, igual que hoy. Es el mínimo
+(opcionales). La preferencia orienta la oferta; cuando el cliente eligió
+`none`, `basic` o `advanced`, la oferta congela esa decisión y deriva el
+importe mensual del plan. Si eligió `later`, la oferta queda pendiente hasta
+que el cliente seleccione un plan real en su centro de cuenta. Es el mínimo
 para poder evaluar y, si se aprueba, redactar una oferta y arrancar el
 proyecto con contexto real. El contenido fino de catálogo/galería (ej.
 pólizas, clasificador de un seguro) se sigue
@@ -115,12 +115,12 @@ oferta se divide en 25% por fase (`splitImplementationIntoPhases`, la última
 fase absorbe el residuo del redondeo). Las 4 fases se mapean 1:1 con las
 transiciones del estado de la orden de trabajo Starter:
 
-| Fase | % | Transición que habilita |
-| --- | --- | --- |
-| 1 | 25% | Crea la orden de trabajo (`awaiting_provisioning`) |
-| 2 | 25% | `in_build` → `client_review` |
-| 3 | 25% | `client_review` → `ready_to_publish` |
-| 4 | 25% | `ready_to_publish` → `live` (publicación) |
+| Fase | %   | Transición que habilita                            |
+| ---- | --- | -------------------------------------------------- |
+| 1    | 25% | Crea la orden de trabajo (`awaiting_provisioning`) |
+| 2    | 25% | `in_build` → `client_review`                       |
+| 3    | 25% | `client_review` → `ready_to_publish`               |
+| 4    | 25% | `ready_to_publish` → `live` (publicación)          |
 
 Reglas de negocio:
 
@@ -133,7 +133,7 @@ Reglas de negocio:
 - Confirmar el pago de una fase nunca cancela ni marca en revisión a sus
   fases hermanas de la misma oferta; la lógica de "pago duplicado" y
   cancelación de órdenes obsoletas en `reconcilePayment()` sólo actúa sobre
-  órdenes de una versión de oferta *distinta* (revisiones supersedidas).
+  órdenes de una versión de oferta _distinta_ (revisiones supersedidas).
 - Reabrir una oferta expirada (`cancelExpiredImplementationAndReopen`) exige
   que ninguna fase 2-4 tenga ya un pago o revisión pendiente; de lo contrario
   requiere intervención manual porque hay dinero real comprometido.
@@ -168,10 +168,99 @@ estado general aunque todavía no se hayan cargado los secretos.
   Webhook `processed` y luego reembolsar desde Mercado Pago si corresponde.
 - Sólo después de esa evidencia se mantiene la puerta en `"1"` para clientes.
 
+## Proyecto del cliente Starter (separado del registro interno)
+
+El pago confirmado de la fase 1 crea, dentro del mismo flujo idempotente de
+`ensureFromPaidBillingOrder`, una fila en `lmw_starter_client_projects` — una
+entidad propia del cliente, **distinta** de `lmwares_projects` (que sigue
+siendo únicamente el catálogo de repositorios/runtimes internos de Oracle,
+nunca un catálogo de clientes). Cada proyecto de cliente guarda: nombre
+visible, slug estable, subdominio LMWares (`slug.lmwares.com`), URL de
+preview, estado operativo (preparando/en construcción/revisión/listo para
+publicar/publicado/cancelado) y, opcionalmente, una referencia al proyecto
+interno de Oracle sólo cuando un operador enlaza un repositorio real desde el
+admin. Repetir el webhook o el cron sobre el mismo pago de fase 1 devuelve
+siempre la misma fila; nunca se crea un segundo proyecto de cliente para el
+mismo work order.
+
+El cliente ve este proyecto desde su cuenta pública apenas se confirma el
+pago de fase 1, con un mensaje que deja claro que el subdominio de
+seguimiento está reservado — nunca que el sitio ya está publicado.
+
+## Recuperación administrativa de pagos atascados
+
+Cuando el cron de reconciliación (`subscription-reconciliation.ts`) no logra
+resolver un pago (checkout abandonado, preapproval sin confirmar, timeout del
+proveedor), el admin ve el detalle en el indicador de "Pagos atascados"
+(tipo, edad, estado interno, último estado del proveedor). El botón
+"Reconciliar ahora" dispara exactamente la misma lógica idempotente del cron
+para ese único ítem — **nunca crea un checkout o preapproval nuevo**, sólo
+vuelve a consultar/confirmar el estado ya existente en el proveedor.
+
+Arquitectura: admin-api no tiene los Access Tokens de Mercado Pago (viven
+sólo como secretos de public-api), así que la acción hace una llamada
+servidor-a-servidor a `POST /internal/stuck-payments/reconcile` en
+public-api, autenticada con un bearer token compartido
+(`OPS_RECOVERY_TOKEN`, comparación de hash constante-time). Mientras ese
+secreto no esté configurado en ambos Workers, el botón responde
+`conflict` sin intentar nada — nunca falla en silencio ni actúa de forma
+insegura por defecto. Cada reconciliación manual queda auditada como
+`lmwares.stuck_payment.manual_reconcile` con el email del operador que la
+disparó.
+
 ## Lo que falta después de esta fase
 
 - cargar las credenciales comerciales y validar el cobro real controlado;
 - pruebas comerciales controladas de punta a punta.
+
+## Dominio personalizado sin proveedor
+
+Mientras no se elija una API de DNS/SSL, el sistema sólo prepara el registro y
+las instrucciones para operación manual:
+
+- se aceptan inicialmente `www.cliente.com` y `app.cliente.com`;
+- el apex (`cliente.com`) y los comodines quedan fuera de esta fase;
+- se genera un CNAME hacia el destino administrado por LMWares y un TXT de
+  verificación;
+- la creación sólo se habilita cuando la orden está en `ready_to_publish` o
+  `live`, para no adelantar el dominio a la entrega contratada;
+- `pending_verification`, `verified`, `provisioning`, `active`, `failed` y
+  `removed` son estados explícitos;
+- un dominio no verificado nunca se resuelve ni sustituye a
+  `slug.lmwares.com`.
+- el cliente usa `GET/POST /starter-projects/:clientProjectId/domains` y
+  `DELETE /starter-projects/:clientProjectId/domains/:domainId`; la
+  confirmación de DNS la realiza el panel operativo, no el navegador del
+  cliente;
+- el token TXT se devuelve únicamente en la respuesta inicial de creación,
+  se guarda sólo su hash y las consultas posteriores muestran el valor
+  redactado;
+- el panel operativo consulta `GET /admin/starter-domains`, confirma la
+  verificación y retira registros con auditoría;
+- la creación permanece cerrada si no existe `STARTER_DOMAIN_CNAME_TARGET`.
+
+La interfaz `DomainProvider` permite elegir el proveedor sin acoplar el flujo
+comercial a Cloudflare u otro servicio:
+
+- `DOMAIN_PROVIDER = "manual"` mantiene el flujo sin llamadas externas;
+- `DOMAIN_PROVIDER = "cloudflare-saas"` usa Custom Hostnames de Cloudflare,
+  exige `CLOUDFLARE_SAAS_API_TOKEN`, `CLOUDFLARE_ZONE_ID` y
+  `CLOUDFLARE_SAAS_CNAME_TARGET`, y sólo marca el dominio `active` cuando el
+  hostname y su certificado aparecen activos;
+- el token de Cloudflare es secreto independiente para `public-api` y
+  `admin-api`; nunca se guarda en D1, respuestas ni logs;
+- el panel administrativo sincroniza el estado del proveedor antes de
+  confirmar un dominio Cloudflare y la retirada elimina primero el Custom
+  Hostname externo;
+- el registro (`register()`) es idempotente ante un timeout: antes de crear
+  un Custom Hostname nuevo, reconcilia por hostname exacto contra Cloudflare
+  y adopta el recurso existente si un intento anterior ya lo creó, evitando
+  huérfanos externos ante un reintento del cliente o del operador.
+
+La habilitación productiva requiere activar Custom Hostnames y el fallback
+origin en Cloudflare, crear un CNAME SaaS proxied y cargar los secretos en
+ambos Workers. Mientras `DOMAIN_PROVIDER` siga en `manual`, no se crean
+hostnames ni se generan cargos de Cloudflare.
 
 ## Compuerta productiva de la mensualidad
 
@@ -193,6 +282,12 @@ estado general aunque todavía no se hayan cargado los secretos.
 - Sólo una mensualidad activa permite cambiar la orden de
   `ready_to_publish` a `live`; ninguna respuesta del navegador puede saltarse
   esa verificación en D1.
+- Desde el pago de la fase 1 se reserva un proyecto Starter del cliente y su
+  subdominio de seguimiento; esto no crea un repositorio sintético en
+  `lmwares_projects`. El enlace al proyecto técnico de Oracle sigue siendo una
+  acción administrativa explícita.
+- Un dominio personalizado sólo puede entrar al router después de verificación
+  y provisión confirmadas. El subdominio LMWares permanece como fallback.
 - El regreso de Mercado Pago a `/suscripcion/<workOrderId>` concilia
   automáticamente el estado cuando incluye `preapproval_id`, pero la interfaz
   distingue explícitamente `active` de `live`: autorizar abre la compuerta y

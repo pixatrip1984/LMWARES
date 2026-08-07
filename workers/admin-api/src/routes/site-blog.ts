@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { AppError } from '@starter/domain';
 import { defaultProjectConfig, extFromContentType } from '@starter/config';
 import {
+  createRepositories,
   SiteBlogRepository,
   type SiteBlogArticleRecord,
   type SiteBlogStoredBody,
@@ -15,6 +16,7 @@ import {
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { mediaUrl } from '../lib/media';
+import { requireStarterClientRuntime } from '../lib/starter-project-authorization';
 import { requireWrite } from '../middleware/auth';
 
 /**
@@ -28,6 +30,11 @@ export const siteBlogAdmin = new Hono<{
   Bindings: Bindings;
   Variables: Variables;
 }>();
+
+siteBlogAdmin.use('*', async (c, next) => {
+  await requireStarterClientRuntime(c.env.DB, c.req.param('projectId')!);
+  await next();
+});
 
 siteBlogAdmin.get('/', async (c) => {
   const projectId = readProjectId(c.req.param());
@@ -62,14 +69,9 @@ siteBlogAdmin.post('/', requireWrite, async (c) => {
     changedBy: c.get('admin').email,
   });
 
-  await repo.recordAudit({
-    actorId: c.get('admin').email,
-    action: 'site_blog.article.create',
-    articleId: created.id,
-    projectId,
-    metadata: { slug: created.slug, status: created.status },
-    ip: c.req.header('CF-Connecting-IP'),
-    userAgent: c.req.header('User-Agent'),
+  await audit(c, projectId, created.id, 'site_blog.article.create', {
+    slug: created.slug,
+    status: created.status,
   });
 
   return c.json(toArticleView(c.env, created), 201);
@@ -114,20 +116,17 @@ siteBlogAdmin.patch('/:slug', requireWrite, async (c) => {
   });
   if (!updated) throw AppError.notFound('Artículo');
 
-  await repo.recordAudit({
-    actorId: c.get('admin').email,
-    action:
-      existing.status === updated.status ? 'site_blog.article.update' : 'site_blog.article.status',
-    articleId: updated.id,
+  await audit(
+    c,
     projectId,
-    metadata: {
+    updated.id,
+    existing.status === updated.status ? 'site_blog.article.update' : 'site_blog.article.status',
+    {
       slug: updated.slug,
       fromStatus: existing.status,
       toStatus: updated.status,
     },
-    ip: c.req.header('CF-Connecting-IP'),
-    userAgent: c.req.header('User-Agent'),
-  });
+  );
 
   return c.json(toArticleView(c.env, updated));
 });
@@ -182,14 +181,9 @@ siteBlogAdmin.post('/:slug', requireWrite, async (c) => {
     throw error;
   }
 
-  await repo.recordAudit({
-    actorId: c.get('admin').email,
-    action: 'site_blog.article.cover.attach',
-    articleId: updated.id,
-    projectId,
-    metadata: { fileAssetId: updated.coverImageId, key },
-    ip: c.req.header('CF-Connecting-IP'),
-    userAgent: c.req.header('User-Agent'),
+  await audit(c, projectId, updated.id, 'site_blog.article.cover.attach', {
+    fileAssetId: updated.coverImageId,
+    key,
   });
 
   return c.json(toArticleView(c.env, updated));
@@ -197,6 +191,29 @@ siteBlogAdmin.post('/:slug', requireWrite, async (c) => {
 
 async function requireProject(repo: SiteBlogRepository, projectId: string): Promise<void> {
   if (!(await repo.projectExists(projectId))) throw AppError.notFound('Proyecto');
+}
+
+async function audit(
+  c: {
+    env: Bindings;
+    get: (key: 'admin') => Variables['admin'];
+    req: { header: (name: string) => string | undefined };
+  },
+  projectId: string,
+  articleId: string,
+  action: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await createRepositories(c.env.DB).audit.record({
+    actorType: 'admin',
+    actorId: c.get('admin').email,
+    action,
+    entityType: 'lmwares_project',
+    entityId: projectId,
+    metadata: { articleId, ...metadata },
+    ip: c.req.header('CF-Connecting-IP') ?? null,
+    userAgent: c.req.header('User-Agent') ?? null,
+  });
 }
 
 function readProjectId(params: Record<string, string>): string {

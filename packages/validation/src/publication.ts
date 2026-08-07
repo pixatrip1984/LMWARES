@@ -18,7 +18,9 @@ export const createPublicationSchema = z.object({
 export type CreatePublicationInput = z.infer<typeof createPublicationSchema>;
 
 /** Payload para editar una publicación: todos los campos opcionales. */
-export const updatePublicationSchema = createPublicationSchema.partial();
+export const updatePublicationSchema = createPublicationSchema
+  .omit({ status: true })
+  .partial();
 export type UpdatePublicationInput = z.infer<typeof updatePublicationSchema>;
 
 /** Cambio de estado con razón opcional (registra StatusHistory). */

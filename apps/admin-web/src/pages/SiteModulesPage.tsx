@@ -1,9 +1,13 @@
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
+import type { LmwaresProject } from '@starter/domain';
 import { BlogWorkspace } from '../features/site-modules/blog/BlogWorkspace';
 import { DocsWorkspace } from '../features/site-modules/docs/DocsWorkspace';
 import { EventsWorkspace } from '../features/site-modules/events/EventsWorkspace';
 import { FormsWorkspace } from '../features/site-modules/forms/FormsWorkspace';
 import { GalleriesWorkspace } from '../features/site-modules/galleries/GalleriesWorkspace';
+import { api } from '../lib/api';
+import { isClientStarterProject } from '../lib/project-classification';
 import './siteModulesPage.css';
 
 const MODULES = [
@@ -16,11 +20,40 @@ const MODULES = [
 
 type ModuleKey = (typeof MODULES)[number]['key'];
 
+type ProjectGuard =
+  | { status: 'loading' }
+  | { status: 'allowed'; project: LmwaresProject }
+  | { status: 'blocked'; project: LmwaresProject }
+  | { status: 'not-found' };
+
 export function SiteModulesPage() {
   const { projectId, moduleKey } = useParams<{
     projectId: string;
     moduleKey: string;
   }>();
+  const [guard, setGuard] = useState<ProjectGuard>({ status: 'loading' });
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    setGuard({ status: 'loading' });
+    api
+      .getLmwaresProject(projectId)
+      .then((project) => {
+        if (cancelled) return;
+        setGuard(
+          isClientStarterProject(project)
+            ? { status: 'allowed', project }
+            : { status: 'blocked', project },
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setGuard({ status: 'not-found' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   if (!projectId) return <Navigate to="/projects" replace />;
   if (!isModuleKey(moduleKey)) {
@@ -62,8 +95,34 @@ export function SiteModulesPage() {
       </aside>
 
       <main className="site-modules-page__workspace">
-        <ModuleWorkspace moduleKey={moduleKey} projectId={projectId} />
+        {guard.status === 'loading' ? (
+          <SiteModulesNotice title="Verificando proyecto…" detail="Confirmando que sea un sitio Starter de cliente." />
+        ) : guard.status === 'not-found' ? (
+          <SiteModulesNotice
+            title="Proyecto no encontrado"
+            detail="Este id no existe en el registro privado. Vuelve a Oracle y selecciona un proyecto registrado."
+          />
+        ) : guard.status === 'blocked' ? (
+          <SiteModulesNotice
+            title="Módulos no disponibles para este proyecto"
+            detail={`"${guard.project.name}" es un proyecto interno de Oracle (categoría "${guard.project.category}"), no un sitio Starter de cliente. Los módulos de contenido (blog, galerías, docs, formularios, eventos) solo aplican a sitios Starter de clientes para evitar publicar contenido en un proyecto equivocado.`}
+          />
+        ) : (
+          <ModuleWorkspace moduleKey={moduleKey} projectId={projectId} />
+        )}
       </main>
+    </div>
+  );
+}
+
+function SiteModulesNotice({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="site-modules-page__notice">
+      <p className="site-modules-page__notice-title">{title}</p>
+      <p className="site-modules-page__notice-detail">{detail}</p>
+      <Link className="site-modules-page__back" to="/projects">
+        ← Volver a Oracle
+      </Link>
     </div>
   );
 }

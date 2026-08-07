@@ -355,6 +355,7 @@ async function handleSubscriptionPreapprovalWebhook(
     const reconciled = maintenanceScope
       ? await repos.lmwaresMaintenanceSubscriptions.savePreapproval({
           id: subscription.id,
+          externalReference: provider.externalReference,
           providerPreapprovalId: provider.id,
           authorizationUrl: provider.authorizationUrl,
           providerStatus: provider.status,
@@ -983,7 +984,7 @@ function assertTechnicalCheckoutEnabled(env: Bindings): void {
   }
 }
 
-function mercadoPagoSubscriptionsAccessToken(env: Bindings): string {
+export function mercadoPagoSubscriptionsAccessToken(env: Bindings): string {
   const accessToken = env.MERCADO_PAGO_SUBSCRIPTIONS_ACCESS_TOKEN?.trim();
   if (!accessToken) {
     throw new AppError(
@@ -1044,7 +1045,7 @@ export function mercadoPagoCommercialAccessToken(env: Bindings): string {
   return token;
 }
 
-function mercadoPagoMaintenanceAccessToken(env: Bindings): string {
+export function mercadoPagoMaintenanceAccessToken(env: Bindings): string {
   const token = env.MERCADO_PAGO_MAINTENANCE_ACCESS_TOKEN?.trim();
   if (!token) {
     throw new AppError('internal_error', 'Falta configurar el Access Token de mensualidades.');

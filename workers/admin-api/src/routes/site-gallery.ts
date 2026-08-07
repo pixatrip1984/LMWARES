@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { AppError } from '@starter/domain';
+import { createRepositories } from '@starter/db';
 import { parseInput } from '@starter/validation';
 import {
   SiteGalleryRepository,
@@ -28,6 +29,7 @@ import {
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { mediaUrl } from '../lib/media';
+import { requireStarterClientRuntime } from '../lib/starter-project-authorization';
 import { requireWrite } from '../middleware/auth';
 
 type GalleryContext = Context<{
@@ -55,6 +57,11 @@ export const adminSiteGalleries = new Hono<{
   Bindings: Bindings;
   Variables: Variables;
 }>();
+
+adminSiteGalleries.use('*', async (c, next) => {
+  await requireStarterClientRuntime(c.env.DB, c.req.param('projectId')!);
+  await next();
+});
 
 adminSiteGalleries.get('/', async (c) => {
   const projectId = readProjectId(c);
@@ -89,7 +96,7 @@ adminSiteGalleries.post('/', requireWrite, async (c) => {
     },
     c.get('admin').email,
   );
-  await audit(c, gallery, {
+  await audit(c, {
     action: 'site_gallery.album.create',
     projectId,
     albumId: album.id,
@@ -124,7 +131,7 @@ adminSiteGalleries.patch('/:albumId', requireWrite, async (c) => {
       patch.description === undefined ? undefined : patch.description,
   });
   if (!album) throw AppError.notFound('Álbum');
-  await audit(c, gallery, {
+  await audit(c, {
     action: 'site_gallery.album.update',
     projectId,
     albumId,
@@ -151,7 +158,7 @@ adminSiteGalleries.post('/:albumId/draft', requireWrite, async (c) => {
     reason ?? 'Guardado como borrador',
   );
   if (!album) throw AppError.notFound('Álbum');
-  await audit(c, gallery, {
+  await audit(c, {
     action: 'site_gallery.album.draft',
     projectId,
     albumId,
@@ -187,7 +194,7 @@ adminSiteGalleries.post('/:albumId/publish', requireWrite, async (c) => {
   if (!publication) throw AppError.notFound('Álbum');
   const { album, orphanedImages } = publication;
   await deleteOrphanedObjects(c, orphanedImages);
-  await audit(c, gallery, {
+  await audit(c, {
     action: 'site_gallery.album.publish',
     projectId,
     albumId,
@@ -220,7 +227,7 @@ adminSiteGalleries.post('/:albumId/unpublish', requireWrite, async (c) => {
     reason ?? 'Álbum retirado de la vista pública',
   );
   if (!album) throw AppError.notFound('Álbum');
-  await audit(c, gallery, {
+  await audit(c, {
     action: 'site_gallery.album.unpublish',
     projectId,
     albumId,
@@ -345,7 +352,7 @@ adminSiteGalleries.post('/:albumId/images', requireWrite, async (c) => {
     throw error;
   }
 
-  await audit(c, gallery, {
+  await audit(c, {
     action: 'site_gallery.image.add',
     projectId,
     albumId,
@@ -379,7 +386,7 @@ adminSiteGalleries.patch(
         'El orden debe incluir exactamente todas las imágenes actuales del álbum.',
       );
     }
-    await audit(c, gallery, {
+    await audit(c, {
       action: 'site_gallery.images.reorder',
       projectId,
       albumId,
@@ -405,7 +412,7 @@ adminSiteGalleries.patch('/:albumId/cover', requireWrite, async (c) => {
       'La portada debe ser una imagen del mismo álbum.',
     );
   }
-  await audit(c, gallery, {
+  await audit(c, {
     action: 'site_gallery.cover.set',
     projectId,
     albumId,
@@ -434,7 +441,7 @@ adminSiteGalleries.patch(
       alt,
     );
     if (!image) throw AppError.notFound('Imagen');
-    await audit(c, gallery, {
+    await audit(c, {
       action: 'site_gallery.image.update',
       projectId,
       albumId,
@@ -459,6 +466,7 @@ adminSiteGalleries.delete(
     // Una imagen incluida en la revisión pública debe seguir existiendo en R2
     // aunque se quite del borrador. Se limpia al publicar la siguiente revisión.
     const retainedForPublication = await gallery.imageIsPublished(
+      projectId,
       albumId,
       imageId,
     );
@@ -466,7 +474,7 @@ adminSiteGalleries.delete(
     const removed = await gallery.removeImage(projectId, albumId, imageId);
     if (!removed) throw AppError.notFound('Imagen');
 
-    await audit(c, gallery, {
+    await audit(c, {
       action: 'site_gallery.image.delete',
       projectId,
       albumId,
@@ -513,7 +521,6 @@ async function assertSlugAvailable(
 
 async function audit(
   c: GalleryContext,
-  gallery: SiteGalleryRepository,
   data: {
     action: string;
     projectId: string;
@@ -521,14 +528,15 @@ async function audit(
     metadata?: Record<string, unknown>;
   },
 ): Promise<void> {
-  await gallery.recordAudit({
+  await createRepositories(c.env.DB).audit.record({
+    actorType: 'admin',
     actorId: c.get('admin').email,
     action: data.action,
-    projectId: data.projectId,
-    albumId: data.albumId,
-    metadata: data.metadata,
-    ip: c.req.header('cf-connecting-ip') ?? null,
-    userAgent: c.req.header('user-agent') ?? null,
+    entityType: 'lmwares_project',
+    entityId: data.projectId,
+    metadata: { albumId: data.albumId, ...(data.metadata ?? {}) },
+    ip: c.req.header('CF-Connecting-IP') ?? null,
+    userAgent: c.req.header('User-Agent') ?? null,
   });
 }
 

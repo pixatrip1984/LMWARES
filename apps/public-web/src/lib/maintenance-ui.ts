@@ -8,8 +8,12 @@ export type MaintenanceStatus =
   | 'canceled'
   | 'disputed';
 
-export function maintenanceActionLabel(status: MaintenanceStatus | null): string {
-  if (!status) return 'Elige tu plan de mantenimiento';
+export function maintenanceActionLabel(
+  status: MaintenanceStatus | null,
+  planAlreadyDecided = false,
+): string {
+  if (!status)
+    return planAlreadyDecided ? 'Activar mantenimiento' : 'Elige tu plan de mantenimiento';
   const labels: Record<MaintenanceStatus, string> = {
     creating: 'Ver mensualidad en preparación',
     creation_failed: 'Reintentar autorización mensual',
@@ -23,7 +27,10 @@ export function maintenanceActionLabel(status: MaintenanceStatus | null): string
   return labels[status];
 }
 
-export function reconciliationMessage(status: MaintenanceStatus, providerStatus: string | null): string {
+export function reconciliationMessage(
+  status: MaintenanceStatus,
+  providerStatus: string | null,
+): string {
   if (status === 'active') {
     return 'Mensualidad activa. LMWares ya puede completar la publicación; la publicación se confirma por separado.';
   }
@@ -42,11 +49,15 @@ export function reconciliationMessage(status: MaintenanceStatus, providerStatus:
   return `Mercado Pago reporta: ${providerStatus ?? 'pendiente'}.`;
 }
 
-export function maintenanceTierLabel(plan: 'none' | 'basic' | 'advanced'): { name: string; description: string } {
+export function maintenanceTierLabel(plan: 'none' | 'basic' | 'advanced'): {
+  name: string;
+  description: string;
+} {
   const labels: Record<'none' | 'basic' | 'advanced', { name: string; description: string }> = {
     none: {
       name: 'Sin mantenimiento',
-      description: 'Conservas la versión entregada como definitiva; el siguiente paso es indexarla en tu dominio.',
+      description:
+        'Conservas la versión entregada como definitiva; el siguiente paso es indexarla en tu dominio.',
     },
     basic: {
       name: 'Mantenimiento básico',
@@ -60,37 +71,57 @@ export function maintenanceTierLabel(plan: 'none' | 'basic' | 'advanced'): { nam
   return labels[plan];
 }
 
-export function maintenancePresentation(status: MaintenanceStatus | null, planAlreadyDecided: boolean) {
+export function maintenancePresentation(
+  status: MaintenanceStatus | null,
+  planAlreadyDecided = false,
+  selectedPlan: 'none' | 'basic' | 'advanced' | null = null,
+) {
+  if (!status && selectedPlan === 'none') {
+    return {
+      heading: 'Sin mantenimiento mensual',
+      description:
+        'Tu proyecto se publicará como una entrega de pago único, sin renovaciones ni cargos futuros.',
+      projectMessage:
+        'La siguiente etapa es completar la publicación y, más adelante, indexar el sitio en tu dominio propio.',
+    };
+  }
   switch (status) {
     case 'active':
       return {
         heading: 'Mantenimiento autorizado',
-        description: 'Mercado Pago confirmó la mensualidad. LMWares aún debe completar y registrar la publicación por separado.',
-        projectMessage: 'La compuerta mensual está abierta; el operador puede completar la publicación y emitir el comprobante.',
+        description:
+          'Mercado Pago confirmó la mensualidad. LMWares aún debe completar y registrar la publicación por separado.',
+        projectMessage:
+          'La compuerta mensual está abierta; el operador puede completar la publicación y emitir el comprobante.',
       };
     case 'payment_attention':
       return {
         heading: 'Tu mensualidad requiere atención',
-        description: 'Mercado Pago rechazó o no pudo completar la autorización del cobro. Puedes reintentarlo con el mismo medio de pago u otro distinto.',
-        projectMessage: 'Usa "Abrir Mercado Pago" para reintentar la autorización antes de continuar con el mantenimiento.',
+        description:
+          'Mercado Pago rechazó o no pudo completar la autorización del cobro. Puedes reintentarlo con el mismo medio de pago u otro distinto.',
+        projectMessage:
+          'Usa "Abrir Mercado Pago" para reintentar la autorización antes de continuar con el mantenimiento.',
       };
     case 'paused':
       return {
         heading: 'Mantenimiento pausado',
         description: 'La autorización existe, pero Mercado Pago la mantiene en pausa.',
-        projectMessage: 'La publicación y el mantenimiento permanecen separados hasta recuperar el estado activo.',
+        projectMessage:
+          'La publicación y el mantenimiento permanecen separados hasta recuperar el estado activo.',
       };
     case 'disputed':
       return {
         heading: 'Cobro en aclaración',
         description: 'Hay una disputa asociada a la mensualidad.',
-        projectMessage: 'LMWares conservará la evidencia y no asumirá que el mantenimiento está activo.',
+        projectMessage:
+          'LMWares conservará la evidencia y no asumirá que el mantenimiento está activo.',
       };
     case 'canceled':
       return {
         heading: 'Mantenimiento cancelado',
         description: 'Esta autorización ya no programará nuevos cobros.',
-        projectMessage: 'La cancelación no revierte el trabajo ya entregado ni crea automáticamente otro contrato.',
+        projectMessage:
+          'La cancelación no revierte el trabajo ya entregado ni crea automáticamente otro contrato.',
       };
     default:
       // El cliente ya había decidido su plan (en el configurador o justo
@@ -99,14 +130,18 @@ export function maintenancePresentation(status: MaintenanceStatus | null, planAl
       if (planAlreadyDecided) {
         return {
           heading: 'Confirma tu mantenimiento',
-          description: 'Este es el plan de mantenimiento que ya habías acordado. Autorízalo con Mercado Pago para activarlo; el proyecto puede publicarse en cuanto lo confirmes.',
-          projectMessage: 'La publicación queda a cargo de LMWares en cuanto autorices esta mensualidad ya acordada.',
+          description:
+            'Este es el plan de mantenimiento que ya habías acordado. Autorízalo con Mercado Pago para activarlo; el proyecto puede publicarse en cuanto lo confirmes.',
+          projectMessage:
+            'La publicación queda a cargo de LMWares en cuanto autorices esta mensualidad ya acordada.',
         };
       }
       return {
         heading: 'Elige tu plan de mantenimiento',
-        description: 'El proyecto ya está construido y puede publicarse con o sin mantenimiento. Si eliges un plan, así se activará; si prefieres conservar esta versión como definitiva, puedes continuar sin contratarlo.',
-        projectMessage: 'La publicación queda a cargo de LMWares en cuanto confirmes tu decisión (con o sin mantenimiento).',
+        description:
+          'El proyecto ya está construido y puede publicarse con o sin mantenimiento. Si eliges un plan, así se activará; si prefieres conservar esta versión como definitiva, puedes continuar sin contratarlo.',
+        projectMessage:
+          'La publicación queda a cargo de LMWares en cuanto confirmes tu decisión (con o sin mantenimiento).',
       };
   }
 }

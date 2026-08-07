@@ -12,8 +12,24 @@ export interface Bindings {
   PROJECT_SLUG: string;
   /** Token de servicio para el runner privado Free. En producción debe ser secret. */
   FREE_RUNNER_TOKEN: string;
+  /**
+   * Token compartido con el Admin API para disparar bajo demanda una
+   * reconciliación puntual de un pago atascado (misma lógica idempotente del
+   * cron, nunca crea checkouts/cargos nuevos). Ausente = acción deshabilitada.
+   */
+  OPS_RECOVERY_TOKEN?: string;
   /** Dominio base para publicar URLs tipo slug.lmwares.com. */
   FREE_SITE_BASE_DOMAIN: string;
+  /** Destino CNAME del proveedor manual de dominios Starter. */
+  STARTER_DOMAIN_CNAME_TARGET?: string;
+  /** Proveedor activo: manual (predeterminado) o cloudflare-saas. */
+  DOMAIN_PROVIDER?: string;
+  /** Token secreto para la API de Custom Hostnames de Cloudflare for SaaS. */
+  CLOUDFLARE_SAAS_API_TOKEN?: string;
+  /** Zone ID de lmwares.com para Custom Hostnames. */
+  CLOUDFLARE_ZONE_ID?: string;
+  /** CNAME SaaS proxied al fallback origin de Cloudflare. */
+  CLOUDFLARE_SAAS_CNAME_TARGET?: string;
   /** Origen canónico del frontend público, sin slash final. */
   PUBLIC_WEB_URL: string;
   /** Origen canónico de este Worker, sin slash final. */
@@ -78,6 +94,26 @@ export interface Bindings {
   TURNSTILE_DISABLED: string;
   /** Secreto de Turnstile (server-side). Inyectado como secret. */
   TURNSTILE_SECRET_KEY: string;
+  /** client_email del service account de Google usado para Indexing/Site Verification API. */
+  GOOGLE_INDEXING_CLIENT_EMAIL?: string;
+  /** private_key (PEM) del mismo service account. Siempre como secret. */
+  GOOGLE_INDEXING_PRIVATE_KEY?: string;
+  /** Registrador de dominios activo: manual (predeterminado) o namesilo. */
+  DOMAIN_REGISTRAR_PROVIDER?: string;
+  /** API Key de Namesilo para búsqueda/compra/DNS de dominios. Siempre como secret. */
+  NAMESILO_API_KEY?: string;
+  /**
+   * URL base del proxy (AWS Lambda) usado para llamar a Namesilo, porque
+   * Namesilo bloquea (403) las IPs de salida de Cloudflare Workers. Si no se
+   * configura, se llama a Namesilo directamente (fallará con 403 en producción).
+   */
+  NAMESILO_PROXY_BASE_URL?: string;
+  /** Secreto compartido enviado como header X-Proxy-Secret al proxy de Namesilo. Siempre como secret. */
+  NAMESILO_PROXY_SHARED_SECRET?: string;
+  /** API Key pública de Porkbun (registrador de dominios). Siempre como secret. */
+  PORKBUN_API_KEY?: string;
+  /** Secret API Key de Porkbun. Siempre como secret. */
+  PORKBUN_SECRET_API_KEY?: string;
 }
 
 export type Variables = {

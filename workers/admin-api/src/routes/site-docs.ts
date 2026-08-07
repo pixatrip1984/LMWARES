@@ -27,6 +27,7 @@ import {
   type SiteDocStoredFile,
 } from '@starter/db';
 import type { Bindings, Variables } from '../env';
+import { requireStarterClientRuntime } from '../lib/starter-project-authorization';
 import { requireWrite } from '../middleware/auth';
 
 type DocsContext = Context<{
@@ -42,6 +43,11 @@ export const siteDocsAdmin = new Hono<{
   Bindings: Bindings;
   Variables: Variables;
 }>();
+
+siteDocsAdmin.use('*', async (c, next) => {
+  await requireStarterClientRuntime(c.env.DB, c.req.param('projectId')!);
+  await next();
+});
 
 siteDocsAdmin.get('/', async (c) => {
   const projectId = readProjectId(c.req.param('projectId'));
@@ -116,6 +122,10 @@ siteDocsAdmin.post('/documents', requireWrite, async (c) => {
   });
 
   const document = await processUpload(c, projectId, documentId, version, file);
+  await audit(c, 'site_docs.document.create', projectId, {
+    documentId: document.id,
+    versionId: document.currentVersionId,
+  });
   return c.json(document, 201);
 });
 
@@ -137,6 +147,10 @@ siteDocsAdmin.post('/documents/:docId/versions', requireWrite, async (c) => {
   });
 
   const document = await processUpload(c, projectId, documentId, version, file);
+  await audit(c, 'site_docs.version.create', projectId, {
+    documentId: document.id,
+    versionId: document.currentVersionId,
+  });
   return c.json(document, 201);
 });
 

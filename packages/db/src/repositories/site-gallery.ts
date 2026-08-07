@@ -281,7 +281,7 @@ export class SiteGalleryRepository {
   ): Promise<SiteGalleryAlbumDetailRecord | null> {
     const album = await this.getById(projectId, albumId);
     if (!album) return null;
-    return { ...album, images: await this.listImages(albumId) };
+    return { ...album, images: await this.listImages(projectId, albumId) };
   }
 
   async getPublishedBySlug(
@@ -297,7 +297,7 @@ export class SiteGalleryRepository {
       .first<AlbumRow>();
     if (!row) return null;
     const album = mapAlbum(row);
-    return { ...album, images: await this.listPublishedImages(album.id) };
+    return { ...album, images: await this.listPublishedImages(projectId, album.id) };
   }
 
   async slugExists(
@@ -444,7 +444,7 @@ export class SiteGalleryRepository {
     const existing = await this.getDetail(projectId, albumId);
     if (!existing) return null;
 
-    const previousImages = await this.listPublishedImages(albumId);
+    const previousImages = await this.listPublishedImages(projectId, albumId);
     const now = nowIso();
     const publishedAt = existing.publishedAt ?? now;
     const coverImageId = existing.coverImageId ?? existing.images[0]?.id ?? null;
@@ -691,14 +691,20 @@ export class SiteGalleryRepository {
     return row ? mapStoredImage(row) : null;
   }
 
-  async imageIsPublished(albumId: string, imageId: string): Promise<boolean> {
+  async imageIsPublished(
+    projectId: string,
+    albumId: string,
+    imageId: string,
+  ): Promise<boolean> {
     const row = await this.db
       .prepare(
         `SELECT 1 AS present
-         FROM site_gallery_publication_images
-         WHERE album_id = ? AND image_id = ?`,
+         FROM site_gallery_publication_images image
+         INNER JOIN site_gallery_publications publication
+           ON publication.album_id = image.album_id
+         WHERE image.album_id = ? AND image.image_id = ? AND publication.project_id = ?`,
       )
-      .bind(albumId, imageId)
+      .bind(albumId, imageId, projectId)
       .first<{ present: number }>();
     return row !== null;
   }
@@ -859,28 +865,34 @@ export class SiteGalleryRepository {
     }
   }
 
-  private async listImages(albumId: string): Promise<SiteGalleryStoredImage[]> {
+  private async listImages(
+    projectId: string,
+    albumId: string,
+  ): Promise<SiteGalleryStoredImage[]> {
     const { results } = await this.db
       .prepare(
         `${IMAGE_SELECT}
-         WHERE image.album_id = ?
+         WHERE image.album_id = ? AND album.project_id = ?
          ORDER BY image.position ASC, image.created_at ASC`,
       )
-      .bind(albumId)
+      .bind(albumId, projectId)
       .all<StoredImageRow>();
     return results.map(mapStoredImage);
   }
 
   private async listPublishedImages(
+    projectId: string,
     albumId: string,
   ): Promise<SiteGalleryStoredImage[]> {
     const { results } = await this.db
       .prepare(
         `${PUBLISHED_IMAGE_SELECT}
-         WHERE image.album_id = ?
+         INNER JOIN site_gallery_publications publication
+           ON publication.album_id = image.album_id
+         WHERE image.album_id = ? AND publication.project_id = ?
          ORDER BY image.position ASC, image.created_at ASC`,
       )
-      .bind(albumId)
+      .bind(albumId, projectId)
       .all<StoredImageRow>();
     return results.map(mapStoredImage);
   }

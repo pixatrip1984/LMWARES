@@ -682,6 +682,34 @@
   margin: 6px 0 0;
 }
 
+.lmw-account-project-callout {
+  display: grid;
+  gap: 3px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(45, 128, 255, 0.35);
+  border-radius: 8px;
+  background: rgba(12, 44, 88, 0.56);
+}
+
+.lmw-account-project-callout strong {
+  color: #b9d5ff;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lmw-account-project-callout span {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.lmw-account-project-callout small {
+  color: #9ab8dc;
+  font-size: 11px;
+}
+
 .lmw-account-phase-cards {
   display: grid;
   gap: 10px;
@@ -1115,6 +1143,167 @@
   margin-left: 20px;
   padding: 12px 15px;
   text-decoration: none;
+}
+
+.lmw-account-domains {
+  border-top: 1px solid rgba(125, 165, 221, 0.2);
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.lmw-account-domains header {
+  display: grid;
+  gap: 4px;
+}
+
+.lmw-account-domains header small,
+.lmw-account-domains header p {
+  color: #8ea8c9;
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.lmw-account-domains article,
+.lmw-account-domains__instructions {
+  background: rgba(16, 37, 68, 0.72);
+  border: 1px solid rgba(125, 165, 221, 0.2);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.lmw-account-domains article > div:first-child {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.lmw-account-domains article span {
+  color: #9ed9be;
+  font-size: 0.78rem;
+}
+
+.lmw-account-domains code {
+  color: #c8dcf7;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.lmw-account-domains__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lmw-account-domains__searching {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: #9fc1ea;
+  font-size: 0.85rem;
+}
+
+.lmw-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(159, 193, 234, 0.3);
+  border-top-color: #9fc1ea;
+  animation: lmw-spin 0.8s linear infinite;
+}
+
+@keyframes lmw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.lmw-account-domains input,
+.lmw-account-domains select {
+  background: #081a32;
+  border: 1px solid rgba(125, 165, 221, 0.35);
+  border-radius: 7px;
+  color: #eaf3ff;
+  min-width: 0;
+  padding: 8px;
+}
+
+.lmw-account-domains button {
+  background: #1d66d8;
+  border: 0;
+  border-radius: 7px;
+  color: white;
+  cursor: pointer;
+  padding: 8px 10px;
+}
+
+.lmw-account-domains button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.lmw-account-domains__error {
+  color: #ffb4a9;
+  margin: 0;
+}
+
+.lmw-account-domains__results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lmw-account-domains__results li {
+  align-items: center;
+  background: #081a32;
+  border: 1px solid rgba(125, 165, 221, 0.25);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.lmw-account-domains__confirm-overlay {
+  align-items: center;
+  background: rgba(3, 10, 22, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 60;
+}
+
+.lmw-account-domains__confirm {
+  background: #0b1f3a;
+  border: 1px solid rgba(125, 165, 221, 0.35);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  padding: 20px;
+  width: 90%;
+}
+
+.lmw-account-domains__confirm-check {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+}
+
+.lmw-account-domains__confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .lmw-account-signout {

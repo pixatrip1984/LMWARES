@@ -2,9 +2,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const intakeSource = readFileSync(new URL('../routes/commercial-intakes.ts', import.meta.url), 'utf8');
+const intakeSource = readFileSync(
+  new URL('../routes/commercial-intakes.ts', import.meta.url),
+  'utf8',
+);
 const paymentsSource = readFileSync(new URL('../routes/payments.ts', import.meta.url), 'utf8');
-const subscriptionsSource = readFileSync(new URL('../routes/subscriptions.ts', import.meta.url), 'utf8');
+const subscriptionsSource = readFileSync(
+  new URL('../routes/subscriptions.ts', import.meta.url),
+  'utf8',
+);
 const workerSource = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
 const wranglerSource = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 const accountSource = readFileSync(new URL('../routes/account.ts', import.meta.url), 'utf8');
@@ -12,14 +18,20 @@ const notificationDispatcherSource = readFileSync(
   new URL('../routes/free-jobs-internal.ts', import.meta.url),
   'utf8',
 );
-const offersSource = readFileSync(new URL('../lib/commercial-offer-public.ts', import.meta.url), 'utf8');
+const offersSource = readFileSync(
+  new URL('../lib/commercial-offer-public.ts', import.meta.url),
+  'utf8',
+);
 const mercadoPagoSource = readFileSync(new URL('./mercado-pago.ts', import.meta.url), 'utf8');
 const billingRepositorySource = readFileSync(
   new URL('../../../../packages/db/src/repositories/lmwares-billing-orders.ts', import.meta.url),
   'utf8',
 );
 const workOrderRepositorySource = readFileSync(
-  new URL('../../../../packages/db/src/repositories/lmwares-starter-work-orders.ts', import.meta.url),
+  new URL(
+    '../../../../packages/db/src/repositories/lmwares-starter-work-orders.ts',
+    import.meta.url,
+  ),
   'utf8',
 );
 const workOrderMigrationSource = readFileSync(
@@ -27,7 +39,10 @@ const workOrderMigrationSource = readFileSync(
   'utf8',
 );
 const maintenanceRepositorySource = readFileSync(
-  new URL('../../../../packages/db/src/repositories/lmwares-maintenance-subscriptions.ts', import.meta.url),
+  new URL(
+    '../../../../packages/db/src/repositories/lmwares-maintenance-subscriptions.ts',
+    import.meta.url,
+  ),
   'utf8',
 );
 const maintenanceRouteSource = readFileSync(
@@ -67,9 +82,18 @@ test('closed commercial submission keys cannot masquerade as a fresh review requ
 });
 
 test('technical billing creation is closed independently in production', () => {
-  assert.match(paymentsSource, /payments\.post\('\/proposals'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/);
-  assert.match(paymentsSource, /payments\.post\('\/proposals\/:id\/checkout'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/);
-  assert.match(subscriptionsSource, /subscriptions\.post\('\/proposals\/:proposalId'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/);
+  assert.match(
+    paymentsSource,
+    /payments\.post\('\/proposals'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/,
+  );
+  assert.match(
+    paymentsSource,
+    /payments\.post\('\/proposals\/:id\/checkout'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/,
+  );
+  assert.match(
+    subscriptionsSource,
+    /subscriptions\.post\('\/proposals\/:proposalId'[\s\S]*?assertTechnicalCheckoutEnabled\(c\.env\)/,
+  );
   assert.match(wranglerSource, /MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED = "0"/);
 });
 
@@ -100,7 +124,10 @@ test('account returns only the sanitized current offer and an in-app notice', ()
 test('accepted offers create four server-priced implementation phase orders', () => {
   assert.match(intakeSource, /ensureImplementationPhases/);
   assert.match(billingRepositorySource, /INSERT OR IGNORE INTO lmw_billing_orders/);
-  assert.match(billingRepositorySource, /splitImplementationIntoPhases\(offer\.implementation_amount_cents\)/);
+  assert.match(
+    billingRepositorySource,
+    /splitImplementationIntoPhases\(offer\.implementation_amount_cents\)/,
+  );
   assert.match(billingRepositorySource, /status = 'accepted'/);
   assert.match(billingRepositorySource, /lmw-implementation:\$\{id\}/);
   assert.doesNotMatch(intakeSource, /amountCents: input\./);
@@ -166,8 +193,15 @@ test('paying one implementation phase never flags or cancels its sibling phases'
 
 test('a confirmed implementation payment creates one supervised Starter work order', () => {
   assert.match(billingRepositorySource, /ensureFromPaidBillingOrder/);
+  assert.match(
+    billingRepositorySource,
+    /paidOrder\?\.status === 'paid'[\s\S]*?paidOrder\.phase === 1/,
+  );
   assert.match(workOrderRepositorySource, /INSERT OR IGNORE INTO lmw_starter_work_orders/);
-  assert.match(workOrderRepositorySource, /b\.purpose = 'implementation' AND b\.phase = 1 AND b\.status = 'paid'/);
+  assert.match(
+    workOrderRepositorySource,
+    /b\.purpose = 'implementation' AND b\.phase = 1 AND b\.status = 'paid'/,
+  );
   assert.match(workOrderRepositorySource, /'awaiting_provisioning'/);
   assert.match(workOrderMigrationSource, /billing_order_id[\s\S]*?UNIQUE/);
   assert.match(workOrderMigrationSource, /intake_id[\s\S]*?UNIQUE/);
@@ -175,9 +209,22 @@ test('a confirmed implementation payment creates one supervised Starter work ord
 
 test('Starter publication requires maintenance only when the accepted offer has a monthly amount', () => {
   assert.match(workOrderRepositorySource, /Primero enlaza un proyecto real de Oracle/);
-  assert.match(workOrderRepositorySource, /if \(from === 'in_build'\) return to === 'client_review'/);
-  assert.match(workOrderRepositorySource, /if \(from === 'client_review'\) return to === 'in_build' \|\| to === 'ready_to_publish'/);
-  assert.match(workOrderRepositorySource, /monthly_amount_cents > 0 && !publicationGate\.subscription_id/);
+  assert.match(
+    workOrderRepositorySource,
+    /if \(from === 'in_build'\) return to === 'client_review'/,
+  );
+  assert.match(
+    workOrderRepositorySource,
+    /if \(from === 'client_review'\) return to === 'in_build' \|\| to === 'ready_to_publish'/,
+  );
+  assert.match(
+    workOrderRepositorySource,
+    /maintenance_plan_selected === 'none'/,
+  );
+  assert.match(
+    workOrderRepositorySource,
+    /maintenance_plan_selected IN \('basic', 'advanced'\)/,
+  );
   assert.match(workOrderRepositorySource, /o\.monthly_amount_cents = 0/);
   assert.match(workOrderRepositorySource, /status = 'active'/);
   assert.match(workOrderRepositorySource, /SET status = 'live', published_url = \?/);
@@ -189,11 +236,42 @@ test('phased implementation payments gate client_review, ready_to_publish and go
   assert.match(workOrderRepositorySource, /PHASE_GATE_BY_TARGET_STATUS/);
   assert.match(workOrderRepositorySource, /client_review: 2,/);
   assert.match(workOrderRepositorySource, /ready_to_publish: 3,/);
-  assert.match(workOrderRepositorySource, /assertPhasePaid\(current\.commercialOfferId, requiredPhase\)/);
+  assert.match(
+    workOrderRepositorySource,
+    /assertPhasePaid\(current\.commercialOfferId, requiredPhase\)/,
+  );
   assert.match(workOrderRepositorySource, /assertPhasePaid\(current\.commercialOfferId, 4\)/);
   assert.match(
     workOrderRepositorySource,
     /bo\.purpose = 'implementation' AND bo\.phase = 4 AND bo\.status <> 'paid'/,
+  );
+});
+
+test('paying phase 2 before phase 1 never converts the intake or creates a Starter work order', () => {
+  const phaseOneStart = billingRepositorySource.indexOf('if (paidOrder.phase === 1)');
+  const phaseOneEnd = billingRepositorySource.indexOf('} else {', phaseOneStart);
+  const phaseTwoStart = phaseOneEnd + 1;
+  const phaseTwoEnd =
+    billingRepositorySource.indexOf('paymentNotification.run();', phaseTwoStart) +
+    'paymentNotification.run();'.length;
+
+  assert.ok(phaseOneStart >= 0 && phaseOneEnd > phaseOneStart);
+  assert.ok(phaseTwoEnd > phaseTwoStart);
+  assert.match(
+    billingRepositorySource.slice(phaseOneStart, phaseOneEnd),
+    /ensureFromPaidBillingOrder/,
+  );
+  assert.match(
+    billingRepositorySource.slice(phaseOneStart, phaseOneEnd),
+    /paidOrder\.phase === 1/,
+  );
+  assert.doesNotMatch(
+    billingRepositorySource.slice(phaseTwoStart, phaseTwoEnd),
+    /ensureFromPaidBillingOrder/,
+  );
+  assert.match(
+    billingRepositorySource.slice(phaseTwoStart, phaseTwoEnd),
+    /Un pago adelantado no convierte el intake/,
   );
 });
 
@@ -210,7 +288,10 @@ test('Starter publication creates one idempotent account and email receipt', () 
 test('commercial maintenance is frozen from the accepted offer and owner gated', () => {
   assert.match(maintenanceRepositorySource, /o\.monthly_amount_cents/);
   assert.match(maintenanceRepositorySource, /w\.status = 'ready_to_publish'/);
-  assert.match(maintenanceRepositorySource, /b\.status = 'paid' AND b\.payment_review_required = 0/);
+  assert.match(
+    maintenanceRepositorySource,
+    /b\.status = 'paid' AND b\.payment_review_required = 0/,
+  );
   assert.match(maintenanceRepositorySource, /o\.status = 'accepted'/);
   assert.match(maintenanceRouteSource, /workOrder\.userId !== userId/);
   assert.match(maintenanceRouteSource, /assertTrustedPublicOrigin\(c\)/);
@@ -220,6 +301,23 @@ test('commercial maintenance is frozen from the accepted offer and owner gated',
   assert.match(paymentsSource, /maintenanceSubscriptionId:/);
   assert.match(wranglerSource, /MERCADO_PAGO_MAINTENANCE_SUBSCRIPTIONS_ENABLED = "1"/);
   assert.match(wranglerSource, /MERCADO_PAGO_MAINTENANCE_TEST_MODE = "0"/);
+});
+
+test('none maintenance cannot accidentally enter the Mercado Pago authorization route', () => {
+  assert.match(maintenanceRouteSource, /offer\?\.maintenancePlanSelected === 'none'/);
+  assert.match(maintenanceRouteSource, /no incluye una mensualidad de mantenimiento/);
+  assert.match(maintenanceRepositorySource, /o\.monthly_amount_cents > 0/);
+});
+
+test('reopening an expired implementation checkout returns every phase after cancellation', () => {
+  assert.match(
+    adminCommercialSource,
+    /getPhasesForOffer\(result\.order\.commercialOfferId\)/,
+  );
+  assert.match(
+    adminCommercialSource,
+    /return c\.json\(\{ intake, offers, billingOrder: result\.order, billingOrders \}\)/,
+  );
 });
 
 test('commercial intake captures a contact/business brief so a build agent has real context', () => {
@@ -236,7 +334,10 @@ test('commercial intake captures a contact/business brief so a build agent has r
     'utf8',
   );
   const migrationSource = readFileSync(
-    new URL('../../../../infra/d1/migrations/0028_lmwares_package_intake_brief.sql', import.meta.url),
+    new URL(
+      '../../../../infra/d1/migrations/0028_lmwares_package_intake_brief.sql',
+      import.meta.url,
+    ),
     'utf8',
   );
 

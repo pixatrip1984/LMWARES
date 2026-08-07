@@ -37,10 +37,13 @@ commercialIntakesAdmin.get('/:id', async (c) => {
     ? await repos.lmwaresBillingOrders.getPhasesForOffer(acceptedOffer.id)
     : [];
   const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(intake.id);
-  const maintenanceSubscription = workOrder
-    ? await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id)
-    : null;
-  return c.json({ intake, offers, billingOrders, workOrder, maintenanceSubscription });
+  const [maintenanceSubscription, clientProject] = workOrder
+    ? await Promise.all([
+        repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id),
+        repos.lmwaresStarterClientProjects.getByWorkOrderId(workOrder.id),
+      ])
+    : [null, null];
+  return c.json({ intake, offers, billingOrders, workOrder, clientProject, maintenanceSubscription });
 });
 
 commercialIntakesAdmin.post('/:id/work-order/assign', requireWrite, async (c) => {
@@ -192,6 +195,9 @@ commercialIntakesAdmin.post('/:id/implementation-payment/reopen', requireWrite, 
   const intake = await repos.lmwaresPackageIntakes.getById(intakeId);
   if (!intake) throw AppError.notFound('Solicitud comercial');
   const offers = await repos.lmwaresCommercialOffers.listForIntake(intakeId);
+  const billingOrders = result.order.commercialOfferId
+    ? await repos.lmwaresBillingOrders.getPhasesForOffer(result.order.commercialOfferId)
+    : [];
   if (result.changed) {
     await repos.audit.record({
       actorType: 'admin',
@@ -207,7 +213,7 @@ commercialIntakesAdmin.post('/:id/implementation-payment/reopen', requireWrite, 
       },
     });
   }
-  return c.json({ intake, offers, billingOrder: result.order });
+  return c.json({ intake, offers, billingOrder: result.order, billingOrders });
 });
 
 async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<unknown> {

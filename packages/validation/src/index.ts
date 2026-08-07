@@ -7,6 +7,8 @@ export * from './package-payment';
 export * from './package-intake';
 export * from './commercial-offer';
 export * from './starter-work-order';
+export * from './custom-domain';
+export * from './domain-registrar';
 export * from './site-blog';
 export * from './site-gallery';
 export * from './site-docs';

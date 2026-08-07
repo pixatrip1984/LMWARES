@@ -1,5 +1,10 @@
 import { Hono } from 'hono';
-import { AppError, type FreeIntake, type Metadata } from '@starter/domain';
+import {
+  AppError,
+  type ClientCustomDomain,
+  type FreeIntake,
+  type Metadata,
+} from '@starter/domain';
 import { createRepositories, type LmwaresNotification } from '@starter/db';
 import type { Bindings, Variables } from '../env';
 import { publicCommercialOffer } from '../lib/commercial-offer-public';
@@ -27,6 +32,8 @@ account.get('/', async (c) => {
     currentOffers,
     billingOrders,
     workOrders,
+    clientProjects,
+    customDomains,
     maintenanceSubscriptions,
   ] = await Promise.all([
     repos.lmwaresNotifications.listForUser(user.id),
@@ -35,6 +42,8 @@ account.get('/', async (c) => {
     repos.lmwaresCommercialOffers.listCurrentForUser(user.id),
     repos.lmwaresBillingOrders.listForUser(user.id),
     repos.lmwaresStarterWorkOrders.listForUser(user.id),
+    repos.lmwaresStarterClientProjects.listForUser(user.id),
+    repos.lmwaresCustomDomains.listForUser(user.id),
     repos.lmwaresMaintenanceSubscriptions.listForUser(user.id),
   ]);
   const offersByIntake = new Map(currentOffers.map((offer) => [offer.intakeId, offer]));
@@ -46,6 +55,15 @@ account.get('/', async (c) => {
     ordersByOffer.set(order.commercialOfferId, bucket);
   }
   const workOrdersByIntake = new Map(workOrders.map((workOrder) => [workOrder.intakeId, workOrder]));
+  const clientProjectsByWorkOrder = new Map(
+    clientProjects.map((clientProject) => [clientProject.workOrderId, clientProject]),
+  );
+  const customDomainsByProject = new Map<string, ClientCustomDomain[]>();
+  for (const domain of customDomains) {
+    const bucket = customDomainsByProject.get(domain.clientProjectId) ?? [];
+    bucket.push(domain);
+    customDomainsByProject.set(domain.clientProjectId, bucket);
+  }
   const maintenanceByWorkOrder = new Map(
     maintenanceSubscriptions.map((subscription) => [subscription.workOrderId, subscription]),
   );
@@ -80,6 +98,16 @@ account.get('/', async (c) => {
       workOrder: workOrdersByIntake.has(intake.id)
         ? publicWorkOrder(workOrdersByIntake.get(intake.id)!)
         : null,
+      clientProject:
+        workOrdersByIntake.has(intake.id) &&
+        clientProjectsByWorkOrder.has(workOrdersByIntake.get(intake.id)!.id)
+          ? publicStarterClientProject(
+              clientProjectsByWorkOrder.get(workOrdersByIntake.get(intake.id)!.id)!,
+              customDomainsByProject.get(
+                clientProjectsByWorkOrder.get(workOrdersByIntake.get(intake.id)!.id)!.id,
+              ) ?? [],
+            )
+          : null,
       maintenanceSubscription:
         workOrdersByIntake.has(intake.id) &&
         maintenanceByWorkOrder.has(workOrdersByIntake.get(intake.id)!.id)
@@ -244,6 +272,45 @@ function publicWorkOrder(workOrder: {
     publishedAt: workOrder.publishedAt,
     createdAt: workOrder.createdAt,
     updatedAt: workOrder.updatedAt,
+  };
+}
+
+function publicStarterClientProject(clientProject: {
+  id: string;
+  slug: string;
+  siteName: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}, domains: ClientCustomDomain[] = []) {
+  return {
+    id: clientProject.id,
+    slug: clientProject.slug,
+    siteName: clientProject.siteName,
+    status: clientProject.status,
+    createdAt: clientProject.createdAt,
+    updatedAt: clientProject.updatedAt,
+    customDomains: domains.map(publicCustomDomain),
+  };
+}
+
+function publicCustomDomain(domain: ClientCustomDomain) {
+  return {
+    id: domain.id,
+    clientProjectId: domain.clientProjectId,
+    hostname: domain.hostname,
+    type: domain.type,
+    status: domain.status,
+    verificationMethod: domain.verificationMethod,
+    dnsInstructions: domain.dnsInstructions,
+    provider: domain.provider,
+    certificateStatus: domain.certificateStatus,
+    lastError: domain.lastError,
+    verifiedAt: domain.verifiedAt,
+    activatedAt: domain.activatedAt,
+    removedAt: domain.removedAt,
+    createdAt: domain.createdAt,
+    updatedAt: domain.updatedAt,
   };
 }
 

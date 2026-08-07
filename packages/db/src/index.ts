@@ -20,6 +20,8 @@ import { LmwaresPackageIntakesRepository } from './repositories/lmwares-package-
 import { LmwaresCommercialOffersRepository } from './repositories/lmwares-commercial-offers';
 import { LmwaresBillingOrdersRepository } from './repositories/lmwares-billing-orders';
 import { LmwaresStarterWorkOrdersRepository } from './repositories/lmwares-starter-work-orders';
+import { LmwaresStarterClientProjectsRepository } from './repositories/lmwares-starter-client-projects';
+import { LmwaresCustomDomainsRepository } from './repositories/lmwares-custom-domains';
 import { LmwaresMaintenanceSubscriptionsRepository } from './repositories/lmwares-maintenance-subscriptions';
 import { LmwaresSubscriptionsRepository } from './repositories/lmwares-subscriptions';
 import { SiteBlogRepository } from './repositories/site-blog';
@@ -44,6 +46,8 @@ export * from './repositories/lmwares-package-intakes';
 export * from './repositories/lmwares-commercial-offers';
 export * from './repositories/lmwares-billing-orders';
 export * from './repositories/lmwares-starter-work-orders';
+export * from './repositories/lmwares-starter-client-projects';
+export * from './repositories/lmwares-custom-domains';
 export * from './repositories/lmwares-maintenance-subscriptions';
 export * from './repositories/lmwares-subscriptions';
 export * from './repositories/site-blog';
@@ -72,6 +76,8 @@ export interface Repositories {
   lmwaresCommercialOffers: LmwaresCommercialOffersRepository;
   lmwaresBillingOrders: LmwaresBillingOrdersRepository;
   lmwaresStarterWorkOrders: LmwaresStarterWorkOrdersRepository;
+  lmwaresStarterClientProjects: LmwaresStarterClientProjectsRepository;
+  lmwaresCustomDomains: LmwaresCustomDomainsRepository;
   lmwaresMaintenanceSubscriptions: LmwaresMaintenanceSubscriptionsRepository;
   lmwaresSubscriptions: LmwaresSubscriptionsRepository;
   siteBlog: SiteBlogRepository;
@@ -105,6 +111,8 @@ export function createRepositories(db: D1Database): Repositories {
     lmwaresCommercialOffers: new LmwaresCommercialOffersRepository(db),
     lmwaresBillingOrders: new LmwaresBillingOrdersRepository(db),
     lmwaresStarterWorkOrders: new LmwaresStarterWorkOrdersRepository(db),
+    lmwaresStarterClientProjects: new LmwaresStarterClientProjectsRepository(db),
+    lmwaresCustomDomains: new LmwaresCustomDomainsRepository(db),
     lmwaresMaintenanceSubscriptions: new LmwaresMaintenanceSubscriptionsRepository(db),
     lmwaresSubscriptions: new LmwaresSubscriptionsRepository(db),
     siteBlog: new SiteBlogRepository(db),

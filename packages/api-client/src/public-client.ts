@@ -1,4 +1,10 @@
-import type { Paginated, PublicAuthSession, Publication, PublicUser } from '@starter/domain';
+import type {
+  DomainProviderDnsInstruction,
+  Paginated,
+  PublicAuthSession,
+  Publication,
+  PublicUser,
+} from '@starter/domain';
 import type {
   CreateFreeIntakeInput,
   CreatePackageIntakeInput,
@@ -168,9 +174,61 @@ export interface PublicPackageIntake {
   currentOffer: PublicCommercialOffer | null;
   implementationPhases: PublicBillingOrder[];
   workOrder: PublicStarterWorkOrder | null;
+  clientProject: PublicStarterClientProject | null;
   maintenanceSubscription: PublicMaintenanceSubscription | null;
   submittedAt: string;
   updatedAt: string;
+}
+
+export interface PublicStarterClientProject {
+  id: string;
+  slug: string;
+  siteName: string;
+  status: 'provisioning' | 'active' | 'archived';
+  customDomains: PublicCustomDomain[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicCustomDomain {
+  id: string;
+  clientProjectId: string;
+  hostname: string;
+  type: 'www' | 'app' | 'apex';
+  status:
+    | 'draft'
+    | 'pending_verification'
+    | 'verified'
+    | 'provisioning'
+    | 'active'
+    | 'failed'
+    | 'removed';
+  verificationMethod: 'cname' | 'txt';
+  dnsInstructions: DomainProviderDnsInstruction[];
+  provider: string | null;
+  certificateStatus: 'not_requested' | 'pending' | 'active' | 'failed';
+  lastError: string | null;
+  verifiedAt: string | null;
+  activatedAt: string | null;
+  removedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePublicCustomDomainResult {
+  domain: PublicCustomDomain;
+  verification: {
+    token: string;
+    instructions: DomainProviderDnsInstruction[];
+    expires: null;
+    oneTime: true;
+  } | null;
+}
+
+export interface PublicDomainAvailability {
+  domain: string;
+  available: boolean;
+  priceCents: number | null;
 }
 
 export interface PublicStarterWorkOrder {
@@ -525,6 +583,42 @@ export function createPublicClient(baseUrl: string) {
     cancelMaintenanceSubscription(subscriptionId: string) {
       return http.post<{ subscription: PublicMaintenanceSubscription }>(
         `/maintenance-subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
+      );
+    },
+
+    listStarterDomains(clientProjectId: string) {
+      return http.get<{ domains: PublicCustomDomain[] }>(
+        `/starter-projects/${encodeURIComponent(clientProjectId)}/domains`,
+      );
+    },
+
+    createStarterDomain(
+      clientProjectId: string,
+      input: { hostname: string; type: 'www' | 'app' },
+    ) {
+      return http.post<CreatePublicCustomDomainResult>(
+        `/starter-projects/${encodeURIComponent(clientProjectId)}/domains`,
+        input,
+      );
+    },
+
+    removeStarterDomain(clientProjectId: string, domainId: string) {
+      return http.del<{ domain: PublicCustomDomain }>(
+        `/starter-projects/${encodeURIComponent(clientProjectId)}/domains/${encodeURIComponent(domainId)}`,
+      );
+    },
+
+    searchStarterDomains(clientProjectId: string, input: { sld: string }) {
+      return http.post<{ results: PublicDomainAvailability[] }>(
+        `/starter-projects/${encodeURIComponent(clientProjectId)}/domains/search`,
+        input,
+      );
+    },
+
+    purchaseStarterDomain(clientProjectId: string, input: { domain: string }) {
+      return http.post<CreatePublicCustomDomainResult>(
+        `/starter-projects/${encodeURIComponent(clientProjectId)}/domains/purchase`,
+        input,
       );
     },
   };

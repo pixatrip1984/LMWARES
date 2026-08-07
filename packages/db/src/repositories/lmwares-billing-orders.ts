@@ -64,16 +64,6 @@ export class LmwaresBillingOrdersRepository {
     userId: string;
   }): Promise<BillingOrder[]> {
     const existing = await this.getPhasesForOffer(input.offerId);
-    if (existing.length > 0) {
-      const mismatched = existing.find(
-        (order) => order.userId !== input.userId || order.intakeId !== input.intakeId,
-      );
-      if (mismatched) {
-        throw new AppError('conflict', 'La orden de implementación no coincide con la solicitud.');
-      }
-      return existing;
-    }
-
     const offer = await this.db
       .prepare(
         `SELECT id, intake_id, user_id, version, plan, modules, marketing, currency,
@@ -102,47 +92,84 @@ export class LmwaresBillingOrdersRepository {
       throw new AppError('conflict', 'La oferta debe estar aceptada antes de preparar el pago.');
     }
 
+    const singleExisting = existing.length === 1 ? existing[0] : undefined;
+    const legacySinglePhase =
+      singleExisting?.phase === 1 &&
+      singleExisting.amountCents === offer.implementation_amount_cents &&
+      singleExisting.currency === offer.currency;
+    // Las ofertas históricas podían ser inferiores al mínimo actual de cuatro
+    // fases. Si ya tienen su orden única válida, se conserva antes de intentar
+    // dividir el importe con las reglas nuevas.
+    if (legacySinglePhase && singleExisting) {
+      if (
+        singleExisting.userId !== input.userId ||
+        singleExisting.intakeId !== input.intakeId
+      ) {
+        throw new AppError('conflict', 'La orden de implementación no coincide con la oferta congelada.');
+      }
+      return existing;
+    }
+
     const phases = splitImplementationIntoPhases(offer.implementation_amount_cents);
-    const now = nowIso();
-    const statements = phases.map((share) => {
-      const id = newId();
-      const externalReference = `lmw-implementation:${id}`;
-      return this.db
-        .prepare(
-          `INSERT OR IGNORE INTO lmw_billing_orders
-            (id, purpose, commercial_offer_id, intake_id, user_id, status, phase,
-             amount_cents, currency, order_snapshot, external_reference, provider,
-             created_at, updated_at)
-           VALUES (?, 'implementation', ?, ?, ?, 'ready', ?, ?, ?, ?, ?, 'mercado_pago', ?, ?)`,
-        )
-        .bind(
-          id,
-          offer.id,
-          offer.intake_id,
-          offer.user_id,
-          share.phase,
-          share.amountCents,
-          offer.currency,
-          JSON.stringify({
-            schema: 'lmwares.billing-order.implementation.v1',
-            offerId: offer.id,
-            offerVersion: offer.version,
-            plan: offer.plan,
-            modules: JSON.parse(offer.modules),
-            marketing: Boolean(offer.marketing),
-            scopeSummary: offer.scope_summary,
-            implementationDescription: offer.implementation_description,
-            termsVersion: offer.terms_version,
-            termsSnapshot: JSON.parse(offer.terms_snapshot),
-            phase: share.phase,
-            phaseCount: IMPLEMENTATION_PAYMENT_PHASE_COUNT,
-          }),
-          externalReference,
-          now,
-          now,
-        );
+    const expectedByPhase = new Map(phases.map((phase) => [phase.phase, phase.amountCents]));
+    const mismatched = existing.find((order) => {
+      const expectedAmount = expectedByPhase.get(order.phase);
+      return (
+        order.userId !== input.userId ||
+        order.intakeId !== input.intakeId ||
+        expectedAmount === undefined ||
+        order.amountCents !== expectedAmount ||
+        order.currency !== offer.currency
+      );
     });
-    await this.db.batch(statements);
+    if (mismatched) {
+      throw new AppError('conflict', 'La orden de implementación no coincide con la oferta congelada.');
+    }
+
+    if (existing.length === IMPLEMENTATION_PAYMENT_PHASE_COUNT) return existing;
+
+    const now = nowIso();
+    const statements = phases
+      .filter((share) => !existing.some((order) => order.phase === share.phase))
+      .map((share) => {
+        const id = newId();
+        const externalReference = `lmw-implementation:${id}`;
+        return this.db
+          .prepare(
+            `INSERT OR IGNORE INTO lmw_billing_orders
+              (id, purpose, commercial_offer_id, intake_id, user_id, status, phase,
+               amount_cents, currency, order_snapshot, external_reference, provider,
+               created_at, updated_at)
+             VALUES (?, 'implementation', ?, ?, ?, 'ready', ?, ?, ?, ?, ?, 'mercado_pago', ?, ?)`,
+          )
+          .bind(
+            id,
+            offer.id,
+            offer.intake_id,
+            offer.user_id,
+            share.phase,
+            share.amountCents,
+            offer.currency,
+            JSON.stringify({
+              schema: 'lmwares.billing-order.implementation.v1',
+              offerId: offer.id,
+              offerVersion: offer.version,
+              plan: offer.plan,
+              modules: JSON.parse(offer.modules),
+              marketing: Boolean(offer.marketing),
+              scopeSummary: offer.scope_summary,
+              implementationDescription: offer.implementation_description,
+              termsVersion: offer.terms_version,
+              termsSnapshot: JSON.parse(offer.terms_snapshot),
+              phase: share.phase,
+              phaseCount: IMPLEMENTATION_PAYMENT_PHASE_COUNT,
+            }),
+            externalReference,
+            now,
+            now,
+          );
+      });
+    if (statements.length > 0) await this.db.batch(statements);
 
     const created = await this.getPhasesForOffer(input.offerId);
     if (created.length !== IMPLEMENTATION_PAYMENT_PHASE_COUNT) {
@@ -500,94 +527,108 @@ export class LmwaresBillingOrdersRepository {
           duplicatePayment: true,
         };
       }
-      if (paidOrder?.status === 'paid' && paidOrder.intakeId && paidOrder.commercialOfferId) {
-        await this.db.batch([
-          this.db
-            .prepare(
-              `UPDATE lmw_commercial_offers
-               SET status = 'superseded', updated_at = ?
-               WHERE intake_id = ? AND id <> ? AND status IN ('issued', 'accepted')`,
-            )
-            .bind(now, paidOrder.intakeId, paidOrder.commercialOfferId),
-          this.db
-            .prepare(
-              `UPDATE lmw_commercial_offers
-               SET status = 'accepted', updated_at = ?
-               WHERE id = ? AND status IN ('accepted', 'superseded')`,
-            )
-            .bind(now, paidOrder.commercialOfferId),
-          this.db
-            .prepare(
-              `UPDATE lmw_package_intakes
-               SET status = 'converted', updated_at = ?
-               WHERE id = ? AND user_id = ? AND status = 'offer_ready'`,
-            )
-            .bind(now, paidOrder.intakeId, paidOrder.userId),
-          this.db
-            .prepare(
-              `UPDATE lmw_billing_orders
-               SET status = 'canceled', checkout_url = NULL,
-                   last_provider_status = 'superseded_by_confirmed_payment', updated_at = ?
-               WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
-                 AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)
-                 AND status IN ('ready', 'checkout_creating', 'checkout_failed',
-                                'payment_pending', 'payment_failed')
-                 AND provider_payment_id IS NULL AND paid_at IS NULL
-                 AND NOT EXISTS (
-                   SELECT 1 FROM lmw_billing_payment_attempts pa
-                   WHERE pa.billing_order_id = lmw_billing_orders.id
-                     AND pa.disposition = 'pending'
-                 )`,
-            )
-            .bind(now, paidOrder.intakeId, paidOrder.id, paidOrder.commercialOfferId),
-          this.db
-            .prepare(
-              `UPDATE lmw_billing_orders
-               SET payment_review_required = 1,
-                   last_provider_status = 'parallel_payment_pending_after_other_paid',
-                   updated_at = ?
-               WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
-                 AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)
-                 AND status IN ('ready', 'checkout_creating', 'checkout_failed',
-                                'payment_pending', 'payment_failed')
-                 AND provider_payment_id IS NULL AND paid_at IS NULL
-                 AND EXISTS (
-                   SELECT 1 FROM lmw_billing_payment_attempts pa
-                   WHERE pa.billing_order_id = lmw_billing_orders.id
-                     AND pa.disposition = 'pending'
-                 )`,
-            )
-            .bind(now, paidOrder.intakeId, paidOrder.id, paidOrder.commercialOfferId),
-          this.db
-            .prepare(
-              `INSERT OR IGNORE INTO lmw_notifications
-                (id, user_id, intake_id, channel, template, to_address, dedupe_key,
-                 status, attempt, max_attempts, payload, sent_at, created_at, updated_at)
-               SELECT ?, u.id, NULL, 'in_app', 'implementation-payment-confirmed', u.email, ?,
-                      'sent', 0, 1, ?, ?, ?, ?
-               FROM lmw_users u WHERE u.id = ?`,
-            )
-            .bind(
-              newId(),
-              `implementation-payment-confirmed:${paidOrder.id}`,
-              JSON.stringify({
-                kind: 'implementation-payment-confirmed',
-                billingOrderId: paidOrder.id,
-                intakeId: paidOrder.intakeId,
-                offerId: paidOrder.commercialOfferId,
-                amountCents: paidOrder.amountCents,
-                currency: paidOrder.currency,
-                providerPaymentId: input.paymentId,
-              }),
-              now,
-              now,
-              now,
-              paidOrder.userId,
-            ),
-        ]);
-        await new LmwaresStarterWorkOrdersRepository(this.db).ensureFromPaidBillingOrder(
-          paidOrder.id,
-        );
+      if (
+        paidOrder?.status === 'paid' &&
+        paidOrder.intakeId &&
+        paidOrder.commercialOfferId
+      ) {
+        const paymentNotification = this.db
+          .prepare(
+            `INSERT OR IGNORE INTO lmw_notifications
+              (id, user_id, intake_id, channel, template, to_address, dedupe_key,
+               status, attempt, max_attempts, payload, sent_at, created_at, updated_at)
+             SELECT ?, u.id, NULL, 'in_app', 'implementation-payment-confirmed', u.email, ?,
+                    'sent', 0, 1, ?, ?, ?, ?
+             FROM lmw_users u WHERE u.id = ?`,
+          )
+          .bind(
+            newId(),
+            `implementation-payment-confirmed:${paidOrder.id}`,
+            JSON.stringify({
+              kind: 'implementation-payment-confirmed',
+              billingOrderId: paidOrder.id,
+              intakeId: paidOrder.intakeId,
+              offerId: paidOrder.commercialOfferId,
+              amountCents: paidOrder.amountCents,
+              currency: paidOrder.currency,
+              providerPaymentId: input.paymentId,
+            }),
+            now,
+            now,
+            now,
+            paidOrder.userId,
+          );
+
+        if (paidOrder.phase === 1) {
+          await this.db.batch([
+            this.db
+              .prepare(
+                `UPDATE lmw_commercial_offers
+                 SET status = 'superseded', updated_at = ?
+                 WHERE intake_id = ? AND id <> ? AND status IN ('issued', 'accepted')`,
+              )
+              .bind(now, paidOrder.intakeId, paidOrder.commercialOfferId),
+            this.db
+              .prepare(
+                `UPDATE lmw_commercial_offers
+                 SET status = 'accepted', updated_at = ?
+                 WHERE id = ? AND status IN ('accepted', 'superseded')`,
+              )
+              .bind(now, paidOrder.commercialOfferId),
+            this.db
+              .prepare(
+                `UPDATE lmw_package_intakes
+                 SET status = 'converted', updated_at = ?
+                 WHERE id = ? AND user_id = ? AND status = 'offer_ready'`,
+              )
+              .bind(now, paidOrder.intakeId, paidOrder.userId),
+            this.db
+              .prepare(
+                `UPDATE lmw_billing_orders
+                 SET status = 'canceled', checkout_url = NULL,
+                     last_provider_status = 'superseded_by_confirmed_payment', updated_at = ?
+                 WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                   AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)
+                   AND status IN ('ready', 'checkout_creating', 'checkout_failed',
+                                  'payment_pending', 'payment_failed')
+                   AND provider_payment_id IS NULL AND paid_at IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM lmw_billing_payment_attempts pa
+                     WHERE pa.billing_order_id = lmw_billing_orders.id
+                       AND pa.disposition = 'pending'
+                   )`,
+              )
+              .bind(now, paidOrder.intakeId, paidOrder.id, paidOrder.commercialOfferId),
+            this.db
+              .prepare(
+                `UPDATE lmw_billing_orders
+                 SET payment_review_required = 1,
+                     last_provider_status = 'parallel_payment_pending_after_other_paid',
+                     updated_at = ?
+                 WHERE intake_id = ? AND purpose = 'implementation' AND id <> ?
+                   AND (commercial_offer_id IS NULL OR commercial_offer_id <> ?)
+                   AND status IN ('ready', 'checkout_creating', 'checkout_failed',
+                                  'payment_pending', 'payment_failed')
+                   AND provider_payment_id IS NULL AND paid_at IS NULL
+                   AND EXISTS (
+                     SELECT 1 FROM lmw_billing_payment_attempts pa
+                     WHERE pa.billing_order_id = lmw_billing_orders.id
+                       AND pa.disposition = 'pending'
+                   )`,
+              )
+              .bind(now, paidOrder.intakeId, paidOrder.id, paidOrder.commercialOfferId),
+            paymentNotification,
+          ]);
+          // Sólo la fase 1 crea la orden de trabajo y el proyecto Starter. Las
+          // fases 2-4 pueden pagarse fuera de orden y sólo confirman su pago.
+          await new LmwaresStarterWorkOrdersRepository(this.db).ensureFromPaidBillingOrder(
+            paidOrder.id,
+          );
+        } else {
+          // Un pago adelantado no convierte el intake ni supersede ofertas:
+          // todavía no existe una orden de trabajo que el cliente pueda revisar.
+          await paymentNotification.run();
+        }
       }
     }
 

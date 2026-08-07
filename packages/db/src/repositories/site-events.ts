@@ -455,10 +455,10 @@ export class SiteEventsRepository {
       .run();
 
     if ((result.meta.changes ?? 0) > 0) {
-      const registration = await this.getRegistration(eventId, registrationId);
+      const registration = await this.getRegistration(projectId, eventId, registrationId);
       return registration ? { kind: 'updated', registration } : { kind: 'not_found' };
     }
-    const registration = await this.getRegistration(eventId, registrationId);
+    const registration = await this.getRegistration(projectId, eventId, registrationId);
     return registration ? { kind: 'full' } : { kind: 'not_found' };
   }
 
@@ -543,7 +543,7 @@ export class SiteEventsRepository {
 
     if ((insertResult?.meta.changes ?? 0) > 0) {
       const [registration, event] = await Promise.all([
-        this.getRegistration(data.eventId, id),
+        this.getRegistration(data.projectId, data.eventId, id),
         this.getPublicById(data.projectId, data.eventId),
       ]);
       if (registration && event) {
@@ -604,16 +604,19 @@ export class SiteEventsRepository {
   }
 
   private async getRegistration(
+    projectId: string,
     eventId: string,
     registrationId: string,
   ): Promise<SiteEventRegistration | null> {
     const row = await this.db
       .prepare(
-        `SELECT * FROM lmwares_event_registrations
-         WHERE event_id = ? AND id = ?
+        `SELECT registration.*
+         FROM lmwares_event_registrations registration
+         INNER JOIN lmwares_events event ON event.id = registration.event_id
+         WHERE registration.event_id = ? AND registration.id = ? AND event.project_id = ?
          LIMIT 1`,
       )
-      .bind(eventId, registrationId)
+      .bind(eventId, registrationId, projectId)
       .first<SiteEventRegistrationRow>();
     return row ? mapRegistration(row) : null;
   }

@@ -3,6 +3,10 @@
 TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"
 TURNSTILE_DISABLED="1"
 FREE_RUNNER_TOKEN="reemplaza-con-un-token-local-largo"
+# Token compartido con Admin API para el botón "Reconciliar ahora" de pagos
+# atascados; ausente = acción deshabilitada. Genera el mismo valor y pégalo en
+# ambos Workers.
+OPS_RECOVERY_TOKEN="reemplaza-con-un-token-local-largo-2"
 # Google Cloud Console > APIs y servicios > Credenciales > Cliente OAuth Web.
 # Redirect local exacto: http://127.0.0.1:8887/auth/google/callback
 GOOGLE_OAUTH_CLIENT_ID=""
@@ -23,3 +27,23 @@ MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET=""
 MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET=""
 # Candado explícito del checkout técnico con credenciales de prueba.
 MERCADO_PAGO_TEST_MODE="1"
+# Sólo para una prueba controlada después de activar Cloudflare for SaaS.
+# DOMAIN_PROVIDER se define en wrangler.toml; nunca pegues el token en el repo.
+# CLOUDFLARE_SAAS_API_TOKEN=""
+# Service account de Google reutilizado para Indexing API / Site Verification.
+# client_email tal cual del JSON; private_key con las líneas BEGIN/END incluidas.
+# DOMAIN_REGISTRAR_PROVIDER se define en wrangler.toml (default "manual").
+# GOOGLE_INDEXING_CLIENT_EMAIL=""
+# GOOGLE_INDEXING_PRIVATE_KEY=""
+# Sólo para una prueba controlada contra un dominio barato propio.
+# NAMESILO_API_KEY=""
+# Namesilo bloquea las IPs de salida de Cloudflare Workers (403); se necesita
+# un proxy fuera de Cloudflare (ver infra/namesilo-proxy/) para reenviar las
+# llamadas. Ambos valores deben coincidir con el proxy desplegado.
+# NAMESILO_PROXY_BASE_URL="https://<lambda-function-url>.lambda-url.<region>.on.aws"
+# NAMESILO_PROXY_SHARED_SECRET=""
+# Porkbun (registrador de dominios activo). No bloquea IPs de Cloudflare
+# Workers, no necesita proxy. Usa una key sandbox (prefijo pk1_sb_/sk1_sb_)
+# para probar sin cargos reales antes de habilitar producción.
+# PORKBUN_API_KEY=""
+# PORKBUN_SECRET_API_KEY=""

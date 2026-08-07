@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type {
   LmwaresProject,
   LmwaresProjectHealth,
@@ -10,6 +10,7 @@ import type {
 import { syncLmwaresProjectsSchema, type SyncLmwaresProjectsInput } from '@starter/validation';
 import { ProjectControlPanel } from '../components/projects/ProjectControlPanel';
 import { api } from '../lib/api';
+import { isClientStarterProject } from '../lib/project-classification';
 
 type DetailTab = 'summary' | 'phases' | 'snapshots' | 'control' | 'registry';
 type RegistryMode = 'loading' | 'registry' | 'local-scan' | 'empty' | 'error';
@@ -27,6 +28,8 @@ const PRIORITY_SCORE: Record<LmwaresProjectPriority, number> = {
 };
 
 export function ProjectsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedProjectId = searchParams.get('projectId')?.trim() || null;
   const [projects, setProjects] = useState<LmwaresProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>('summary');
@@ -51,6 +54,7 @@ export function ProjectsPage() {
     projects.find((project) => project.id === selectedProjectId) ?? orderedProjects[0] ?? null;
   const selectedPhase = selectedProject ? getCurrentPhase(selectedProject) : null;
   const actionableCount = projects.filter((project) => project.health !== 'on-track').length;
+  const clientProjectCount = projects.filter((project) => isClientStarterProject(project)).length;
 
   useEffect(() => {
     let cancelled = false;
@@ -113,11 +117,28 @@ export function ProjectsPage() {
     }
 
     setSelectedProjectId((current) =>
-      current && orderedProjects.some((project) => project.id === current)
+      requestedProjectId && orderedProjects.some((project) => project.id === requestedProjectId)
+        ? requestedProjectId
+        : current && orderedProjects.some((project) => project.id === current)
         ? current
         : firstProject.id,
     );
-  }, [orderedProjects]);
+  }, [orderedProjects, requestedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      if (!searchParams.get('projectId')) return;
+      const next = new URLSearchParams(searchParams);
+      next.delete('projectId');
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    const currentProjectId = searchParams.get('projectId')?.trim() || null;
+    if (currentProjectId === selectedProjectId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('projectId', selectedProjectId);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, selectedProjectId, setSearchParams]);
 
   useEffect(() => {
     if (!selectedProjectId || registryMode !== 'registry') {
@@ -357,14 +378,28 @@ export function ProjectsPage() {
                   <h2 className="mt-1 truncate text-xl font-black">{selectedProject.name}</h2>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <HealthBadge health={selectedProject.health} />
+                  <div className="flex items-center gap-2">
+                    <ProjectOriginBadge project={selectedProject} />
+                    <HealthBadge health={selectedProject.health} />
+                  </div>
                   <div className="flex gap-2">
-                    <Link
-                      to={`/projects/${encodeURIComponent(selectedProject.id)}/modules/blog`}
-                      className="rounded-md border border-[#24598c] bg-[#eaf4ff] px-3 py-2 text-xs font-black text-[#123f69] transition hover:bg-[#d8ebff]"
-                    >
-                      Abrir módulos
-                    </Link>
+                    {isClientStarterProject(selectedProject) ? (
+                      <Link
+                        to={`/projects/${encodeURIComponent(selectedProject.id)}/modules/blog`}
+                        className="rounded-md border border-[#24598c] bg-[#eaf4ff] px-3 py-2 text-xs font-black text-[#123f69] transition hover:bg-[#d8ebff]"
+                      >
+                        Abrir módulos
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        title="Este registro es un proyecto interno de Oracle: los módulos de contenido (blog, galerías, docs, formularios, eventos) solo aplican a sitios Starter de clientes."
+                        className="cursor-not-allowed rounded-md border border-black/10 bg-[#f1f3f0] px-3 py-2 text-xs font-black text-[#8a938d]"
+                      >
+                        Módulos no aplican
+                      </button>
+                    )}
                     <Link
                       to={`/projects/prepare?project=${encodeURIComponent(selectedProject.id)}&name=${encodeURIComponent(selectedProject.name)}`}
                       className="rounded-md bg-[#17201b] px-3 py-2 text-xs font-black text-white transition hover:bg-[#28332c]"
@@ -423,6 +458,7 @@ export function ProjectsPage() {
                     mode={registryMode}
                     meta={scanMeta}
                     projectCount={projects.length}
+                    clientProjectCount={clientProjectCount}
                     actionableCount={actionableCount}
                     canSync={Boolean(localScan)}
                     syncing={syncing}
@@ -671,6 +707,7 @@ function RegistryPanel({
   mode,
   meta,
   projectCount,
+  clientProjectCount,
   actionableCount,
   canSync,
   syncing,
@@ -680,6 +717,7 @@ function RegistryPanel({
   mode: RegistryMode;
   meta: ScanMeta;
   projectCount: number;
+  clientProjectCount: number;
   actionableCount: number;
   canSync: boolean;
   syncing: boolean;
@@ -707,6 +745,7 @@ function RegistryPanel({
           value={meta.generatedAt ? new Date(meta.generatedAt).toLocaleString('es-MX') : 'Sin scan'}
         />
         <MetricTile label="Registrados" value={String(projectCount)} detail="proyectos" />
+        <MetricTile label="Clientes" value={String(clientProjectCount)} detail="sitios Starter" />
         <MetricTile label="Atención" value={String(actionableCount)} detail="requieren acción" />
       </div>
       <button
@@ -757,7 +796,10 @@ function ProjectCard({
             <h2 className="mt-1 truncate text-xl font-black">{project.name}</h2>
             <p className="mt-1 text-sm text-[#66736a]">{project.business}</p>
           </div>
-          <PriorityBadge priority={project.priority} />
+          <div className="flex flex-col items-end gap-2">
+            <PriorityBadge priority={project.priority} />
+            <ProjectOriginBadge project={project} />
+          </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {project.tags.map((tag) => (
@@ -927,6 +969,24 @@ function PriorityBadge({ priority }: { priority: LmwaresProjectPriority }) {
         : 'bg-[#f1f3f0] text-[#5c6860]';
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-black ${className}`}>{priority}</span>
+  );
+}
+
+/**
+ * Distinguishes a registry entry that is an actual client Starter site
+ * (eligible for `/projects/:id/modules/*` content management) from Oracle's
+ * own internal projects, so operators don't confuse the two at a glance.
+ */
+function ProjectOriginBadge({ project }: { project: LmwaresProject }) {
+  const client = isClientStarterProject(project);
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-black ${
+        client ? 'bg-[#eaf4ff] text-[#123f69]' : 'bg-[#f1f3f0] text-[#5c6860]'
+      }`}
+    >
+      {client ? 'Cliente Starter' : 'Interno Oracle'}
+    </span>
   );
 }
 

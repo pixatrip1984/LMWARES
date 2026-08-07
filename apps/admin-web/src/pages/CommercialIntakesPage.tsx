@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   AppError,
   type BillingOrder,
@@ -9,10 +10,15 @@ import {
   type CommercialOffer,
   type PackageIntake,
   type PackageIntakeStatus,
+  type StarterClientProject,
   type StarterWorkOrder,
 } from '@starter/domain';
 import { Button, Card, CardBody, EmptyState, ErrorBanner, PageHeader, Spinner, Textarea } from '@starter/ui';
 import { api } from '../lib/api';
+import {
+  buildStarterPublicationBlockers,
+  isValidStarterPublicationUrl,
+} from '../lib/commercial-flow';
 
 const STATUS_LABELS: Record<PackageIntakeStatus, string> = {
   submitted: 'Pendiente',
@@ -23,12 +29,15 @@ const STATUS_LABELS: Record<PackageIntakeStatus, string> = {
 };
 
 export function CommercialIntakesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedIntakeId = searchParams.get('intakeId')?.trim() || null;
   const [items, setItems] = useState<PackageIntake[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<PackageIntakeStatus | ''>('');
   const [notes, setNotes] = useState('');
   const [offers, setOffers] = useState<CommercialOffer[]>([]);
   const [billingOrders, setBillingOrders] = useState<BillingOrder[]>([]);
+  const [clientProject, setClientProject] = useState<StarterClientProject | null>(null);
   const [workOrder, setWorkOrder] = useState<StarterWorkOrder | null>(null);
   const [maintenanceSubscription, setMaintenanceSubscription] = useState<MaintenanceSubscription | null>(null);
   const [projects, setProjects] = useState<LmwaresProject[]>([]);
@@ -43,18 +52,23 @@ export function CommercialIntakesPage() {
     modules: [] as PackageIntake['modules'],
     marketing: false,
   });
-  const [saving, setSaving] = useState(false);
+  const [activeAction, setActiveAction] = useState<
+    'review' | 'assign' | 'status' | 'publish' | 'offer' | 'reopen' | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const result = await api.listCommercialPackageIntakes({ status: status || undefined, limit: 100 });
     setItems(result.intakes);
     setSelectedId((current) =>
-      current && result.intakes.some((item) => item.id === current)
+      requestedIntakeId && result.intakes.some((item) => item.id === requestedIntakeId)
+        ? requestedIntakeId
+        : current && result.intakes.some((item) => item.id === current)
         ? current
         : result.intakes[0]?.id ?? null,
     );
-  }, [status]);
+  }, [requestedIntakeId, status]);
 
   useEffect(() => {
     setItems(null);
@@ -69,12 +83,53 @@ export function CommercialIntakesPage() {
     () => items?.find((item) => item.id === selectedId) ?? null,
     [items, selectedId],
   );
+  const acceptedOffer = useMemo(
+    () => offers.find((offer) => offer.status === 'accepted') ?? null,
+    [offers],
+  );
+  const publicationBlockers = useMemo(
+    () =>
+      buildStarterPublicationBlockers({
+        acceptedOffer,
+        billingOrders,
+        workOrder,
+        maintenanceSubscription,
+        publicUrl,
+      }),
+    [acceptedOffer, billingOrders, maintenanceSubscription, publicUrl, workOrder],
+  );
+  const publicationReady = workOrder?.status === 'live' || publicationBlockers.length === 0;
+  const phaseOrders = useMemo(
+    () =>
+      ([1, 2, 3, 4] as const).map((phase) => ({
+        phase,
+        order: billingOrders.find((order) => order.phase === phase) ?? null,
+      })),
+    [billingOrders],
+  );
+
+  useEffect(() => {
+    if (!selectedId) {
+      if (!searchParams.get('intakeId')) return;
+      const next = new URLSearchParams(searchParams);
+      next.delete('intakeId');
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    const currentIntakeId = searchParams.get('intakeId')?.trim() || null;
+    if (currentIntakeId === selectedId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('intakeId', selectedId);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, selectedId, setSearchParams]);
 
   useEffect(() => {
     setNotes(selected?.reviewNotes ?? '');
+    setActionError(null);
     if (!selected) {
       setOffers([]);
       setBillingOrders([]);
+      setClientProject(null);
       setWorkOrder(null);
       setMaintenanceSubscription(null);
       return;
@@ -95,6 +150,7 @@ export function CommercialIntakesPage() {
       .then(([result, registry]) => {
         setOffers(result.offers);
         setBillingOrders(result.billingOrders);
+        setClientProject(result.clientProject);
         setWorkOrder(result.workOrder);
         setMaintenanceSubscription(result.maintenanceSubscription);
         setProjects(registry?.projects ?? []);
@@ -116,6 +172,7 @@ export function CommercialIntakesPage() {
       .catch(() => {
         setOffers([]);
         setBillingOrders([]);
+        setClientProject(null);
         setWorkOrder(null);
         setMaintenanceSubscription(null);
       });
@@ -123,8 +180,9 @@ export function CommercialIntakesPage() {
 
   async function review(nextStatus: 'scope_review' | 'declined') {
     if (!selected) return;
-    setSaving(true);
+    setActiveAction('review');
     setError(null);
+    setActionError(null);
     try {
       const result = await api.reviewCommercialPackageIntake(selected.id, {
         status: nextStatus,
@@ -134,23 +192,24 @@ export function CommercialIntakesPage() {
         current?.map((item) => (item.id === result.intake.id ? result.intake : item)) ?? [],
       );
     } catch (err) {
-      setError(err instanceof AppError ? err.message : 'No se pudo guardar la revisión.');
+      setActionError(err instanceof AppError ? err.message : 'No se pudo guardar la revisión.');
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   }
 
   async function assignProject() {
     if (!selected || !projectId) return;
-    setSaving(true);
+    setActiveAction('assign');
     setError(null);
+    setActionError(null);
     try {
       const result = await api.assignStarterWorkOrder(selected.id, projectId);
       setWorkOrder(result.workOrder);
     } catch (err) {
-      setError(err instanceof AppError ? err.message : 'No se pudo enlazar el proyecto.');
+      setActionError(err instanceof AppError ? err.message : 'No se pudo enlazar el proyecto.');
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   }
 
@@ -158,29 +217,37 @@ export function CommercialIntakesPage() {
     next: 'in_build' | 'client_review' | 'ready_to_publish' | 'canceled',
   ) {
     if (!selected || !workOrder) return;
-    setSaving(true);
+    setActiveAction('status');
     setError(null);
+    setActionError(null);
     try {
       const result = await api.updateStarterWorkOrderStatus(selected.id, next);
       setWorkOrder(result.workOrder);
     } catch (err) {
-      setError(err instanceof AppError ? err.message : 'No se pudo avanzar la orden de trabajo.');
+      setActionError(
+        err instanceof AppError ? err.message : 'No se pudo avanzar la orden de trabajo.',
+      );
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   }
 
   async function publishWorkOrder() {
     if (!selected || !publicUrl) return;
-    setSaving(true);
+    setActiveAction('publish');
     setError(null);
+    setActionError(null);
     try {
       const result = await api.publishStarterWorkOrder(selected.id, publicUrl);
       setWorkOrder(result.workOrder);
     } catch (err) {
-      setError(err instanceof AppError ? err.message : 'No se pudo abrir la compuerta de publicación.');
+      setActionError(
+        err instanceof AppError
+          ? err.message
+          : 'No se pudo abrir la compuerta de publicación.',
+      );
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   }
 
@@ -192,8 +259,9 @@ export function CommercialIntakesPage() {
       setError('Revisa los importes de implementación y mensualidad.');
       return;
     }
-    setSaving(true);
+    setActiveAction('offer');
     setError(null);
+    setActionError(null);
     try {
       const result = await api.issueCommercialOffer(selected.id, {
         plan: selected.plan,
@@ -211,9 +279,9 @@ export function CommercialIntakesPage() {
       )]);
       await load();
     } catch (err) {
-      setError(err instanceof AppError ? err.message : 'No se pudo emitir la oferta.');
+      setActionError(err instanceof AppError ? err.message : 'No se pudo emitir la oferta.');
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   }
 
@@ -224,21 +292,20 @@ export function CommercialIntakesPage() {
     if (!window.confirm('Se cancelará la orden pendiente y la oferta aceptada volverá a revisión. No se puede deshacer.')) {
       return;
     }
-    setSaving(true);
+    setActiveAction('reopen');
     setError(null);
+    setActionError(null);
     try {
       const result = await api.reopenExpiredImplementationPayment(selected.id);
       setItems((current) =>
         current?.map((item) => (item.id === result.intake.id ? result.intake : item)) ?? [],
       );
       setOffers(result.offers);
-      setBillingOrders((current) =>
-        current.map((order) => (order.id === result.billingOrder.id ? result.billingOrder : order)),
-      );
+      setBillingOrders(result.billingOrders);
     } catch (err) {
-      setError(err instanceof AppError ? err.message : 'No se pudo reabrir la oferta.');
+      setActionError(err instanceof AppError ? err.message : 'No se pudo reabrir la oferta.');
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   }
 
@@ -363,6 +430,275 @@ export function CommercialIntakesPage() {
                       disabled={selected.status === 'declined' || selected.status === 'converted'}
                     />
                   </div>
+                  <section className="space-y-4 border-t border-surface-border pt-6">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-brand-700">
+                        Seguimiento comercial y operativo
+                      </p>
+                      <h3 className="mt-1 text-xl font-bold text-gray-900">
+                        Estado completo del flujo Starter
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Aquí se ve la oferta aceptada, las 4 fases, la orden de trabajo, el
+                        proyecto Starter del cliente, el proyecto interno de Oracle, el
+                        mantenimiento y la publicación.
+                      </p>
+                    </div>
+                    <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                      <Info
+                        label="Oferta aceptada"
+                        value={
+                          acceptedOffer
+                            ? `v${acceptedOffer.version} aceptada el ${acceptedOffer.acceptedAt ? formatDate(acceptedOffer.acceptedAt) : 'cliente pendiente de pago fase 1'}`
+                            : 'Todavía no existe una oferta aceptada; el cliente aún debe aceptar una versión vigente.'
+                        }
+                      />
+                      <Info
+                        label="Decisión de mantenimiento"
+                        value={acceptedOffer ? maintenanceDecisionSummary(acceptedOffer) : maintenancePreferenceLabel(selected.brief.maintenancePlanPreference)}
+                      />
+                      <Info
+                        label="Estado de la orden de trabajo"
+                        value={workOrder ? workOrderStatusLabel(workOrder.status) : 'La orden de trabajo se creará cuando la fase 1 quede pagada.'}
+                      />
+                      <Info
+                        label="Estado de publicación"
+                        value={
+                          workOrder?.status === 'live'
+                            ? `Publicado en ${workOrder.publishedUrl ?? 'URL pendiente de registrar'}`
+                            : publicationReady
+                              ? 'Listo para publicar en cuanto el admin confirme la URL.'
+                              : `Bloqueado por ${publicationBlockers.length} requisito(s).`
+                        }
+                      />
+                      <Info
+                        label="Proyecto Starter del cliente"
+                        value={
+                          clientProject ? (
+                            <div className="space-y-1">
+                              <div>{clientProject.siteName} · {clientProjectStatusLabel(clientProject.status)}</div>
+                              <Link
+                                className="text-sm font-semibold text-brand-700 hover:underline"
+                                to={`/starter-domains?clientProjectId=${encodeURIComponent(clientProject.id)}`}
+                              >
+                                Ver dominios del proyecto Starter
+                              </Link>
+                            </div>
+                          ) : 'Aún no existe proyecto Starter visible; verifica que la fase 1 esté pagada y que la orden se haya aprovisionado.'
+                        }
+                      />
+                      <Info
+                        label="Proyecto interno de Oracle"
+                        value={
+                          workOrder?.projectId ? (
+                            <Link
+                              className="font-semibold text-brand-700 hover:underline"
+                              to={`/projects?projectId=${encodeURIComponent(workOrder.projectId)}`}
+                            >
+                              {workOrder.projectId} · Abrir registro interno
+                            </Link>
+                          ) : 'Falta enlazar el proyecto interno de Oracle antes de avanzar a publicación.'
+                        }
+                      />
+                      <Info
+                        label="Subdominio Starter reservado"
+                        value={
+                          clientProject
+                            ? `${clientProject.slug}.lmwares.com`
+                            : 'Aún no hay subdominio visible; se genera con el proyecto Starter del cliente.'
+                        }
+                      />
+                      <Info
+                        label="Mensualidad / autorización"
+                        value={maintenanceStatusSummary(acceptedOffer, maintenanceSubscription)}
+                      />
+                    </dl>
+                    <div className="rounded-xl border border-surface-border bg-surface-muted/50 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            Fases de implementación
+                          </p>
+                          <p className="mt-1 text-sm text-gray-700">
+                            {billingOrders.filter((order) => order.status === 'paid').length}/4 fases
+                            pagadas.
+                          </p>
+                        </div>
+                        {phase1Order && acceptedOffer && phase1Order.status !== 'paid' ? (
+                          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+                            Oferta aceptada esperando fase 1
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {phaseOrders.map(({ phase, order }) => (
+                          <article key={phase} className="rounded-lg border border-white bg-white p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-semibold text-gray-900">Fase {phase}</p>
+                              <span className={phaseStatusClass(order)}>
+                                {phaseStatusLabel(order)}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm text-gray-700">
+                              {phaseStatusDetail(order, phase)}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {order ? `${money(order.amountCents)} · ${order.status}` : 'Sin orden generada todavía'}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                    {workOrder ? (
+                      <div className="rounded-xl border border-surface-border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                              Operación del work order
+                            </p>
+                            <h4 className="mt-1 text-lg font-bold text-gray-900">
+                              Orden de trabajo Starter
+                            </h4>
+                            <p className="mt-1 text-sm text-gray-500">
+                              El proyecto del cliente se reserva con la fase 1; el repositorio
+                              interno de Oracle se enlaza y opera por separado.
+                            </p>
+                          </div>
+                          {workOrder.assignedBy ? (
+                            <span className="rounded-full bg-surface-muted px-3 py-1 text-xs text-gray-600">
+                              Enlazado por {workOrder.assignedBy}
+                            </span>
+                          ) : null}
+                        </div>
+                        {actionError ? (
+                          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            {actionError}
+                          </p>
+                        ) : null}
+                        {!workOrder.projectId ? (
+                          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                            <select
+                              aria-label="Proyecto Oracle"
+                              className="rounded-lg border border-surface-border px-3 py-2 text-sm"
+                              value={projectId}
+                              onChange={(event) => setProjectId(event.target.value)}
+                              disabled={activeAction !== null}
+                            >
+                              <option value="">Selecciona un proyecto sincronizado</option>
+                              {projects.map((project) => (
+                                <option key={project.id} value={project.id}>
+                                  {project.name} · {project.id}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              onClick={assignProject}
+                              disabled={activeAction !== null || !projectId}
+                            >
+                              {activeAction === 'assign' ? 'Enlazando…' : 'Enlazar proyecto Oracle'}
+                            </Button>
+                          </div>
+                        ) : null}
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          {workOrder.status === 'in_build' ? (
+                            <Button
+                              onClick={() => changeWorkStatus('client_review')}
+                              disabled={activeAction !== null}
+                            >
+                              {activeAction === 'status'
+                                ? 'Actualizando…'
+                                : 'Enviar a revisión del cliente'}
+                            </Button>
+                          ) : null}
+                          {workOrder.status === 'client_review' ? (
+                            <>
+                              <Button
+                                variant="secondary"
+                                onClick={() => changeWorkStatus('in_build')}
+                                disabled={activeAction !== null}
+                              >
+                                {activeAction === 'status'
+                                  ? 'Actualizando…'
+                                  : 'Volver a construcción'}
+                              </Button>
+                              <Button
+                                onClick={() => changeWorkStatus('ready_to_publish')}
+                                disabled={activeAction !== null}
+                              >
+                                {activeAction === 'status'
+                                  ? 'Actualizando…'
+                                  : 'Marcar lista para publicar'}
+                              </Button>
+                            </>
+                          ) : null}
+                          {workOrder.status === 'ready_to_publish' ? (
+                            <div className="w-full space-y-3">
+                              <Button
+                                variant="secondary"
+                                onClick={() => changeWorkStatus('client_review')}
+                                disabled={activeAction !== null}
+                              >
+                                {activeAction === 'status'
+                                  ? 'Actualizando…'
+                                  : 'Volver a revisión del cliente'}
+                              </Button>
+                              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                <input
+                                  aria-label="URL pública inicial"
+                                  className="rounded-lg border border-surface-border px-3 py-2 text-sm"
+                                  placeholder="https://cliente.lmwares.com"
+                                  value={publicUrl}
+                                  onChange={(event) => setPublicUrl(event.target.value)}
+                                  disabled={activeAction !== null}
+                                />
+                                <Button
+                                  onClick={publishWorkOrder}
+                                  disabled={activeAction !== null || publicationBlockers.length > 0}
+                                >
+                                  {activeAction === 'publish'
+                                    ? 'Publicando…'
+                                    : 'Confirmar publicación'}
+                                </Button>
+                              </div>
+                              {!isValidStarterPublicationUrl(publicUrl) && publicUrl.trim() ? (
+                                <p className="text-xs text-amber-700">
+                                  Usa una URL HTTPS terminada en <code>.lmwares.com</code> antes de
+                                  publicar.
+                                </p>
+                              ) : null}
+                              {publicationBlockers.length ? (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                  <p className="font-semibold">
+                                    Publicación bloqueada hasta resolver lo siguiente:
+                                  </p>
+                                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                                    {publicationBlockers.map((blocker) => (
+                                      <li key={blocker}>{blocker}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {workOrder.status === 'live' && workOrder.publishedUrl ? (
+                            <a
+                              className="text-sm font-semibold text-blue-700"
+                              href={workOrder.publishedUrl}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              Abrir sitio publicado ↗
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </section>
+                  {actionError && !workOrder ? (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {actionError}
+                    </p>
+                  ) : null}
                   {selected.status === 'submitted' || selected.status === 'scope_review' ? (
                     <div className="space-y-2">
                       {selected.status === 'submitted' ? (
@@ -373,10 +709,18 @@ export function CommercialIntakesPage() {
                         </p>
                       ) : null}
                       <div className="flex flex-wrap gap-3">
-                        <Button onClick={() => review('scope_review')} disabled={saving}>
-                          {saving ? 'Guardando…' : selected.status === 'submitted' ? 'Tomar revisión' : 'Guardar revisión'}
+                        <Button onClick={() => review('scope_review')} disabled={activeAction !== null}>
+                          {activeAction === 'review'
+                            ? 'Guardando…'
+                            : selected.status === 'submitted'
+                              ? 'Tomar revisión'
+                              : 'Guardar revisión'}
                         </Button>
-                        <Button variant="secondary" onClick={() => review('declined')} disabled={saving}>
+                        <Button
+                          variant="secondary"
+                          onClick={() => review('declined')}
+                          disabled={activeAction !== null}
+                        >
                           No aprobar
                         </Button>
                       </div>
@@ -385,42 +729,83 @@ export function CommercialIntakesPage() {
                   {selected.status === 'scope_review' || selected.status === 'offer_ready' ? (
                     <section className="space-y-4 border-t border-surface-border pt-6">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-brand-700">Oferta versionada</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-brand-700">
+                          Oferta versionada
+                        </p>
                         <h3 className="mt-1 text-xl font-bold text-gray-900">
-                          {offers.some((offer) => offer.status === 'issued') ? 'Emitir una revisión' : 'Preparar oferta final'}
+                          {offers.some((offer) => offer.status === 'issued')
+                            ? 'Emitir una revisión'
+                            : 'Preparar oferta final'}
                         </h3>
-                        <p className="mt-1 text-sm text-gray-500">Vigencia automática de 15 días. Usa MXN $0 si el cliente contrata únicamente la implementación.</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Vigencia automática de 15 días. El monto mensual final se deriva de la
+                          decisión real de mantenimiento del cliente.
+                        </p>
                       </div>
                       {offers.length ? (
                         <div className="space-y-2">
                           {offers.map((offer) => (
-                            <div key={offer.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-muted px-3 py-2 text-sm">
-                              <span>v{offer.version} · {money(offer.implementationAmountCents)} + {money(offer.monthlyAmountCents)}/mes</span>
-                              <b className="text-brand-700">{offer.status}</b>
+                            <div
+                              key={offer.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-muted px-3 py-2 text-sm"
+                            >
+                              <span>
+                                v{offer.version} · {money(offer.implementationAmountCents)} +{' '}
+                                {money(offer.monthlyAmountCents)}/mes
+                              </span>
+                              <b className="text-brand-700">
+                                {commercialOfferStatusLabel(offer.status)}
+                              </b>
                             </div>
                           ))}
                         </div>
                       ) : null}
-                      {offers.some((offer) => offer.status === 'accepted') && phase1Order && phase1Order.status !== 'paid' ? (
+                      {acceptedOffer && phase1Order && phase1Order.status !== 'paid' ? (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                          <p className="font-semibold">Cobro de implementación pendiente</p>
+                          <p className="font-semibold">Cobro de fase 1 pendiente o vencido</p>
                           <p className="mt-1">
-                            Si el checkout venció o el cliente necesita otro importe, cancela esta orden para emitir una nueva versión.
+                            Si el checkout expiró o el cliente necesita otra versión, cancela este
+                            cobro y vuelve la solicitud a revisión para emitir una oferta nueva.
                           </p>
-                          <Button className="mt-3" variant="secondary" onClick={reopenImplementationPayment} disabled={saving}>
-                            {saving ? 'Reabriendo…' : 'Cancelar cobro y reabrir oferta'}
+                          <Button
+                            className="mt-3"
+                            variant="secondary"
+                            onClick={reopenImplementationPayment}
+                            disabled={activeAction !== null}
+                          >
+                            {activeAction === 'reopen'
+                              ? 'Reabriendo…'
+                              : 'Cancelar cobro y reabrir oferta'}
                           </Button>
                         </div>
                       ) : null}
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <OfferInput label="Implementación (MXN)" value={offerForm.implementationPesos} onChange={(value) => setOfferForm((current) => ({ ...current, implementationPesos: value }))} />
-                        <OfferInput label="Mantenimiento al publicar (MXN, 0 = no contratado)" value={offerForm.monthlyPesos} onChange={(value) => setOfferForm((current) => ({ ...current, monthlyPesos: value }))} />
+                        <OfferInput
+                          label="Implementación (MXN · mínimo $40 en 4 fases)"
+                          value={offerForm.implementationPesos}
+                          onChange={(value) =>
+                            setOfferForm((current) => ({
+                              ...current,
+                              implementationPesos: value,
+                            }))
+                          }
+                        />
+                        <OfferInput
+                          label="Mantenimiento mostrado (referencia visual)"
+                          value={offerForm.monthlyPesos}
+                          onChange={(value) =>
+                            setOfferForm((current) => ({ ...current, monthlyPesos: value }))
+                          }
+                        />
                       </div>
                       <div>
                         <p className="mb-2 text-sm font-medium text-gray-700">Módulos finales</p>
                         <div className="flex flex-wrap gap-2">
                           {PACKAGE_MODULE_IDS.map((module) => (
-                            <label key={module} className="flex items-center gap-2 rounded-full border border-surface-border px-3 py-1 text-sm">
+                            <label
+                              key={module}
+                              className="flex items-center gap-2 rounded-full border border-surface-border px-3 py-1 text-sm"
+                            >
                               <input
                                 type="checkbox"
                                 checked={offerForm.modules.includes(module)}
@@ -433,101 +818,43 @@ export function CommercialIntakesPage() {
                         </div>
                       </div>
                       <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                        AstraMuses está anunciado como Próximamente y no puede incluirse ni cobrarse en esta oferta.
+                        AstraMuses está anunciado como Próximamente y no puede incluirse ni cobrarse
+                        en esta oferta.
                       </p>
-                      <OfferText label="Resumen de alcance" value={offerForm.scopeSummary} onChange={(value) => setOfferForm((current) => ({ ...current, scopeSummary: value }))} />
-                      <OfferText label="Qué cubre la implementación" value={offerForm.implementationDescription} onChange={(value) => setOfferForm((current) => ({ ...current, implementationDescription: value }))} />
-                      <OfferText label="Qué cubre la mensualidad" value={offerForm.recurringDescription} onChange={(value) => setOfferForm((current) => ({ ...current, recurringDescription: value }))} />
-                      <Button onClick={issueOffer} disabled={saving || offers.some((offer) => offer.status === 'accepted')}>
-                        {saving ? 'Emitiendo…' : offers.some((offer) => offer.status === 'issued') ? 'Emitir nueva versión' : 'Emitir oferta'}
+                      <OfferText
+                        label="Resumen de alcance"
+                        value={offerForm.scopeSummary}
+                        onChange={(value) =>
+                          setOfferForm((current) => ({ ...current, scopeSummary: value }))
+                        }
+                      />
+                      <OfferText
+                        label="Qué cubre la implementación"
+                        value={offerForm.implementationDescription}
+                        onChange={(value) =>
+                          setOfferForm((current) => ({
+                            ...current,
+                            implementationDescription: value,
+                          }))
+                        }
+                      />
+                      <OfferText
+                        label="Qué cubre la mensualidad"
+                        value={offerForm.recurringDescription}
+                        onChange={(value) =>
+                          setOfferForm((current) => ({ ...current, recurringDescription: value }))
+                        }
+                      />
+                      <Button
+                        onClick={issueOffer}
+                        disabled={activeAction !== null || offers.some((offer) => offer.status === 'accepted')}
+                      >
+                        {activeAction === 'offer'
+                          ? 'Emitiendo…'
+                          : offers.some((offer) => offer.status === 'issued')
+                            ? 'Emitir nueva versión'
+                            : 'Emitir oferta'}
                       </Button>
-                    </section>
-                  ) : null}
-                  {selected.status === 'converted' ? (
-                    <section className="space-y-4 border-t border-surface-border pt-6">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Implementación pagada</p>
-                        <h3 className="mt-1 text-xl font-bold text-gray-900">Orden de trabajo Starter</h3>
-                        <p className="mt-1 text-sm text-gray-500">
-                          El proyecto se enlaza conscientemente después de crearlo o sincronizarlo en Oracle.
-                        </p>
-                      </div>
-                      <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                        <Info
-                          label="Fases de pago"
-                          value={
-                            billingOrders.length
-                              ? `${billingOrders.filter((order) => order.status === 'paid').length}/${billingOrders.length} pagadas · ${billingOrders
-                                  .slice()
-                                  .sort((a, b) => a.phase - b.phase)
-                                  .map((order) => `F${order.phase}:${order.status === 'paid' ? money(order.amountCents) : order.status}`)
-                                  .join(' · ')}`
-                              : 'Sin orden'
-                          }
-                        />
-                        <Info label="Trabajo" value={workOrder ? workOrderStatusLabel(workOrder.status) : 'Preparando orden'} />
-                        <Info label="Proyecto Oracle" value={workOrder?.projectId ?? 'Sin enlazar'} />
-                        <Info label="Asignado por" value={workOrder?.assignedBy ?? 'Pendiente'} />
-                        <Info
-                          label="Mensualidad"
-                          value={offers.find((offer) => offer.status === 'accepted')?.monthlyAmountCents === 0
-                            ? 'No contratada · pago único'
-                            : maintenanceSubscription
-                              ? subscriptionStatusLabel(maintenanceSubscription.status)
-                              : 'Sin autorizar'}
-                        />
-                        <Info label="URL pública" value={workOrder?.publishedUrl ?? 'Sin publicar'} />
-                      </dl>
-                      {workOrder && !workOrder.projectId ? (
-                        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                          <select
-                            aria-label="Proyecto Oracle"
-                            className="rounded-lg border border-surface-border px-3 py-2 text-sm"
-                            value={projectId}
-                            onChange={(event) => setProjectId(event.target.value)}
-                          >
-                            <option value="">Selecciona un proyecto sincronizado</option>
-                            {projects.map((project) => (
-                              <option key={project.id} value={project.id}>{project.name} · {project.id}</option>
-                            ))}
-                          </select>
-                          <Button onClick={assignProject} disabled={saving || !projectId}>Enlazar proyecto</Button>
-                        </div>
-                      ) : null}
-                      {workOrder?.projectId ? (
-                        <div className="flex flex-wrap gap-3">
-                          {workOrder.status === 'in_build' ? <Button onClick={() => changeWorkStatus('client_review')} disabled={saving}>Enviar a revisión del cliente</Button> : null}
-                          {workOrder.status === 'client_review' ? (
-                            <>
-                              <Button variant="secondary" onClick={() => changeWorkStatus('in_build')} disabled={saving}>Volver a construcción</Button>
-                              <Button onClick={() => changeWorkStatus('ready_to_publish')} disabled={saving}>Lista para publicar</Button>
-                            </>
-                          ) : null}
-                          {workOrder.status === 'ready_to_publish' ? (
-                            <>
-                              <Button variant="secondary" onClick={() => changeWorkStatus('client_review')} disabled={saving}>Volver a revisión</Button>
-                              {offers.find((offer) => offer.status === 'accepted')?.monthlyAmountCents === 0
-                              || maintenanceSubscription?.status === 'active' ? (
-                                <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                                  <input
-                                    aria-label="URL pública inicial"
-                                    className="rounded-lg border border-surface-border px-3 py-2 text-sm"
-                                    placeholder="https://cliente.lmwares.com"
-                                    value={publicUrl}
-                                    onChange={(event) => setPublicUrl(event.target.value)}
-                                  />
-                                  <Button onClick={publishWorkOrder} disabled={saving || !publicUrl}>Confirmar publicación</Button>
-                                </div>
-                              ) : (
-                                <span className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">Publicación bloqueada hasta autorizar la suscripción contratada.</span>
-                              )}
-                            </>
-                          ) : null}
-                          {workOrder.status === 'live' && workOrder.publishedUrl ? (
-                            <a className="text-sm font-semibold text-blue-700" href={workOrder.publishedUrl} rel="noreferrer" target="_blank">Abrir sitio publicado ↗</a>
-                          ) : null}
-                        </div>
-                      ) : null}
                     </section>
                   ) : null}
                 </div>
@@ -564,7 +891,7 @@ function pesosToCents(value: string, allowZero = false): number | null {
   return Math.round(amount * 100);
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</dt>
@@ -593,10 +920,10 @@ function formatDate(value: string): string {
 
 function workOrderStatusLabel(status: StarterWorkOrder['status']): string {
   const labels: Record<StarterWorkOrder['status'], string> = {
-    awaiting_provisioning: 'Esperando proyecto',
+    awaiting_provisioning: 'Fase 1 pagada; falta enlazar el proyecto interno de Oracle',
     in_build: 'En construcción',
     client_review: 'En revisión del cliente',
-    ready_to_publish: 'Lista para suscripción',
+    ready_to_publish: 'Lista para publicar cuando mantenimiento y URL estén resueltos',
     live: 'Publicada',
     canceled: 'Cancelada',
   };
@@ -605,14 +932,103 @@ function workOrderStatusLabel(status: StarterWorkOrder['status']): string {
 
 function subscriptionStatusLabel(status: MaintenanceSubscription['status']): string {
   const labels: Record<MaintenanceSubscription['status'], string> = {
-    creating: 'Preparando',
-    creation_failed: 'Falló la creación',
-    pending_authorization: 'Pendiente de autorización',
+    creating: 'Preparando autorización',
+    creation_failed: 'Falló la creación de la suscripción',
+    pending_authorization: 'Pendiente: el cliente debe autorizarla',
     active: 'Activa',
-    payment_attention: 'Requiere atención',
+    payment_attention: 'Requiere revisión de cobro',
     paused: 'Pausada',
     canceled: 'Cancelada',
     disputed: 'En disputa',
   };
   return labels[status];
+}
+
+function clientProjectStatusLabel(status: StarterClientProject['status']): string {
+  const labels: Record<StarterClientProject['status'], string> = {
+    provisioning: 'Reservado; falta activarlo en operación',
+    active: 'Activo',
+    archived: 'Archivado',
+  };
+  return labels[status];
+}
+
+function commercialOfferStatusLabel(status: CommercialOffer['status']): string {
+  const labels: Record<CommercialOffer['status'], string> = {
+    issued: 'Emitida y esperando respuesta del cliente',
+    accepted: 'Aceptada por el cliente',
+    superseded: 'Reemplazada por otra versión',
+    declined: 'No aprobada por el cliente',
+    expired: 'Vencida',
+  };
+  return labels[status];
+}
+
+function maintenanceDecisionSummary(offer: CommercialOffer): string {
+  if (offer.maintenancePlanSelected === null) {
+    return 'Pendiente: el cliente decidió elegir su mantenimiento más adelante.';
+  }
+  if (offer.maintenancePlanSelected === 'none') {
+    return 'Sin mantenimiento mensual; venta de pago único.';
+  }
+  return `${offer.maintenancePlanSelected === 'basic' ? 'Básico' : 'Avanzado'} · ${money(offer.monthlyAmountCents)}/mes`;
+}
+
+function maintenanceStatusSummary(
+  offer: CommercialOffer | null,
+  subscription: MaintenanceSubscription | null,
+): string {
+  if (!offer) {
+    return 'La mensualidad todavía depende de que exista una oferta aceptada.';
+  }
+  if (offer.maintenancePlanSelected === null) {
+    return 'Pendiente: el cliente aún no decide si quiere mantenimiento.';
+  }
+  if (offer.maintenancePlanSelected === 'none') {
+    return 'No contratada: el sitio puede publicarse sin suscripción mensual.';
+  }
+  if (!subscription) {
+    return 'Falta generar la suscripción y conseguir que el cliente la autorice.';
+  }
+  return `${subscriptionStatusLabel(subscription.status)} · ${money(subscription.amountCents)}/mes`;
+}
+
+function phaseStatusLabel(order: BillingOrder | null): string {
+  if (!order) return 'Falta preparar';
+  if (order.status === 'paid') return 'Pagada';
+  if (isExpiredPendingOrder(order)) return 'Checkout vencido';
+  return 'Pendiente';
+}
+
+function phaseStatusClass(order: BillingOrder | null): string {
+  if (!order) return 'rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700';
+  if (order.status === 'paid') {
+    return 'rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700';
+  }
+  if (isExpiredPendingOrder(order)) {
+    return 'rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800';
+  }
+  return 'rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700';
+}
+
+function phaseStatusDetail(order: BillingOrder | null, phase: 1 | 2 | 3 | 4): string {
+  if (!order) {
+    return `La orden de cobro de la fase ${phase} todavía no aparece en el expediente.`;
+  }
+  if (order.status === 'paid') {
+    return `La fase ${phase} ya quedó confirmada y no bloquea el siguiente paso.`;
+  }
+  if (isExpiredPendingOrder(order)) {
+    return `El checkout de la fase ${phase} venció o quedó sin confirmar; revisa si conviene reabrir la oferta.`;
+  }
+  return `La fase ${phase} sigue ${order.status}; espera confirmación o reconcíliala si quedó atascada.`;
+}
+
+function isExpiredPendingOrder(order: BillingOrder): boolean {
+  return Boolean(
+    order.status !== 'paid' &&
+      order.checkoutExpiresAt &&
+      Number.isFinite(Date.parse(order.checkoutExpiresAt)) &&
+      Date.parse(order.checkoutExpiresAt) <= Date.now(),
+  );
 }

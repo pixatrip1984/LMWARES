@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/models/*.test.mjs",
+    "test": "node --experimental-strip-types --test src/*.test.mjs src/models/*.test.mjs",
     "lint": "echo \"(domain) no lint configured\""
   },
   "devDependencies": {

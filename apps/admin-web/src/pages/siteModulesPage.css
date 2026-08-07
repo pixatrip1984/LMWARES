@@ -163,6 +163,38 @@
   padding: 18px;
 }
 
+.site-modules-page__notice {
+  display: flex;
+  max-width: 560px;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid rgba(84, 146, 218, 0.22);
+  border-radius: 10px;
+  background: rgba(6, 16, 34, 0.75);
+  padding: 24px;
+}
+
+.site-modules-page__notice-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #eef5ff;
+}
+
+.site-modules-page__notice-detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #a9bcd6;
+}
+
+.site-modules-page__notice .site-modules-page__back {
+  align-self: flex-start;
+  border-top: 0;
+  margin-top: 0;
+  padding: 0;
+}
+
 @media (max-width: 900px) {
   .site-modules-page {
     grid-template-columns: 1fr;

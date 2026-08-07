@@ -6,6 +6,7 @@ import {
   type StarterWorkOrderStatus,
 } from '@starter/domain';
 import { newId, nowIso, parseJson } from '../helpers';
+import { LmwaresStarterClientProjectsRepository } from './lmwares-starter-client-projects';
 
 interface StarterWorkOrderRow {
   id: string;
@@ -65,6 +66,14 @@ export class LmwaresStarterWorkOrdersRepository {
     if (!workOrder) {
       throw new AppError('conflict', 'La orden de trabajo requiere un pago confirmado.');
     }
+    // El proyecto/sitio propiedad del cliente se aprovisiona en el mismo
+    // momento que la orden de trabajo, de forma idempotente: si ya existe
+    // (reintento del webhook de pago) no se modifica.
+    await new LmwaresStarterClientProjectsRepository(this.db).ensureForWorkOrder({
+      workOrderId: workOrder.id,
+      intakeId: workOrder.intakeId,
+      userId: workOrder.userId,
+    });
     return workOrder;
   }
 
@@ -135,17 +144,48 @@ export class LmwaresStarterWorkOrdersRepository {
       throw new AppError('conflict', 'La orden ya está enlazada a otro proyecto.');
     }
     const now = nowIso();
-    await this.db
+    const result = await this.db
       .prepare(
         `UPDATE lmw_starter_work_orders
          SET project_id = ?, status = CASE WHEN status = 'awaiting_provisioning' THEN 'in_build' ELSE status END,
              assigned_by = COALESCE(assigned_by, ?), assigned_at = COALESCE(assigned_at, ?),
              updated_at = ?
          WHERE id = ? AND status NOT IN ('canceled', 'live')
-           AND (project_id IS NULL OR project_id = ?)`,
+           AND (project_id IS NULL OR project_id = ?)
+           AND NOT EXISTS (
+             SELECT 1 FROM lmw_starter_work_orders other
+             WHERE other.project_id = ? AND other.id <> ? AND other.status <> 'canceled'
+           )`,
       )
-      .bind(input.projectId, input.assignedBy, now, now, input.id, input.projectId)
+      .bind(
+        input.projectId,
+        input.assignedBy,
+        now,
+        now,
+        input.id,
+        input.projectId,
+        input.projectId,
+        input.id,
+      )
       .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      const conflictingOrder = await this.db
+        .prepare(
+          `SELECT id FROM lmw_starter_work_orders
+          WHERE project_id = ? AND id <> ? AND status <> 'canceled'
+          LIMIT 1`,
+        )
+        .bind(input.projectId, input.id)
+        .first<{ id: string }>();
+      if (conflictingOrder) {
+        throw new AppError(
+          'conflict',
+          'Ese proyecto Oracle ya está enlazado a otra orden Starter activa.',
+        );
+      }
+      throw new AppError('conflict', 'La orden cambió mientras se enlazaba el proyecto.');
+    }
+    await new LmwaresStarterClientProjectsRepository(this.db).activateForWorkOrder(input.id);
     return (await this.getById(input.id))!;
   }
 
@@ -165,11 +205,40 @@ export class LmwaresStarterWorkOrdersRepository {
     if (requiredPhase) {
       await this.assertPhasePaid(current.commercialOfferId, requiredPhase);
     }
-    const result = await this.db
-      .prepare(`UPDATE lmw_starter_work_orders SET status = ?, updated_at = ? WHERE id = ? AND status = ?`)
-      .bind(input.status, nowIso(), input.id, current.status)
-      .run();
-    if ((result.meta.changes ?? 0) !== 1) {
+    const paymentGate = requiredPhase
+      ? ` AND NOT EXISTS (
+           SELECT 1 FROM lmw_billing_orders bo
+           WHERE bo.commercial_offer_id = ? AND bo.purpose = 'implementation'
+             AND bo.phase = ? AND bo.status <> 'paid'
+         )`
+      : '';
+    const now = nowIso();
+    const statements = [
+      this.db
+        .prepare(
+          `UPDATE lmw_starter_work_orders
+           SET status = ?, updated_at = ?
+           WHERE id = ? AND status = ?${paymentGate}`,
+        )
+        .bind(
+          ...(requiredPhase
+            ? [input.status, now, input.id, current.status, current.commercialOfferId, requiredPhase]
+            : [input.status, now, input.id, current.status]),
+        ),
+    ];
+    if (input.status === 'canceled') {
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE lmw_starter_client_projects
+             SET status = 'archived', updated_at = ?
+             WHERE work_order_id = ? AND status <> 'archived'`,
+          )
+          .bind(now, input.id),
+      );
+    }
+    const [result] = await this.db.batch(statements);
+    if ((result?.meta.changes ?? 0) !== 1) {
       throw new AppError('conflict', 'La orden cambió mientras se actualizaba.');
     }
     return (await this.getById(input.id))!;
@@ -215,6 +284,7 @@ export class LmwaresStarterWorkOrdersRepository {
     const publicationGate = await this.db
       .prepare(
         `SELECT o.monthly_amount_cents,
+                o.maintenance_plan_selected,
                 (SELECT s.id FROM lmw_maintenance_subscriptions s
                  WHERE s.work_order_id = w.id AND s.status = 'active' LIMIT 1) AS subscription_id
          FROM lmw_starter_work_orders w
@@ -222,11 +292,30 @@ export class LmwaresStarterWorkOrdersRepository {
          WHERE w.id = ? AND o.status = 'accepted' LIMIT 1`,
       )
       .bind(current.id)
-      .first<{ monthly_amount_cents: number; subscription_id: string | null }>();
+      .first<{
+        monthly_amount_cents: number;
+        maintenance_plan_selected: string | null;
+        subscription_id: string | null;
+      }>();
     if (!publicationGate) {
       throw new AppError('conflict', 'La publicación requiere una oferta aceptada vigente.');
     }
-    if (publicationGate.monthly_amount_cents > 0 && !publicationGate.subscription_id) {
+    if (publicationGate.maintenance_plan_selected === null) {
+      throw new AppError(
+        'conflict',
+        'Elige un plan de mantenimiento o confirma que no deseas contratarlo antes de publicar.',
+      );
+    }
+    if (
+      publicationGate.maintenance_plan_selected === 'none' &&
+      publicationGate.monthly_amount_cents !== 0
+    ) {
+      throw new AppError('conflict', 'La oferta de pago único tiene un importe de mantenimiento inválido.');
+    }
+    if (
+      ['basic', 'advanced'].includes(publicationGate.maintenance_plan_selected) &&
+      (publicationGate.monthly_amount_cents <= 0 || !publicationGate.subscription_id)
+    ) {
       throw new AppError('conflict', 'La publicación requiere una mensualidad activa.');
     }
     const now = nowIso();
@@ -239,11 +328,16 @@ export class LmwaresStarterWorkOrdersRepository {
               SELECT 1 FROM lmw_commercial_offers o
               WHERE o.id = lmw_starter_work_orders.commercial_offer_id
                 AND o.status = 'accepted'
+                AND o.maintenance_plan_selected IS NOT NULL
                 AND (
-                  o.monthly_amount_cents = 0
-                  OR EXISTS (
+                  (o.maintenance_plan_selected = 'none' AND o.monthly_amount_cents = 0)
+                  OR (
+                    o.maintenance_plan_selected IN ('basic', 'advanced')
+                    AND o.monthly_amount_cents > 0
+                    AND EXISTS (
                     SELECT 1 FROM lmw_maintenance_subscriptions s
                     WHERE s.work_order_id = lmw_starter_work_orders.id AND s.status = 'active'
+                    )
                   )
                 )
             )

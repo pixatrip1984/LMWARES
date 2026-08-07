@@ -5,6 +5,7 @@ import { parseList } from '@starter/config';
 import type { Bindings, Variables } from './env';
 import { onError } from './middleware/error';
 import { freeJobsInternal } from './routes/free-jobs-internal';
+import { stuckPaymentsInternal } from './routes/stuck-payments-internal';
 import { freeIntakes } from './routes/free-intakes';
 import { freeSites, serveFreeSite } from './routes/free-sites';
 import { publications } from './routes/publications';
@@ -22,6 +23,8 @@ import { account } from './routes/account';
 import { mapLocations } from './routes/map-locations';
 import { reconcileSubscriptionsOnSchedule } from './lib/subscription-reconciliation';
 import { commercialIntakes } from './routes/commercial-intakes';
+import { serveStarterSite, serveStarterSiteByHostname, starterSites } from './routes/starter-sites';
+import { starterDomains } from './routes/starter-domains';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -36,7 +39,7 @@ app.use('*', (c, next) => {
   const allowed = parseList(c.env.ALLOWED_ORIGINS);
   return cors({
     origin: (origin) => (allowed.includes(origin) ? origin : null),
-    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Idempotency-Key'],
     credentials: true,
     maxAge: 86400,
@@ -45,10 +48,7 @@ app.use('*', (c, next) => {
 
 app.onError(onError);
 app.notFound((c) =>
-  c.json(
-    new AppError('not_found', 'Ruta no encontrada.').toBody(c.get('requestId')),
-    404,
-  ),
+  c.json(new AppError('not_found', 'Ruta no encontrada.').toBody(c.get('requestId')), 404),
 );
 
 app.get('/health', (c) => c.json({ ok: true, service: 'public-api' }));
@@ -64,6 +64,7 @@ app.route('/requests', requests);
 app.route('/free', freeIntakes);
 app.route('/map', mapLocations);
 app.route('/internal', freeJobsInternal);
+app.route('/internal', stuckPaymentsInternal);
 app.route('/sites/:projectId/blog', siteBlogPublic);
 app.route('/sites/:projectId/galleries', publicSiteGalleries);
 app.route('/sites/:projectId/docs', siteDocsPublic);
@@ -71,12 +72,27 @@ app.route('/sites/:projectId/documents', siteDocsPublic);
 app.route('/sites/:projectId/forms', siteForms);
 app.route('/sites/:projectId/events', siteEvents);
 app.route('/sites', freeSites);
+app.route('/starter-sites', starterSites);
+app.route('/starter-projects', starterDomains);
 
-// El mismo Worker atiende el wildcard `*.lmwares.com/*` en producción.
+// El mismo Worker atiende el wildcard `*.lmwares.com/*` y los hostnames
+// personalizados activos de Cloudflare for SaaS en producción.
 app.get('/', async (c) => {
-  const slug = freeSlugFromHost(c.req.header('Host'), c.env.FREE_SITE_BASE_DOMAIN);
-  if (!slug) throw AppError.notFound('Sitio Free');
-  return serveFreeSite(c, slug);
+  const hostname = hostnameFromHostHeader(c.req.header('Host'));
+  const slug = freeSlugFromHost(hostname, c.env.FREE_SITE_BASE_DOMAIN);
+
+  if (slug) {
+    const starterResponse = await serveStarterSite(c, slug);
+    if (starterResponse) return starterResponse;
+    return serveFreeSite(c, slug);
+  }
+
+  if (hostname) {
+    const customDomainResponse = await serveStarterSiteByHostname(c, hostname);
+    if (customDomainResponse) return customDomainResponse;
+  }
+
+  throw AppError.notFound('Sitio');
 });
 
 /**
@@ -85,10 +101,7 @@ app.get('/', async (c) => {
  */
 app.get('/media/:key{.+}', async (c) => {
   const key = decodeURIComponent(c.req.param('key'));
-  if (
-    /^sites\/[^/]+\/docs\//.test(key) ||
-    /^free-intakes\/[^/]+\/original\//.test(key)
-  ) {
+  if (/^sites\/[^/]+\/docs\//.test(key) || /^free-intakes\/[^/]+\/original\//.test(key)) {
     // Los documentos tienen permisos, estado y cabeceras de descarga propios.
     // Los originales Free permanecen en cuarentena. Ninguno debe salir por el
     // proxy genérico de medios.
@@ -114,8 +127,22 @@ export default {
   },
 } satisfies ExportedHandler<Bindings>;
 
-function freeSlugFromHost(hostHeader: string | undefined, baseDomain: string): string | null {
-  const host = (hostHeader ?? '').split(':')[0]!.toLowerCase();
+function hostnameFromHostHeader(hostHeader: string | undefined): string | null {
+  const raw = (hostHeader ?? '').trim().toLowerCase();
+  if (!raw || raw.startsWith('[')) return null;
+
+  const match = /^([^:]+)(?::[0-9]+)?$/.exec(raw);
+  if (!match) return null;
+
+  const hostname = match[1]!;
+  if (hostname.endsWith('.') || !/^[a-z0-9.-]+$/.test(hostname)) {
+    return null;
+  }
+  return hostname;
+}
+
+function freeSlugFromHost(hostname: string | null, baseDomain: string): string | null {
+  const host = hostname ?? '';
   const suffix = `.${baseDomain.toLowerCase()}`;
   if (!host.endsWith(suffix)) return null;
   const slug = host.slice(0, -suffix.length);

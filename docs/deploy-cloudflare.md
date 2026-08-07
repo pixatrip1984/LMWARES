@@ -209,6 +209,30 @@ cd ../..
 | `ERR_BLOCKED_BY_CLIENT` en preview de imagen        | Brave/adblock bloquea `workers.dev`. Baja shields o usa `MEDIA_BASE_URL`. |
 | Pages `project create` da error `8000000`           | Transitorio; usa `pages deploy` y acepta "Create a new project".          |
 
+### D1: migración pendiente con columna ya existente
+
+Si `d1 migrations apply --remote` marca una migración como pendiente pero
+falla con `duplicate column name`, no vuelvas a ejecutar el `ALTER TABLE` ni
+modifiques una migración histórica. Primero comprueba en remoto que la columna
+ya existe y revisa el ledger:
+
+```powershell
+npx wrangler d1 execute <PROYECTO>-db --remote --command "PRAGMA table_info(<tabla>)"
+npx wrangler d1 execute <PROYECTO>-db --remote --command "SELECT id, name, applied_at FROM d1_migrations ORDER BY id"
+```
+
+Sólo si el esquema coincide exactamente con la migración, registra ese archivo
+como aplicado y continúa con Wrangler:
+
+```powershell
+npx wrangler d1 execute <PROYECTO>-db --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('<MIGRACION>.sql')"
+npx wrangler d1 migrations apply <PROYECTO>-db --remote
+```
+
+Este ajuste sólo corrige el historial; no sustituye la migración ni debe usarse
+para saltar cambios que todavía no existan en el esquema. Después ejecuta
+`PRAGMA foreign_key_check` y el preflight del proyecto.
+
 ---
 
 > Plantilla limpia: reemplaza los marcadores con los valores de tu cuenta y dominio.

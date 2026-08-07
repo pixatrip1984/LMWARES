@@ -448,8 +448,8 @@ export class SiteFormsRepository {
     const request = await this.getRequestById(projectId, requestId);
     if (!request) return null;
     const [notes, history] = await Promise.all([
-      this.listNotes(requestId),
-      this.listHistory(requestId),
+      this.listNotes(projectId, requestId),
+      this.listHistory(projectId, requestId),
     ]);
     return { request, notes, history };
   }
@@ -541,26 +541,35 @@ export class SiteFormsRepository {
     return row ? mapSiteFormRequestNote(row) : null;
   }
 
-  private async listNotes(requestId: string): Promise<SiteFormRequestNote[]> {
+  private async listNotes(projectId: string, requestId: string): Promise<SiteFormRequestNote[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT * FROM lmwares_site_form_request_notes
-         WHERE request_id = ?
+        `SELECT note.*
+         FROM lmwares_site_form_request_notes note
+         INNER JOIN lmwares_site_form_requests request
+           ON request.id = note.request_id
+         WHERE note.request_id = ? AND request.project_id = ?
          ORDER BY created_at ASC`,
       )
-      .bind(requestId)
+      .bind(requestId, projectId)
       .all<SiteFormRequestNoteRow>();
     return results.map(mapSiteFormRequestNote);
   }
 
-  private async listHistory(requestId: string): Promise<SiteFormStatusHistory[]> {
+  private async listHistory(
+    projectId: string,
+    requestId: string,
+  ): Promise<SiteFormStatusHistory[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT * FROM lmwares_site_form_status_history
-         WHERE request_id = ?
+        `SELECT history.*
+         FROM lmwares_site_form_status_history history
+         INNER JOIN lmwares_site_form_requests request
+           ON request.id = history.request_id
+         WHERE history.request_id = ? AND request.project_id = ?
          ORDER BY created_at ASC`,
       )
-      .bind(requestId)
+      .bind(requestId, projectId)
       .all<SiteFormStatusHistoryRow>();
     return results.map(mapSiteFormStatusHistory);
   }

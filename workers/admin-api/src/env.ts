@@ -19,6 +19,19 @@ export interface Bindings {
   AUTO_PROVISION_ADMINS: string;
   /** "1" para saltar Access en local. */
   ACCESS_DISABLED: string;
+  /** Token secreto para la API de Custom Hostnames de Cloudflare for SaaS. */
+  CLOUDFLARE_SAAS_API_TOKEN?: string;
+  /** Zone ID de lmwares.com para Custom Hostnames. */
+  CLOUDFLARE_ZONE_ID?: string;
+  /** CNAME SaaS proxied al fallback origin de Cloudflare. */
+  CLOUDFLARE_SAAS_CNAME_TARGET?: string;
+  /**
+   * Token compartido con el Public API para disparar una reconciliación
+   * puntual de un pago atascado (misma lógica idempotente del cron). Ausente
+   * = el botón de "reconciliar ahora" queda deshabilitado sin fallar el resto
+   * del panel.
+   */
+  OPS_RECOVERY_TOKEN?: string;
 }
 
 export interface Identity {

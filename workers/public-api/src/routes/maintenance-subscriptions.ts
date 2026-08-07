@@ -55,31 +55,75 @@ maintenanceSubscriptions.post('/work-orders/:workOrderId/maintenance-plan', asyn
   const input = parseInput(selectMaintenancePlanSchema, await readJson(c));
   const workOrder = await ownedWorkOrder(c.env, c.req.param('workOrderId')!, session.user.id);
   const repos = createRepositories(c.env.DB);
-  const offer = await repos.lmwaresCommercialOffers.selectMaintenancePlan({
-    offerId: workOrder.commercialOfferId,
-    userId: session.user.id,
-    plan: input.plan,
-  });
+  const currentOffer = await repos.lmwaresCommercialOffers.getById(workOrder.commercialOfferId);
+  if (!currentOffer || currentOffer.userId !== session.user.id) {
+    throw AppError.notFound('Oferta comercial');
+  }
+  // Una selección repetida es idempotente. Si una petición anterior alcanzó a
+  // fijar la oferta pero falló mientras limpiaba un intento viejo, reanudamos
+  // esa limpieza en vez de dejar una autorización obsoleta bloqueando el flujo.
+  if (currentOffer.maintenancePlanSelected !== null) {
+    const existing = await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id);
+    if (currentOffer.maintenancePlanSelected === 'none') {
+      await cancelPendingPreapprovalForPlanChange(c.env, existing);
+      await repos.lmwaresMaintenanceSubscriptions.markNotRequired(workOrder.id);
+    } else if (
+      existing &&
+      existing.amountCents !== currentOffer.monthlyAmountCents &&
+      ['creating', 'creation_failed', 'pending_authorization'].includes(existing.status)
+    ) {
+      await cancelPendingPreapprovalForPlanChange(c.env, existing);
+      await repos.lmwaresMaintenanceSubscriptions.resetForPlanChange(workOrder.id);
+    }
+    return c.json({ maintenancePlan: buildMaintenancePlanInfo(workOrder, currentOffer) });
+  }
+
   // Si ya existía un intento de suscripción creado con el monto viejo (antes
-  // de que el cliente eligiera este plan real), reiniciarlo para que tome el
-  // precio correcto; nunca toca uno que ya esté activo/cobrando de verdad.
-  const staleSubscription = await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id);
+  // de que el cliente eligiera este plan real), primero cancelarlo en Mercado
+  // Pago. Si el proveedor no confirma la cancelación, no cambiamos la decisión
+  // local ni creamos una segunda autorización potencialmente cobrable.
+  const staleSubscription = await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(
+    workOrder.id,
+  );
+  if (
+    staleSubscription &&
+    !['creating', 'creation_failed', 'pending_authorization', 'canceled'].includes(
+      staleSubscription.status,
+    )
+  ) {
+    throw new AppError(
+      'conflict',
+      'La mensualidad existente requiere atención antes de elegir otro plan.',
+    );
+  }
+  if (staleSubscription?.status === 'creating' && !staleSubscription.providerPreapprovalId) {
+    throw new AppError(
+      'conflict',
+      'La mensualidad se está preparando. Espera a que termine antes de elegir otro plan.',
+    );
+  }
   if (
     staleSubscription &&
     ['creating', 'creation_failed', 'pending_authorization'].includes(staleSubscription.status) &&
     staleSubscription.providerPreapprovalId
   ) {
-    try {
-      await cancelMercadoPagoPreapproval({
-        accessToken: maintenanceAccessToken(c.env),
-        preapprovalId: staleSubscription.providerPreapprovalId,
-      });
-    } catch {
-      // Best-effort: si Mercado Pago no lo permite, igual reiniciamos nuestro
-      // registro para no dejar al cliente atorado con el precio viejo.
-    }
+    await cancelPendingPreapprovalForPlanChange(c.env, staleSubscription);
   }
-  await repos.lmwaresMaintenanceSubscriptions.resetForPlanChange(workOrder.id);
+  const selection = await repos.lmwaresCommercialOffers.selectMaintenancePlan({
+    offerId: workOrder.commercialOfferId,
+    userId: session.user.id,
+    plan: input.plan,
+  });
+  const offer = selection.offer;
+  if (!selection.changed) {
+    return c.json({ maintenancePlan: buildMaintenancePlanInfo(workOrder, offer) });
+  }
+  if (offer.maintenancePlanSelected === 'none') {
+    await repos.lmwaresMaintenanceSubscriptions.markNotRequired(workOrder.id);
+  } else {
+    // Nunca toca una suscripción que ya cobró de verdad.
+    await repos.lmwaresMaintenanceSubscriptions.resetForPlanChange(workOrder.id);
+  }
   await repos.audit.record({
     actorType: 'public',
     actorId: session.user.id,
@@ -104,12 +148,21 @@ maintenanceSubscriptions.post('/work-orders/:workOrderId', async (c) => {
   const accessToken = maintenanceAccessToken(c.env);
   const workOrder = await ownedWorkOrder(c.env, c.req.param('workOrderId')!, session.user.id);
   if (workOrder.status !== 'ready_to_publish') {
-    throw new AppError('conflict', 'La mensualidad sólo se autoriza cuando el proyecto está listo para publicar.');
+    throw new AppError(
+      'conflict',
+      'La mensualidad sólo se autoriza cuando el proyecto está listo para publicar.',
+    );
   }
   const repos = createRepositories(c.env.DB);
   const offer = await repos.lmwaresCommercialOffers.getById(workOrder.commercialOfferId);
   if (offer && offer.maintenancePlanSelected === null) {
-    throw new AppError('conflict', 'Elige tu plan de mantenimiento antes de autorizar la mensualidad.');
+    throw new AppError(
+      'conflict',
+      'Elige tu plan de mantenimiento antes de autorizar la mensualidad.',
+    );
+  }
+  if (offer?.maintenancePlanSelected === 'none' || offer?.monthlyAmountCents === 0) {
+    throw new AppError('conflict', 'Esta oferta no incluye una mensualidad de mantenimiento.');
   }
   const claim = await repos.lmwaresMaintenanceSubscriptions.claimCreation({
     workOrderId: workOrder.id,
@@ -118,7 +171,10 @@ maintenanceSubscriptions.post('/work-orders/:workOrderId', async (c) => {
   let subscription = claim.subscription;
   if (!claim.claimed) {
     if (!subscription.providerPreapprovalId) {
-      throw new AppError('conflict', 'La mensualidad se está preparando. Intenta nuevamente en unos segundos.');
+      throw new AppError(
+        'conflict',
+        'La mensualidad se está preparando. Intenta nuevamente en unos segundos.',
+      );
     }
     const provider = await getMercadoPagoPreapproval({
       accessToken,
@@ -135,20 +191,22 @@ maintenanceSubscriptions.post('/work-orders/:workOrderId', async (c) => {
       externalReference: subscription.externalReference,
     });
     const plan = subscription.subscriptionSnapshot.plan === 'pro' ? 'pro' : 'starter';
-    const provider = recovered ?? await createMercadoPagoPreapproval({
-      accessToken,
-      subscriptionId: subscription.externalReference,
-      plan,
-      payerEmail: maintenancePayerEmail(c.env, session.user.email),
-      amountCents: subscription.amountCents,
-      currency: subscription.currency,
-      publicApiUrl: c.env.PUBLIC_API_URL,
-      publicWebUrl: c.env.PUBLIC_WEB_URL,
-      proposalId: workOrder.id,
-      reason: `Mantenimiento LMWares · ${plan === 'pro' ? 'Pro' : 'Starter'} mensual`,
-      returnPath: `/suscripcion/${encodeURIComponent(workOrder.id)}`,
-      webhookScope: 'maintenance',
-    });
+    const provider =
+      recovered ??
+      (await createMercadoPagoPreapproval({
+        accessToken,
+        subscriptionId: subscription.externalReference,
+        plan,
+        payerEmail: maintenancePayerEmail(c.env, session.user.email),
+        amountCents: subscription.amountCents,
+        currency: subscription.currency,
+        publicApiUrl: c.env.PUBLIC_API_URL,
+        publicWebUrl: c.env.PUBLIC_WEB_URL,
+        proposalId: workOrder.id,
+        reason: `Mantenimiento LMWares · ${plan === 'pro' ? 'Pro' : 'Starter'} mensual`,
+        returnPath: `/suscripcion/${encodeURIComponent(workOrder.id)}`,
+        webhookScope: 'maintenance',
+      }));
     assertPreapprovalMatches(provider, subscription);
     subscription = await saveProvider(c.env, subscription, provider);
   } catch (error) {
@@ -211,11 +269,17 @@ maintenanceSubscriptions.post('/:id/reconcile', async (c) => {
 maintenanceSubscriptions.post('/:id/cancel', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
-  const accessToken = maintenanceAccessToken(c.env);
   let subscription = await ownedSubscription(c.env, c.req.param('id')!, session.user.id);
   if (!subscription.providerPreapprovalId) {
     throw new AppError('conflict', 'La mensualidad todavía no existe en Mercado Pago.');
   }
+  if (subscription.status === 'disputed') {
+    throw new AppError(
+      'conflict',
+      'La mensualidad está en aclaración y no puede cancelarse desde aquí.',
+    );
+  }
+  const accessToken = maintenanceAccessToken(c.env);
   if (subscription.status !== 'canceled') {
     const provider = await cancelMercadoPagoPreapproval({
       accessToken,
@@ -242,21 +306,61 @@ async function ownedSubscription(env: Bindings, id: string, userId: string) {
   return subscription;
 }
 
+async function cancelPendingPreapprovalForPlanChange(
+  env: Bindings,
+  subscription: MaintenanceSubscription | null,
+): Promise<void> {
+  if (
+    !subscription ||
+    !['creating', 'creation_failed', 'pending_authorization'].includes(subscription.status) ||
+    !subscription.providerPreapprovalId
+  ) {
+    return;
+  }
+  const accessToken = maintenanceAccessToken(env);
+  const provider = await getMercadoPagoPreapproval({
+    accessToken,
+    preapprovalId: subscription.providerPreapprovalId,
+  });
+  assertPreapprovalMatches(provider, subscription);
+  if (provider.status === 'canceled') return;
+  const canceled = await cancelMercadoPagoPreapproval({
+    accessToken,
+    preapprovalId: subscription.providerPreapprovalId,
+  });
+  assertPreapprovalMatches(canceled, subscription);
+}
+
 async function saveProvider(
   env: Bindings,
   subscription: MaintenanceSubscription,
   provider: MercadoPagoPreapproval,
 ) {
-  return createRepositories(env.DB).lmwaresMaintenanceSubscriptions.savePreapproval({
-    id: subscription.id,
-    providerPreapprovalId: provider.id,
-    authorizationUrl: provider.authorizationUrl,
-    providerStatus: provider.status,
-    nextPaymentDate: provider.nextPaymentDate,
-  });
+  try {
+    return await createRepositories(env.DB).lmwaresMaintenanceSubscriptions.savePreapproval({
+      id: subscription.id,
+      externalReference: provider.externalReference,
+      providerPreapprovalId: provider.id,
+      authorizationUrl: provider.authorizationUrl,
+      providerStatus: provider.status,
+      nextPaymentDate: provider.nextPaymentDate,
+    });
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'conflict' && provider.status !== 'canceled') {
+      const canceled = await cancelMercadoPagoPreapproval({
+        accessToken: maintenanceAccessToken(env),
+        preapprovalId: provider.id,
+      });
+      assertPreapprovalMatches(canceled, subscription);
+    }
+    throw error;
+  }
 }
 
-function assertPreapprovalMatches(provider: MercadoPagoPreapproval, subscription: MaintenanceSubscription) {
+function assertPreapprovalMatches(
+  provider: MercadoPagoPreapproval,
+  subscription: MaintenanceSubscription,
+) {
   if (
     provider.externalReference !== subscription.externalReference ||
     provider.currency !== subscription.currency ||
@@ -264,7 +368,10 @@ function assertPreapprovalMatches(provider: MercadoPagoPreapproval, subscription
     provider.frequency !== subscription.frequency ||
     provider.frequencyType !== subscription.frequencyType
   ) {
-    throw new AppError('internal_error', 'La mensualidad no coincide con la oferta comercial congelada.');
+    throw new AppError(
+      'internal_error',
+      'La mensualidad no coincide con la oferta comercial congelada.',
+    );
   }
 }
 
@@ -284,7 +391,8 @@ function assertChargeMatches(
 
 function maintenanceAccessToken(env: Bindings): string {
   const token = env.MERCADO_PAGO_MAINTENANCE_ACCESS_TOKEN?.trim();
-  if (!token) throw new AppError('internal_error', 'Falta configurar el Access Token de mensualidades.');
+  if (!token)
+    throw new AppError('internal_error', 'Falta configurar el Access Token de mensualidades.');
   return token;
 }
 
@@ -341,16 +449,22 @@ async function readJson(c: Parameters<typeof requirePublicSession>[0]): Promise<
  * todavía debe elegir uno real antes de poder autorizar/publicar.
  */
 function buildMaintenancePlanInfo(workOrder: StarterWorkOrder, offer: CommercialOffer | null) {
-  const brief = (workOrder.workSnapshot as { brief?: { maintenancePlanPreference?: unknown } } | undefined)?.brief;
+  const brief = (
+    workOrder.workSnapshot as { brief?: { maintenancePlanPreference?: unknown } } | undefined
+  )?.brief;
   const preferenceRaw = brief?.maintenancePlanPreference;
   const preference: 'later' | 'none' | 'basic' | 'advanced' =
-    preferenceRaw === 'none' || preferenceRaw === 'basic' || preferenceRaw === 'advanced' ? preferenceRaw : 'later';
+    preferenceRaw === 'none' || preferenceRaw === 'basic' || preferenceRaw === 'advanced'
+      ? preferenceRaw
+      : 'later';
   const selected = offer?.maintenancePlanSelected ?? null;
   return {
     preference,
     selected,
     pending: selected === null,
-    options: MAINTENANCE_PLAN_TIERS.map((plan) => ({ plan, amountCents: maintenancePlanTierAmountCents(plan) })),
+    options: MAINTENANCE_PLAN_TIERS.map((plan) => ({
+      plan,
+      amountCents: maintenancePlanTierAmountCents(plan),
+    })),
   };
 }
-

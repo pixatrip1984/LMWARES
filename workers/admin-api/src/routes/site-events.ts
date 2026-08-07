@@ -13,6 +13,7 @@ import {
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { mediaUrl } from '../lib/media';
+import { requireStarterClientRuntime } from '../lib/starter-project-authorization';
 import { requireWrite } from '../middleware/auth';
 
 /**
@@ -23,6 +24,11 @@ export const siteEvents = new Hono<{
   Bindings: Bindings;
   Variables: Variables;
 }>();
+
+siteEvents.use('*', async (c, next) => {
+  await requireStarterClientRuntime(c.env.DB, c.req.param('projectId')!);
+  await next();
+});
 
 siteEvents.get('/', async (c) => {
   const { projectId } = parseInput(siteEventProjectParamsSchema, c.req.param());

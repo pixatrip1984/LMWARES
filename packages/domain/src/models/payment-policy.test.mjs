@@ -72,3 +72,33 @@ test('un reembolso sólo afecta la propuesta cuando pertenece al pago canónico'
   assert.equal(duplicate.affectsProposal, false);
   assert.equal(duplicate.disposition, 'refunded');
 });
+
+test('los estados no aprobados no sustituyen un pago canónico', () => {
+  for (const providerStatus of ['rejected', 'cancelled', 'canceled', 'pending']) {
+    const decision = decidePaymentPolicy({
+      providerStatus,
+      canonicalPaymentId: 'payment-1',
+      incomingPaymentId: 'payment-2',
+    });
+    assert.equal(decision.affectsProposal, false);
+    assert.equal(decision.reviewRequired, false);
+    assert.equal(decision.proposalStatus, providerStatus === 'pending' ? 'payment_pending' : 'payment_failed');
+    assert.equal(decision.disposition, providerStatus === 'pending' ? 'pending' : 'failed');
+  }
+});
+
+test('un cargo en disputa conserva la revisión del pago original', () => {
+  assert.deepEqual(
+    decidePaymentPolicy({
+      providerStatus: 'charged_back',
+      canonicalPaymentId: 'payment-1',
+      incomingPaymentId: 'payment-1',
+    }),
+    {
+      affectsProposal: true,
+      disposition: 'charged_back',
+      proposalStatus: 'payment_failed',
+      reviewRequired: false,
+    },
+  );
+});

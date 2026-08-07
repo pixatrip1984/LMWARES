@@ -1,5 +1,6 @@
 import type {
   AuditEvent,
+  ClientCustomDomain,
   CommercialOffer,
   BillingOrder,
   MaintenanceSubscription,
@@ -12,6 +13,7 @@ import type {
   LmwaresValidationResult,
   PackageIntake,
   PackageIntakeStatus,
+  StarterClientProject,
   StarterWorkOrder,
   Request,
   RequestNote,
@@ -51,12 +53,34 @@ export interface LmwaresProjectRegistryResponse {
 export interface StuckPaymentsSummary {
   total: number;
   thresholdHours: number;
+  items: StuckPaymentItem[];
   byType: {
     billingOrders: number;
     packageProposals: number;
     packageSubscriptions: number;
     maintenanceSubscriptions: number;
   };
+}
+
+export interface StuckPaymentItem {
+  kind:
+    | 'implementation_phase'
+    | 'package_proposal'
+    | 'package_subscription'
+    | 'maintenance_subscription';
+  id: string;
+  phase: 1 | 2 | 3 | 4 | null;
+  status: string;
+  amountCents: number;
+  currency: string;
+  updatedAt: string;
+  ageMinutes: number;
+  providerStatus: string | null;
+  providerResourceId: string | null;
+  externalReference: string | null;
+  userId: string;
+  intakeId: string | null;
+  workOrderId: string | null;
 }
 
 /**
@@ -129,6 +153,7 @@ export function createAdminClient(baseUrl: string) {
         offers: CommercialOffer[];
         billingOrders: BillingOrder[];
         workOrder: StarterWorkOrder | null;
+        clientProject: StarterClientProject | null;
         maintenanceSubscription: MaintenanceSubscription | null;
       }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}`,
@@ -166,6 +191,7 @@ export function createAdminClient(baseUrl: string) {
         intake: PackageIntake;
         offers: CommercialOffer[];
         billingOrder: BillingOrder;
+        billingOrders: BillingOrder[];
       }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}/implementation-payment/reopen`,
         {},
@@ -250,6 +276,32 @@ export function createAdminClient(baseUrl: string) {
     // ── Pagos atascados ──────────────────────────────────────
     getStuckPayments() {
       return http.get<StuckPaymentsSummary>('/admin/stuck-payments');
+    },
+
+    reconcileStuckPayment(kind: StuckPaymentItem['kind'], id: string) {
+      return http.post<{ kind: string; id: string; previousStatus: string; status: string }>(
+        `/admin/stuck-payments/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/reconcile`,
+        {},
+      );
+    },
+
+    listStarterDomains(clientProjectId?: string) {
+      const suffix = clientProjectId
+        ? `?clientProjectId=${encodeURIComponent(clientProjectId)}`
+        : '';
+      return http.get<{ domains: ClientCustomDomain[] }>(`/admin/starter-domains${suffix}`);
+    },
+
+    confirmStarterDomain(domainId: string) {
+      return http.post<{ domain: ClientCustomDomain }>(
+        `/admin/starter-domains/${encodeURIComponent(domainId)}/verify`,
+      );
+    },
+
+    removeStarterDomain(domainId: string) {
+      return http.del<{ domain: ClientCustomDomain }>(
+        `/admin/starter-domains/${encodeURIComponent(domainId)}`,
+      );
     },
   };
 }

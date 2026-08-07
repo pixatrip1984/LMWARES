@@ -1,11 +1,20 @@
 import { z } from 'zod';
-import { MAINTENANCE_PLAN_TIERS, PACKAGE_MODULE_IDS, PAID_PACKAGE_PLANS } from '@starter/domain';
+import {
+  IMPLEMENTATION_MINIMUM_TOTAL_AMOUNT_CENTS,
+  MAINTENANCE_PLAN_TIERS,
+  PACKAGE_MODULE_IDS,
+  PAID_PACKAGE_PLANS,
+} from '@starter/domain';
 
 export const issueCommercialOfferSchema = z.object({
   plan: z.enum(PAID_PACKAGE_PLANS),
   modules: z.array(z.enum(PACKAGE_MODULE_IDS)).min(2).max(PACKAGE_MODULE_IDS.length),
   marketing: z.boolean(),
-  implementationAmountCents: z.number().int().min(100).max(100_000_000),
+  implementationAmountCents: z
+    .number()
+    .int()
+    .min(IMPLEMENTATION_MINIMUM_TOTAL_AMOUNT_CENTS)
+    .max(100_000_000),
   monthlyAmountCents: z.number().int().min(0).max(10_000_000),
   scopeSummary: z.string().trim().min(20).max(4_000),
   implementationDescription: z.string().trim().min(20).max(4_000),

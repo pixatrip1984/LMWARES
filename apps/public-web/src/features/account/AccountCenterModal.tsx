@@ -3,7 +3,12 @@ import type {
   AccountNotification,
   AccountOverview,
   AccountSite,
+  CreatePublicCustomDomainResult,
+  PublicCustomDomain,
+  PublicDomainAvailability,
   PublicPackageIntake,
+  PublicStarterClientProject,
+  PublicStarterWorkOrder,
 } from '@starter/api-client';
 import { maintenanceActionLabel } from '../../lib/maintenance-ui';
 import './accountCenterModal.css';
@@ -16,9 +21,22 @@ type AccountCenterModalProps = {
   loading: boolean;
   onClose: () => void;
   onAcceptOffer: (intakeId: string, offerId: string, termsVersion: string) => Promise<void>;
+  onCreateStarterDomain: (
+    clientProjectId: string,
+    input: { hostname: string; type: 'www' | 'app' },
+  ) => Promise<CreatePublicCustomDomainResult>;
   onMarkAllRead: () => Promise<void>;
   onMarkRead: (notificationId: string) => Promise<void>;
+  onPurchaseStarterDomain: (
+    clientProjectId: string,
+    input: { domain: string },
+  ) => Promise<CreatePublicCustomDomainResult>;
   onReload: () => Promise<void>;
+  onRemoveStarterDomain: (clientProjectId: string, domainId: string) => Promise<unknown>;
+  onSearchStarterDomains: (
+    clientProjectId: string,
+    input: { sld: string },
+  ) => Promise<PublicDomainAvailability[]>;
   onSignOut: () => Promise<void>;
   open: boolean;
   overview: AccountOverview | null;
@@ -55,9 +73,13 @@ export function AccountCenterModal({
   loading,
   onClose,
   onAcceptOffer,
+  onCreateStarterDomain,
   onMarkAllRead,
   onMarkRead,
+  onPurchaseStarterDomain,
   onReload,
+  onRemoveStarterDomain,
+  onSearchStarterDomains,
   onSignOut,
   open,
   overview,
@@ -69,9 +91,9 @@ export function AccountCenterModal({
 
   const selectedNotification = useMemo(
     () =>
-      overview?.notifications.find(({ id }) => id === selectedId)
-      ?? overview?.notifications[0]
-      ?? null,
+      overview?.notifications.find(({ id }) => id === selectedId) ??
+      overview?.notifications[0] ??
+      null,
     [overview, selectedId],
   );
 
@@ -107,7 +129,10 @@ export function AccountCenterModal({
     try {
       await navigator.clipboard.writeText(site.publicUrl);
       setCopyState(site.id);
-      window.setTimeout(() => setCopyState((current) => current === site.id ? null : current), 1800);
+      window.setTimeout(
+        () => setCopyState((current) => (current === site.id ? null : current)),
+        1800,
+      );
     } catch {
       setCopyState(null);
     }
@@ -144,7 +169,9 @@ export function AccountCenterModal({
             onClick={() => setTab('notifications')}
             type="button"
           >
-            <span><b>01</b> Notificaciones</span>
+            <span>
+              <b>01</b> Notificaciones
+            </span>
             {overview?.unreadCount ? <i>{overview.unreadCount}</i> : null}
           </button>
           <button
@@ -152,7 +179,9 @@ export function AccountCenterModal({
             onClick={() => setTab('sites')}
             type="button"
           >
-            <span><b>02</b> Mis sitios</span>
+            <span>
+              <b>02</b> Mis sitios
+            </span>
             <i>{(overview?.sites.length ?? 0) + (overview?.commercialIntakes.length ?? 0)}</i>
           </button>
           <button
@@ -160,16 +189,25 @@ export function AccountCenterModal({
             onClick={() => setTab('account')}
             type="button"
           >
-            <span><b>03</b> Perfil</span>
+            <span>
+              <b>03</b> Perfil
+            </span>
           </button>
         </nav>
 
         <div className="lmw-account-content">
           {loading && !overview ? (
-            <AccountState title="Cargando tu cuenta…" copy="Estamos recuperando sitios y mensajes." />
+            <AccountState
+              title="Cargando tu cuenta…"
+              copy="Estamos recuperando sitios y mensajes."
+            />
           ) : error && !overview ? (
             <AccountState
-              action={<button onClick={() => void onReload()} type="button">Reintentar</button>}
+              action={
+                <button onClick={() => void onReload()} type="button">
+                  Reintentar
+                </button>
+              }
               copy={error}
               title="No pudimos abrir tu cuenta"
             />
@@ -185,19 +223,23 @@ export function AccountCenterModal({
               copyState={copyState}
               intakes={overview?.commercialIntakes ?? []}
               onAcceptOffer={onAcceptOffer}
+              onCreateStarterDomain={onCreateStarterDomain}
               onCopy={copyUrl}
+              onPurchaseStarterDomain={onPurchaseStarterDomain}
+              onRemoveStarterDomain={onRemoveStarterDomain}
+              onSearchStarterDomains={onSearchStarterDomains}
               sites={overview?.sites ?? []}
             />
           ) : (
-            <ProfilePanel
-              onSignOut={onSignOut}
-              overview={overview}
-            />
+            <ProfilePanel onSignOut={onSignOut} overview={overview} />
           )}
         </div>
 
         <footer className="lmw-account-footer">
-          <span><i />Datos sincronizados con tu cuenta</span>
+          <span>
+            <i />
+            Datos sincronizados con tu cuenta
+          </span>
           <a href="mailto:soporte@lmwares.com">soporte@lmwares.com</a>
         </footer>
       </section>
@@ -245,28 +287,33 @@ function NotificationsPanel({
       />
       <div className="lmw-account-notifications">
         <aside className="lmw-account-inbox">
-        <header>
-          <div><small>BANDEJA</small><b>{notifications.length} mensajes</b></div>
-          {notifications.some(({ readAt }) => !readAt) ? (
-            <button onClick={() => void onMarkAllRead()} type="button">Marcar todo leído</button>
-          ) : null}
-        </header>
-        <div>
-          {notifications.map((notification) => (
-            <button
-              className={`${selected?.id === notification.id ? 'is-selected' : ''}${notification.readAt ? '' : ' is-unread'}`}
-              key={notification.id}
-              onClick={() => onSelect(notification.id)}
-              type="button"
-            >
-              <i />
-              <span>
-                <b>{notification.summary}</b>
-                <small>{formatDate(notification.createdAt)}</small>
-              </span>
-            </button>
-          ))}
-        </div>
+          <header>
+            <div>
+              <small>BANDEJA</small>
+              <b>{notifications.length} mensajes</b>
+            </div>
+            {notifications.some(({ readAt }) => !readAt) ? (
+              <button onClick={() => void onMarkAllRead()} type="button">
+                Marcar todo leído
+              </button>
+            ) : null}
+          </header>
+          <div>
+            {notifications.map((notification) => (
+              <button
+                className={`${selected?.id === notification.id ? 'is-selected' : ''}${notification.readAt ? '' : ' is-unread'}`}
+                key={notification.id}
+                onClick={() => onSelect(notification.id)}
+                type="button"
+              >
+                <i />
+                <span>
+                  <b>{notification.summary}</b>
+                  <small>{formatDate(notification.createdAt)}</small>
+                </span>
+              </button>
+            ))}
+          </div>
         </aside>
 
         {selected ? <NotificationReader notification={selected} /> : null}
@@ -293,27 +340,37 @@ function NotificationReader({ notification }: { notification: AccountNotificatio
       <header>
         <small>
           {notification.kind === 'commercial-offer-issued' ? 'OFERTA COMERCIAL' : 'PUBLICACIÓN'}
-          {' · '}{notification.plan.toUpperCase()}
+          {' · '}
+          {notification.plan.toUpperCase()}
         </small>
         <h3>{notification.title}</h3>
         <p>{formatDateTime(notification.createdAt)}</p>
       </header>
       <div className="lmw-account-reader__body">
         <strong>{notification.siteName}</strong>
-        {notification.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+        {notification.body.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
         {notification.actionUrl ? (
           <div className="lmw-account-reader__url">
             <small>URL DE TU SITIO</small>
             <b>{notification.actionUrl}</b>
             <div>
-              <button onClick={copy} type="button">{copied ? 'Copiada ✓' : 'Copiar URL'}</button>
-              <a href={notification.actionUrl} rel="noreferrer" target="_blank">Abrir sitio ↗</a>
+              <button onClick={copy} type="button">
+                {copied ? 'Copiada ✓' : 'Copiar URL'}
+              </button>
+              <a href={notification.actionUrl} rel="noreferrer" target="_blank">
+                Abrir sitio ↗
+              </a>
             </div>
           </div>
         ) : null}
       </div>
       <footer>
-        <div><small>REFERENCIA</small><b>{notification.referenceId ?? 'No disponible'}</b></div>
+        <div>
+          <small>REFERENCIA</small>
+          <b>{notification.referenceId ?? 'No disponible'}</b>
+        </div>
         <div>
           <small>{notification.kind === 'commercial-offer-issued' ? 'CANAL' : 'EMAIL'}</small>
           <b>
@@ -327,17 +384,425 @@ function NotificationReader({ notification }: { notification: AccountNotificatio
   );
 }
 
+function CustomDomainsPanel({
+  clientProjectId,
+  domains,
+  onCreate,
+  onRemove,
+}: {
+  clientProjectId: string;
+  domains: PublicCustomDomain[];
+  onCreate: (
+    clientProjectId: string,
+    input: { hostname: string; type: 'www' | 'app' },
+  ) => Promise<CreatePublicCustomDomainResult>;
+  onRemove: (clientProjectId: string, domainId: string) => Promise<unknown>;
+}) {
+  const [hostname, setHostname] = useState('');
+  const [type, setType] = useState<'www' | 'app'>('www');
+  const [verification, setVerification] = useState<CreatePublicCustomDomainResult['verification']>(
+    null,
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await onCreate(clientProjectId, { hostname, type });
+      setVerification(result.verification);
+      if (result.verification) setHostname('');
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'No pudimos registrar el dominio.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (domain: PublicCustomDomain) => {
+    if (!window.confirm(`¿Retirar ${domain.hostname} del proyecto?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onRemove(clientProjectId, domain.id);
+      if (verification) setVerification(null);
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : 'No pudimos retirar el dominio.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="lmw-account-domains" aria-label="Dominios personalizados">
+      <header>
+        <small>DOMINIO PROPIO · YA LO TIENES</small>
+        <strong>¿Ya tienes un dominio comprado en otro lado? Conéctalo aquí</strong>
+        <p>
+          Este formulario es para dominios que ya compraste tú (en otro proveedor). El subdominio
+          LMWares seguirá disponible como respaldo. Te mostraremos los registros DNS necesarios y
+          confirmaremos la activación antes de cambiar el tráfico. Si prefieres que te ayudemos a
+          comprar uno nuevo, usa el buscador de "¿Aún no tienes un dominio?" más abajo (incluido en
+          tu mantenimiento).
+        </p>
+      </header>
+      {domains.filter(({ status }) => status !== 'removed').map((domain) => (
+        <article key={domain.id}>
+          <div>
+            <strong>{domain.hostname}</strong>
+            <span>{customDomainStatusLabel(domain.status)}</span>
+          </div>
+          {domain.dnsInstructions.map((instruction) => (
+            <code key={`${instruction.type}-${instruction.name}`}>
+              {instruction.type} {instruction.name} → {instruction.value}
+            </code>
+          ))}
+          {domain.status === 'pending_verification' ? (
+            <small>
+              Después de configurar los registros, nuestro equipo confirmará la verificación y el
+              certificado. El subdominio LMWares seguirá disponible mientras tanto.
+            </small>
+          ) : null}
+          <button disabled={busy} onClick={() => void remove(domain)} type="button">
+            Retirar dominio
+          </button>
+        </article>
+      ))}
+      {!domains.some(({ status }) => status !== 'removed') ? (
+        <div className="lmw-account-domains__form">
+          <select aria-label="Tipo de dominio" onChange={(event) => setType(event.target.value as 'www' | 'app')} value={type}>
+            <option value="www">www.tuempresa.com</option>
+            <option value="app">app.tuempresa.com</option>
+          </select>
+          <input
+            aria-label="Hostname personalizado"
+            onChange={(event) => setHostname(event.target.value)}
+            placeholder={type === 'www' ? 'www.tuempresa.com' : 'app.tuempresa.com'}
+            value={hostname}
+          />
+          <button disabled={busy || !hostname.trim()} onClick={() => void create()} type="button">
+            Registrar dominio
+          </button>
+        </div>
+      ) : null}
+      {verification ? (
+        <div className="lmw-account-domains__instructions">
+          <strong>Guarda estas instrucciones; el token sólo se muestra una vez.</strong>
+          {verification.instructions.map((instruction) => (
+            <code key={`${instruction.type}-${instruction.name}`}>
+              {instruction.type} {instruction.name} → {instruction.value}
+            </code>
+          ))}
+        </div>
+      ) : null}
+      {error ? <p className="lmw-account-domains__error">{error}</p> : null}
+    </section>
+  );
+}
+
+function DomainSearchGate({
+  clientProject,
+  maintenancePlanSelected,
+  onPurchase,
+  onSearch,
+  workOrderStatus,
+}: {
+  clientProject: PublicStarterClientProject;
+  maintenancePlanSelected: 'none' | 'basic' | 'advanced' | null;
+  onPurchase: (
+    clientProjectId: string,
+    input: { domain: string },
+  ) => Promise<CreatePublicCustomDomainResult>;
+  onSearch: (
+    clientProjectId: string,
+    input: { sld: string },
+  ) => Promise<PublicDomainAvailability[]>;
+  workOrderStatus: PublicStarterWorkOrder['status'] | null;
+}) {
+  const hasActiveApexDomain = clientProject.customDomains.some(
+    (domain) => domain.type === 'apex' && domain.status !== 'removed',
+  );
+  if (hasActiveApexDomain) return null;
+
+  const workOrderReady =
+    workOrderStatus === 'ready_to_publish' || workOrderStatus === 'live';
+  const maintenanceActive =
+    maintenancePlanSelected === 'basic' || maintenancePlanSelected === 'advanced';
+
+  if (!workOrderReady) return null;
+
+  if (!maintenanceActive) {
+    return (
+      <section className="lmw-account-domains" aria-label="Dominio propio comprado">
+        <header>
+          <small>DOMINIO PROPIO · REQUIERE MANTENIMIENTO</small>
+          <strong>Elige un plan de mantenimiento para comprar tu dominio</strong>
+          <p>
+            Buscar y comprar un dominio propio (por ejemplo, tuempresa.com) está incluido en el
+            costo del mantenimiento (básico o avanzado), sin cargo adicional aparte. Si aún no
+            tienes mantenimiento activo, puedes seguir usando tu subdominio LMWares o conectar un
+            dominio que ya poseas arriba.
+          </p>
+        </header>
+      </section>
+    );
+  }
+
+  return (
+    <DomainSearchPanel
+      clientProjectId={clientProject.id}
+      onPurchase={onPurchase}
+      onSearch={onSearch}
+    />
+  );
+}
+
+const KNOWN_DOMAIN_TLDS = ['com.mx', 'com', 'mx', 'net'];
+
+/**
+ * Acepta lo que el cliente escriba (con o sin "www.", protocolo o extensión)
+ * y devuelve sólo el nombre (SLD) que espera el backend, ej.
+ * "https://www.tuempresa.com" -> "tuempresa".
+ */
+function normalizeSldInput(value: string): string {
+  let candidate = value.trim().toLowerCase();
+  if (!candidate) return '';
+  candidate = candidate.replace(/^[a-z]+:\/\//, '');
+  candidate = candidate.split('/')[0] ?? candidate;
+  candidate = candidate.replace(/^www\./, '');
+  const tld = [...KNOWN_DOMAIN_TLDS]
+    .sort((a, b) => b.length - a.length)
+    .find((candidateTld) => candidate.endsWith(`.${candidateTld}`));
+  if (tld) candidate = candidate.slice(0, candidate.length - tld.length - 1);
+  return candidate;
+}
+
+function DomainSearchPanel({
+  clientProjectId,
+  onPurchase,
+  onSearch,
+}: {
+  clientProjectId: string;
+  onPurchase: (
+    clientProjectId: string,
+    input: { domain: string },
+  ) => Promise<CreatePublicCustomDomainResult>;
+  onSearch: (
+    clientProjectId: string,
+    input: { sld: string },
+  ) => Promise<PublicDomainAvailability[]>;
+}) {
+  const [sld, setSld] = useState('');
+  const [results, setResults] = useState<PublicDomainAvailability[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [purchasingDomain, setPurchasingDomain] = useState<string | null>(null);
+  const [purchased, setPurchased] = useState<CreatePublicCustomDomainResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<PublicDomainAvailability | null>(null);
+  const [confirmAccepted, setConfirmAccepted] = useState(false);
+  const requestRef = useRef(0);
+
+  const search = async () => {
+    const query = normalizeSldInput(sld);
+    if (!query) return;
+    const requestId = ++requestRef.current;
+    setSearching(true);
+    setError(null);
+    setResults(null);
+    try {
+      const found = await onSearch(clientProjectId, { sld: query });
+      if (requestRef.current === requestId) setResults(found);
+    } catch (searchError) {
+      if (requestRef.current === requestId) {
+        setError(
+          searchError instanceof Error ? searchError.message : 'No pudimos buscar ese dominio.',
+        );
+      }
+    } finally {
+      if (requestRef.current === requestId) setSearching(false);
+    }
+  };
+
+  const openConfirm = (result: PublicDomainAvailability) => {
+    setConfirmTarget(result);
+    setConfirmAccepted(false);
+    setError(null);
+  };
+
+  const purchase = async () => {
+    if (!confirmTarget || !confirmAccepted) return;
+    const domain = confirmTarget.domain;
+    setPurchasingDomain(domain);
+    setError(null);
+    try {
+      const result = await onPurchase(clientProjectId, { domain });
+      setPurchased(result);
+      setResults(null);
+      setSld('');
+      setConfirmTarget(null);
+    } catch (purchaseError) {
+      setError(
+        purchaseError instanceof Error ? purchaseError.message : 'No pudimos comprar ese dominio.',
+      );
+    } finally {
+      setPurchasingDomain(null);
+    }
+  };
+
+  if (purchased) {
+    return (
+      <section className="lmw-account-domains" aria-label="Dominio propio comprado">
+        <header>
+          <small>DOMINIO PROPIO · COMPRA CONFIRMADA</small>
+          <strong>{purchased.domain.hostname}</strong>
+          <p>
+            Estamos configurando el DNS y esperando la verificación de Cloudflare
+            automáticamente. Estado actual: {customDomainStatusLabel(purchased.domain.status)}. No
+            necesitas copiar ni pegar nada — el subdominio LMWares sigue disponible mientras tanto.
+          </p>
+        </header>
+      </section>
+    );
+  }
+
+  return (
+    <section className="lmw-account-domains" aria-label="Buscar y comprar dominio propio">
+      <header>
+        <small>DOMINIO PROPIO · INCLUIDO EN TU MANTENIMIENTO</small>
+        <strong>¿Aún no tienes un dominio? Búscalo aquí</strong>
+        <p>
+          Escribe sólo el nombre, sin "www." ni extensión (ej. "tuempresa", no "www.tuempresa.com")
+          y buscaremos disponibilidad en .com, .mx, .com.mx y .net. Si pegas la versión completa te
+          la ajustamos automáticamente. Configuraremos todo al comprarlo: DNS, verificación y
+          activación.
+        </p>
+      </header>
+      <div className="lmw-account-domains__form">
+        <input
+          aria-label="Nombre de dominio a buscar"
+          onChange={(event) => setSld(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') void search();
+          }}
+          placeholder="tuempresa"
+          value={sld}
+        />
+        <button disabled={searching || !sld.trim()} onClick={() => void search()} type="button">
+          {searching ? 'Buscando…' : 'Buscar'}
+        </button>
+      </div>
+      {searching ? (
+        <p className="lmw-account-domains__searching" role="status" aria-live="polite">
+          <span className="lmw-spinner" aria-hidden="true" />
+          Buscando disponibilidad… puede tardar hasta un minuto, estamos consultando varias
+          extensiones a la vez.
+        </p>
+      ) : null}
+      {results ? (
+        results.length === 0 ? (
+          <small>No encontramos opciones para ese nombre.</small>
+        ) : (
+          <ul className="lmw-account-domains__results">
+            {results.map((result) => (
+              <li key={result.domain}>
+                <span>{result.domain}</span>
+                {result.available ? (
+                  <>
+                    <span>
+                      {result.priceCents !== null ? formatMoney(result.priceCents, 'USD') : ''}
+                    </span>
+                    <button
+                      disabled={purchasingDomain !== null}
+                      onClick={() => openConfirm(result)}
+                      type="button"
+                    >
+                      Comprar y conectar
+                    </button>
+                  </>
+                ) : (
+                  <span>Ocupado</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )
+      ) : null}
+      {error && !confirmTarget ? <p className="lmw-account-domains__error">{error}</p> : null}
+      {confirmTarget ? (
+        <div className="lmw-account-domains__confirm-overlay" role="dialog" aria-modal="true">
+          <div className="lmw-account-domains__confirm">
+            <strong>Confirma la compra de {confirmTarget.domain}</strong>
+            <p>
+              {confirmTarget.priceCents !== null
+                ? `Costo: ${formatMoney(confirmTarget.priceCents, 'USD')}. `
+                : ''}
+              Una vez registrado, <strong>este dominio no podrá cambiarse tú mismo</strong>. Si
+              después necesitas otro dominio, deberás contactar a soporte y solicitar el cambio,
+              con un costo extra que se añadirá a tu mensualidad.
+            </p>
+            <label className="lmw-account-domains__confirm-check">
+              <input
+                checked={confirmAccepted}
+                onChange={(event) => setConfirmAccepted(event.target.checked)}
+                type="checkbox"
+              />
+              Entiendo y acepto estas condiciones.
+            </label>
+            {error ? <p className="lmw-account-domains__error">{error}</p> : null}
+            <div className="lmw-account-domains__confirm-actions">
+              <button
+                disabled={purchasingDomain !== null}
+                onClick={() => setConfirmTarget(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!confirmAccepted || purchasingDomain !== null}
+                onClick={() => void purchase()}
+                type="button"
+              >
+                {purchasingDomain === confirmTarget.domain
+                  ? 'Comprando…'
+                  : 'Confirmar y comprar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function SitesPanel({
   copyState,
   intakes,
   onAcceptOffer,
+  onCreateStarterDomain,
   onCopy,
+  onPurchaseStarterDomain,
+  onRemoveStarterDomain,
+  onSearchStarterDomains,
   sites,
 }: {
   copyState: string | null;
   intakes: PublicPackageIntake[];
   onAcceptOffer: (intakeId: string, offerId: string, termsVersion: string) => Promise<void>;
+  onCreateStarterDomain: (
+    clientProjectId: string,
+    input: { hostname: string; type: 'www' | 'app' },
+  ) => Promise<CreatePublicCustomDomainResult>;
   onCopy: (site: AccountSite) => Promise<void>;
+  onPurchaseStarterDomain: (
+    clientProjectId: string,
+    input: { domain: string },
+  ) => Promise<CreatePublicCustomDomainResult>;
+  onRemoveStarterDomain: (clientProjectId: string, domainId: string) => Promise<unknown>;
+  onSearchStarterDomains: (
+    clientProjectId: string,
+    input: { sld: string },
+  ) => Promise<PublicDomainAvailability[]>;
   sites: AccountSite[];
 }) {
   const [acceptedTerms, setAcceptedTerms] = useState<Record<string, boolean>>({});
@@ -394,48 +859,75 @@ function SitesPanel({
                     const presentation = MODULE_PRESENTATION[module];
                     return presentation ? (
                       <figure key={module}>
-                        <img alt={`Referencia visual de ${presentation.label}`} src={presentation.visual} />
+                        <img
+                          alt={`Referencia visual de ${presentation.label}`}
+                          src={presentation.visual}
+                        />
                         <figcaption>{presentation.label}</figcaption>
                       </figure>
                     ) : null;
                   })}
                 </div>
-                <div className="lmw-account-intake-progress" aria-label={`Estado: ${commercialIntakeStatus(intake.status)}`}>
+                <div
+                  className="lmw-account-intake-progress"
+                  aria-label={`Estado: ${commercialIntakeStatus(intake.status)}`}
+                >
                   {['Solicitud', 'Revisión', 'Oferta', 'Proyecto'].map((label, index) => (
-                    <span className={index < commercialIntakeProgress(intake.status) ? 'is-complete' : ''} key={label}>
-                      <i />{label}
+                    <span
+                      className={
+                        index < commercialIntakeProgress(intake.status) ? 'is-complete' : ''
+                      }
+                      key={label}
+                    >
+                      <i />
+                      {label}
                     </span>
                   ))}
                 </div>
                 <h4>{intake.modules.length} capacidades seleccionadas</h4>
-                <p>{intake.modules.map((module) => MODULE_PRESENTATION[module]?.label ?? module).join(' · ')}</p>
+                <p>
+                  {intake.modules
+                    .map((module) => MODULE_PRESENTATION[module]?.label ?? module)
+                    .join(' · ')}
+                </p>
                 <dl>
                   <div>
                     <dt>Implementación estimada</dt>
                     <dd>{formatMoney(intake.estimatedImplementationCents, intake.currency)}</dd>
                   </div>
                   <div>
-                        <dt>Mantenimiento opcional estimado</dt>
-                        <dd>Desde {formatMoney(intake.estimatedMonthlyCents, intake.currency)}/mes</dd>
+                    <dt>Mantenimiento opcional estimado</dt>
+                    <dd>Desde {formatMoney(intake.estimatedMonthlyCents, intake.currency)}/mes</dd>
                   </div>
                 </dl>
                 {intake.currentOffer ? (
                   <section className="lmw-account-offer">
                     <header>
                       <small>OFERTA FINAL · V{intake.currentOffer.version}</small>
-                      <b>{intake.currentOffer.status === 'accepted' ? 'Aceptada' : 'Lista para revisar'}</b>
+                      <b>
+                        {intake.currentOffer.status === 'accepted'
+                          ? 'Aceptada'
+                          : 'Lista para revisar'}
+                      </b>
                     </header>
                     <h5>{intake.currentOffer.scopeSummary}</h5>
                     <dl>
                       <div>
                         <dt>Implementación final</dt>
-                        <dd>{formatMoney(intake.currentOffer.implementationAmountCents, intake.currentOffer.currency)}</dd>
+                        <dd>
+                          {formatMoney(
+                            intake.currentOffer.implementationAmountCents,
+                            intake.currentOffer.currency,
+                          )}
+                        </dd>
                       </div>
                       <div>
                         <dt>Mantenimiento acordado</dt>
-                        <dd>{intake.currentOffer.monthlyAmountCents === 0
-                          ? 'No contratado'
-                          : `${formatMoney(intake.currentOffer.monthlyAmountCents, intake.currentOffer.currency)}/mes`}</dd>
+                        <dd>
+                          {intake.currentOffer.monthlyAmountCents === 0
+                            ? 'No contratado'
+                            : `${formatMoney(intake.currentOffer.monthlyAmountCents, intake.currentOffer.currency)}/mes`}
+                        </dd>
                       </div>
                     </dl>
                     <div className="lmw-account-offer__descriptions">
@@ -455,19 +947,26 @@ function SitesPanel({
                           <input
                             type="checkbox"
                             checked={Boolean(acceptedTerms[intake.currentOffer.id])}
-                            onChange={(event) => setAcceptedTerms((current) => ({
-                              ...current,
-                              [intake.currentOffer!.id]: event.target.checked,
-                            }))}
+                            onChange={(event) =>
+                              setAcceptedTerms((current) => ({
+                                ...current,
+                                [intake.currentOffer!.id]: event.target.checked,
+                              }))
+                            }
                           />
                           Revisé el alcance, los importes y acepto esta versión de los términos.
                         </label>
                         <button
-                          disabled={!acceptedTerms[intake.currentOffer.id] || acceptingOfferId === intake.currentOffer.id}
+                          disabled={
+                            !acceptedTerms[intake.currentOffer.id] ||
+                            acceptingOfferId === intake.currentOffer.id
+                          }
                           onClick={() => void acceptOffer(intake)}
                           type="button"
                         >
-                          {acceptingOfferId === intake.currentOffer.id ? 'Aceptando…' : 'Aceptar oferta'}
+                          {acceptingOfferId === intake.currentOffer.id
+                            ? 'Aceptando…'
+                            : 'Aceptar oferta'}
                         </button>
                       </div>
                     ) : (
@@ -476,7 +975,9 @@ function SitesPanel({
                           const phases = intake.implementationPhases
                             .slice()
                             .sort((a, b) => a.phase - b.phase);
-                          const paidCount = phases.filter((phase) => phase.status === 'paid').length;
+                          const paidCount = phases.filter(
+                            (phase) => phase.status === 'paid',
+                          ).length;
                           const allPaid = phases.length > 0 && paidCount === phases.length;
                           const phase1 = phases.find((p) => p.phase === 1);
                           const isPhase1Paid = phase1?.status === 'paid';
@@ -491,7 +992,8 @@ function SitesPanel({
                                 </strong>
                                 {!isPhase1Paid && (
                                   <p className="lmw-account-offer__phase1-callout">
-                                    <b>Atención:</b> Debes realizar el pago de la <b>Fase 1</b> para iniciar la construcción del proyecto.
+                                    <b>Atención:</b> Debes realizar el pago de la <b>Fase 1</b> para
+                                    iniciar la construcción del proyecto.
                                   </p>
                                 )}
                               </div>
@@ -517,8 +1019,14 @@ function SitesPanel({
                                           <span className="lmw-account-phase-card__number">
                                             FASE {phase.phase} DE 4
                                           </span>
-                                          <span className={`lmw-account-phase-card__badge ${isPaid ? 'badge-paid' : isPhase1 ? 'badge-required' : 'badge-optional'}`}>
-                                            {isPaid ? '✓ Pagada' : isPhase1 ? 'Requerida para iniciar' : 'Opcional adelantar'}
+                                          <span
+                                            className={`lmw-account-phase-card__badge ${isPaid ? 'badge-paid' : isPhase1 ? 'badge-required' : 'badge-optional'}`}
+                                          >
+                                            {isPaid
+                                              ? '✓ Pagada'
+                                              : isPhase1
+                                                ? 'Requerida para iniciar'
+                                                : 'Opcional adelantar'}
                                           </span>
                                         </div>
 
@@ -556,18 +1064,48 @@ function SitesPanel({
                             </div>
                           );
                         })()}
-                        {(intake.currentOffer.monthlyAmountCents > 0 || intake.currentOffer.maintenancePlanSelected === null) && intake.workOrder && (
-                          intake.workOrder.status === 'ready_to_publish' || intake.maintenanceSubscription
-                        ) ? (
+                        {intake.clientProject ? (
+                          <div className="lmw-account-project-callout">
+                            <strong>Proyecto reservado desde la Fase 1</strong>
+                            <span>{intake.clientProject.siteName}</span>
+                            <small>
+                              {intake.clientProject.slug}.lmwares.com ·{' '}
+                              {clientProjectStatusLabel(intake.clientProject.status)}
+                            </small>
+                            <CustomDomainsPanel
+                              clientProjectId={intake.clientProject.id}
+                              domains={intake.clientProject.customDomains}
+                              onCreate={onCreateStarterDomain}
+                              onRemove={onRemoveStarterDomain}
+                            />
+                            <DomainSearchGate
+                              clientProject={intake.clientProject}
+                              maintenancePlanSelected={intake.currentOffer?.maintenancePlanSelected ?? null}
+                              onPurchase={onPurchaseStarterDomain}
+                              onSearch={onSearchStarterDomains}
+                              workOrderStatus={intake.workOrder?.status ?? null}
+                            />
+                          </div>
+                        ) : null}
+                        {(intake.currentOffer.monthlyAmountCents > 0 ||
+                          intake.currentOffer.maintenancePlanSelected === null) &&
+                        intake.workOrder &&
+                        (intake.workOrder.status === 'ready_to_publish' ||
+                          intake.maintenanceSubscription) ? (
                           <a href={`/suscripcion/${encodeURIComponent(intake.workOrder.id)}`}>
                             {intake.currentOffer.maintenancePlanSelected === null
                               ? 'Elige tu plan de mantenimiento →'
-                              : maintenanceActionLabel(intake.maintenanceSubscription?.status ?? null)}
+                              : `${maintenanceActionLabel(
+                                  intake.maintenanceSubscription?.status ?? null,
+                                  true,
+                                )} →`}
                           </a>
                         ) : null}
-                        {intake.currentOffer.maintenancePlanSelected === 'none' && intake.workOrder?.status === 'ready_to_publish' ? (
+                        {intake.currentOffer.maintenancePlanSelected === 'none' &&
+                        intake.workOrder?.status === 'ready_to_publish' ? (
                           <strong className="lmw-account-offer__accepted">
-                            Pago único confirmado. El proyecto puede publicarse sin autorizar mensualidad.
+                            Pago único confirmado. El proyecto puede publicarse sin autorizar
+                            mensualidad.
                           </strong>
                         ) : null}
                         {intake.workOrder?.status === 'live' && intake.workOrder.publishedUrl ? (
@@ -583,7 +1121,8 @@ function SitesPanel({
                   <span>
                     {intake.currentOffer?.monthlyAmountCents === 0
                       ? 'Pago único · sin mantenimiento mensual'
-                      : 'Mensualidad desde la publicación'} · Ref. {intake.id.slice(0, 8)}
+                      : 'Mensualidad desde la publicación'}{' '}
+                    · Ref. {intake.id.slice(0, 8)}
                   </span>
                 </footer>
               </article>
@@ -606,8 +1145,14 @@ function SitesPanel({
                 <h4>{site.siteName}</h4>
                 <p>{site.publicUrl ?? `${site.slug}.lmwares.com`}</p>
                 <dl>
-                  <div><dt>Creado</dt><dd>{formatDate(site.createdAt)}</dd></div>
-                  <div><dt>Publicado</dt><dd>{site.publishedAt ? formatDate(site.publishedAt) : 'En proceso'}</dd></div>
+                  <div>
+                    <dt>Creado</dt>
+                    <dd>{formatDate(site.createdAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Publicado</dt>
+                    <dd>{site.publishedAt ? formatDate(site.publishedAt) : 'En proceso'}</dd>
+                  </div>
                 </dl>
               </div>
               {site.publicUrl ? <SiteQrCode site={site} /> : null}
@@ -618,7 +1163,9 @@ function SitesPanel({
                   <button onClick={() => void onCopy(site)} type="button">
                     {copyState === site.id ? 'Copiada ✓' : 'Copiar URL'}
                   </button>
-                  <a href={site.publicUrl} rel="noreferrer" target="_blank">Abrir ↗</a>
+                  <a href={site.publicUrl} rel="noreferrer" target="_blank">
+                    Abrir ↗
+                  </a>
                 </>
               ) : (
                 <span>Procesando solicitud…</span>
@@ -691,8 +1238,10 @@ function SiteQrCode({ site }: { site: AccountSite }) {
 
 function safeDownloadName(slug: string): string {
   return (
-    slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') ||
-    'sitio-lmwares'
+    slug
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'sitio-lmwares'
   );
 }
 
@@ -705,6 +1254,28 @@ function commercialIntakeStatus(status: PublicPackageIntake['status']): string {
     converted: 'Aceptada',
   };
   return labels[status];
+}
+
+function clientProjectStatusLabel(status: 'provisioning' | 'active' | 'archived'): string {
+  const labels: Record<typeof status, string> = {
+    provisioning: 'Preparando',
+    active: 'Activo',
+    archived: 'Archivado',
+  };
+  return labels[status];
+}
+
+function customDomainStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    draft: 'Borrador',
+    pending_verification: 'Pendiente de DNS',
+    verified: 'DNS verificado',
+    provisioning: 'Configurando',
+    active: 'Activo',
+    failed: 'Requiere atención',
+    removed: 'Retirado',
+  };
+  return labels[status] ?? status;
 }
 
 function commercialIntakeProgress(status: PublicPackageIntake['status']): number {
@@ -751,9 +1322,23 @@ function ProfilePanel({
         </div>
       </div>
       <div className="lmw-account-profile__metrics">
-        <article><small>PROYECTOS</small><strong>{(overview?.sites.length ?? 0) + (overview?.commercialIntakes.length ?? 0)}</strong><p>Sitios y solicitudes asociados a tu cuenta.</p></article>
-        <article><small>MENSAJES</small><strong>{overview?.notifications.length ?? 0}</strong><p>Confirmaciones e información operativa.</p></article>
-        <article><small>PENDIENTES</small><strong>{overview?.unreadCount ?? 0}</strong><p>Notificaciones aún no leídas.</p></article>
+        <article>
+          <small>PROYECTOS</small>
+          <strong>
+            {(overview?.sites.length ?? 0) + (overview?.commercialIntakes.length ?? 0)}
+          </strong>
+          <p>Sitios y solicitudes asociados a tu cuenta.</p>
+        </article>
+        <article>
+          <small>MENSAJES</small>
+          <strong>{overview?.notifications.length ?? 0}</strong>
+          <p>Confirmaciones e información operativa.</p>
+        </article>
+        <article>
+          <small>PENDIENTES</small>
+          <strong>{overview?.unreadCount ?? 0}</strong>
+          <p>Notificaciones aún no leídas.</p>
+        </article>
       </div>
       <div className="lmw-account-profile__help">
         <div>

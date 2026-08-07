@@ -284,7 +284,7 @@ export class LmwaresCommercialOffersRepository {
     offerId: string;
     userId: string;
     plan: MaintenancePlanTier;
-  }): Promise<CommercialOffer> {
+  }): Promise<{ offer: CommercialOffer; changed: boolean }> {
     const current = await this.getById(input.offerId);
     if (!current || current.userId !== input.userId) {
       throw AppError.notFound('Oferta comercial');
@@ -293,7 +293,7 @@ export class LmwaresCommercialOffersRepository {
       throw new AppError('conflict', 'La oferta todavía no está aceptada.');
     }
     if (current.maintenancePlanSelected !== null) {
-      return current;
+      return { offer: current, changed: false };
     }
     const amountCents = maintenancePlanTierAmountCents(input.plan);
     const result = await this.db
@@ -307,7 +307,7 @@ export class LmwaresCommercialOffersRepository {
     if ((result.meta.changes ?? 0) !== 1) {
       throw new AppError('conflict', 'El plan de mantenimiento ya fue decidido.');
     }
-    return (await this.getById(input.offerId))!;
+    return { offer: (await this.getById(input.offerId))!, changed: true };
   }
 }
 

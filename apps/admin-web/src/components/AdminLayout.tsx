@@ -10,6 +10,7 @@ const NAV = [
   { to: '/publications', label: 'Publicaciones' },
   { to: '/requests', label: 'Solicitudes' },
   { to: '/commercial-intakes', label: 'Paquetes' },
+  { to: '/starter-domains', label: 'Dominios' },
 ] as const;
 
 export function AdminLayout() {

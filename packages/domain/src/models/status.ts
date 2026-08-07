@@ -27,5 +27,6 @@ export const ENTITY_TYPES = [
   'lmwares_maintenance_subscription',
   'lmwares_package_proposal',
   'lmwares_subscription',
+  'lmw_custom_domain',
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];

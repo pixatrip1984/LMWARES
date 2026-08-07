@@ -3,3 +3,12 @@
 # el header X-Dev-Email (por defecto admin@example.com).
 #
 # Copia este archivo a .dev.vars solo si necesitas overrides locales.
+#
+# Si se prueba Cloudflare for SaaS en local, carga aquí el mismo secreto que
+# usaría el Admin API; no lo guardes ni lo compartas.
+# CLOUDFLARE_SAAS_API_TOKEN=""
+
+# Debe ser IDÉNTICO al OPS_RECOVERY_TOKEN configurado en el Public API; sin
+# este valor el botón "Reconciliar ahora" de pagos atascados responde
+# 'conflict' sin llamar al proveedor.
+# OPS_RECOVERY_TOKEN=""

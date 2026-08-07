@@ -21,6 +21,9 @@ export function PublicationEditPage() {
   const [pub, setPub] = useState<AdminPublicationDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingField, setSavingField] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -39,7 +42,7 @@ export function PublicationEditPage() {
 
   async function saveFields(e: React.FormEvent) {
     e.preventDefault();
-    if (!pub) return;
+    if (!pub || savingField) return;
     setError(null);
     setSavingField(true);
     try {
@@ -59,31 +62,47 @@ export function PublicationEditPage() {
   }
 
   async function changeStatus(status: PublicationStatus) {
-    if (!pub) return;
+    if (!pub || changingStatus || status === pub.status) return;
+    setError(null);
+    setChangingStatus(true);
     try {
       await api.updatePublicationStatus(pub.id, { status });
       await load();
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'Error al cambiar estado.');
+    } finally {
+      setChangingStatus(false);
     }
   }
 
   async function uploadImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !pub) return;
+    if (!file || !pub || uploadingImage) return;
+    setError(null);
+    setUploadingImage(true);
     try {
       await api.uploadPublicationImage(pub.id, file, { position: pub.images.length });
       if (fileRef.current) fileRef.current.value = '';
       await load();
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'Error al subir imagen.');
+    } finally {
+      setUploadingImage(false);
     }
   }
 
   async function deleteImage(imageId: string) {
-    if (!pub) return;
-    await api.deletePublicationImage(pub.id, imageId);
-    await load();
+    if (!pub || deletingImageId) return;
+    setError(null);
+    setDeletingImageId(imageId);
+    try {
+      await api.deletePublicationImage(pub.id, imageId);
+      await load();
+    } catch (err) {
+      setError(err instanceof AppError ? err.message : 'Error al eliminar imagen.');
+    } finally {
+      setDeletingImageId(null);
+    }
   }
 
   return (
@@ -105,8 +124,9 @@ export function PublicationEditPage() {
                 variant={s === pub.status ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => changeStatus(s)}
+                disabled={changingStatus || s === pub.status}
               >
-                {s}
+                {changingStatus && s !== pub.status ? 'Actualizando…' : s}
               </Button>
             ))}
           </div>
@@ -141,13 +161,27 @@ export function PublicationEditPage() {
             {pub.images.map((img) => (
               <div key={img.id} className="rounded-lg border border-surface-border p-2">
                 <img src={img.url} alt={img.alt ?? ''} className="h-28 w-full rounded object-cover" />
-                <Button variant="danger" size="sm" className="mt-2 w-full" onClick={() => deleteImage(img.id)}>
-                  Eliminar
+                <Button
+                  variant="danger"
+                  size="sm"
+                  className="mt-2 w-full"
+                  onClick={() => deleteImage(img.id)}
+                  disabled={deletingImageId !== null}
+                >
+                  {deletingImageId === img.id ? 'Eliminando…' : 'Eliminar'}
                 </Button>
               </div>
             ))}
           </div>
-          <input ref={fileRef} type="file" accept="image/*" onChange={uploadImage} className="text-sm" />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={uploadImage}
+            disabled={uploadingImage}
+            className="text-sm"
+          />
+          {uploadingImage ? <p className="mt-2 text-sm text-gray-500">Subiendo imagen…</p> : null}
         </CardBody>
       </Card>
     </div>

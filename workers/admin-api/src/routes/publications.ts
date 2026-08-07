@@ -81,12 +81,7 @@ publications.patch('/:id', requireWrite, async (c) => {
   const patch = parseInput(updatePublicationSchema, await readJson(c));
   const repos = createRepositories(c.env.DB);
 
-  const updated = await repos.publications.update(id, {
-    ...patch,
-    summary: patch.summary ?? undefined,
-    body: patch.body ?? undefined,
-    coverImageId: patch.coverImageId ?? undefined,
-  });
+  const updated = await repos.publications.update(id, patch);
   if (!updated) throw AppError.notFound('Publicación');
 
   await repos.audit.record({

@@ -52,7 +52,7 @@ export function decidePaymentPolicy(input: {
     };
   }
 
-  if (['rejected', 'cancelled'].includes(input.providerStatus)) {
+  if (['rejected', 'cancelled', 'canceled'].includes(input.providerStatus)) {
     return {
       affectsProposal,
       disposition: 'failed',

@@ -229,6 +229,7 @@ export async function reconcileMaintenanceSubscriptionWithProvider(input: {
   assertPreapprovalMatchesSubscription(provider, input.subscription);
   let subscription = await repos.lmwaresMaintenanceSubscriptions.savePreapproval({
     id: input.subscription.id,
+    externalReference: provider.externalReference,
     providerPreapprovalId: provider.id,
     authorizationUrl: provider.authorizationUrl,
     providerStatus: provider.status,
@@ -360,6 +361,50 @@ function compareAuthorizedPayments(
   return dateComparison || left.id.localeCompare(right.id, undefined, { numeric: true });
 }
 
+export interface BillingOrderReconciliationResult {
+  order: BillingOrder;
+  paymentsFound: number;
+}
+
+/**
+ * Reconcilia una única orden de facturación (fase de implementación) contra
+ * Mercado Pago. Es la misma llamada que hace el cron para cada candidato, por
+ * lo que es segura de invocar bajo demanda (idempotente: sólo aplica pagos que
+ * superan el guard de coincidencia congelada) desde una acción administrativa
+ * puntual de "reconciliar ahora".
+ */
+export async function reconcileBillingOrderWithProvider(input: {
+  env: Bindings;
+  order: BillingOrder;
+  accessToken: string;
+}): Promise<BillingOrderReconciliationResult> {
+  const repos = createRepositories(input.env.DB);
+  if (!input.order.providerPreferenceId) {
+    throw new AppError('conflict', 'La fase todavía no tiene checkout creado en Mercado Pago.');
+  }
+  const found = await searchMercadoPagoPayments({
+    accessToken: input.accessToken,
+    externalReference: input.order.externalReference,
+  });
+  let order: BillingOrder = input.order;
+  const ordered = [...found].sort(
+    (left, right) => paymentTimestamp(left.dateCreated) - paymentTimestamp(right.dateCreated),
+  );
+  for (const payment of ordered) {
+    assertPaymentMatchesBillingOrder(payment, order);
+    const reconciliation = await repos.lmwaresBillingOrders.reconcilePayment({
+      id: order.id,
+      paymentId: payment.id,
+      providerStatus: payment.status,
+      amountCents: Math.round(payment.amount * 100),
+      currency: payment.currency,
+      providerCreatedAt: payment.dateCreated,
+    });
+    order = reconciliation.order;
+  }
+  return { order, paymentsFound: ordered.length };
+}
+
 export async function reconcileBillingOrdersOnSchedule(
   env: Bindings,
   scheduledTime: number,
@@ -379,28 +424,13 @@ export async function reconcileBillingOrdersOnSchedule(
   for (const candidate of candidates) {
     if (!candidate.providerPreferenceId) continue;
     try {
-      const found = await searchMercadoPagoPayments({
+      const result = await reconcileBillingOrderWithProvider({
+        env,
+        order: candidate,
         accessToken: accessToken!,
-        externalReference: candidate.externalReference,
       });
-      let order: BillingOrder = candidate;
-      const ordered = [...found].sort(
-        (left, right) => paymentTimestamp(left.dateCreated) - paymentTimestamp(right.dateCreated),
-      );
-      for (const payment of ordered) {
-        assertPaymentMatchesBillingOrder(payment, order);
-        const reconciliation = await repos.lmwaresBillingOrders.reconcilePayment({
-          id: order.id,
-          paymentId: payment.id,
-          providerStatus: payment.status,
-          amountCents: Math.round(payment.amount * 100),
-          currency: payment.currency,
-          providerCreatedAt: payment.dateCreated,
-        });
-        order = reconciliation.order;
-      }
       processed += 1;
-      if (order.status !== candidate.status) {
+      if (result.order.status !== candidate.status) {
         await repos.audit.record({
           actorType: 'system',
           actorId: 'subscription_reconciliation_cron',
@@ -410,8 +440,8 @@ export async function reconcileBillingOrdersOnSchedule(
           metadata: {
             scheduledTime,
             previousStatus: candidate.status,
-            status: order.status,
-            paymentsFound: ordered.length,
+            status: result.order.status,
+            paymentsFound: result.paymentsFound,
           },
           ip: null,
           userAgent: null,
@@ -439,6 +469,50 @@ export async function reconcileBillingOrdersOnSchedule(
   );
 }
 
+export interface PackageProposalReconciliationResult {
+  proposal: PackageProposal;
+  paymentsFound: number;
+}
+
+/**
+ * Reconcilia una única propuesta de paquete contra Mercado Pago. Mismo código
+ * que usa el cron por candidato; segura para invocarse bajo demanda desde una
+ * acción administrativa "reconciliar ahora" (no crea checkouts ni cobros
+ * nuevos, sólo busca y aplica pagos ya existentes con el guard de coincidencia
+ * congelada).
+ */
+export async function reconcilePackageProposalWithProvider(input: {
+  env: Bindings;
+  proposal: PackageProposal;
+  accessToken: string;
+}): Promise<PackageProposalReconciliationResult> {
+  const repos = createRepositories(input.env.DB);
+  if (!input.proposal.providerPreferenceId) {
+    throw new AppError('conflict', 'La propuesta todavía no tiene checkout creado en Mercado Pago.');
+  }
+  const found = await searchMercadoPagoPayments({
+    accessToken: input.accessToken,
+    externalReference: input.proposal.id,
+  });
+  let proposal: PackageProposal = input.proposal;
+  const ordered = [...found].sort(
+    (left, right) => paymentTimestamp(left.dateCreated) - paymentTimestamp(right.dateCreated),
+  );
+  for (const payment of ordered) {
+    assertPaymentMatchesProposal(payment, proposal);
+    const reconciliation = await repos.lmwaresPayments.reconcilePayment({
+      id: proposal.id,
+      paymentId: payment.id,
+      providerStatus: payment.status,
+      amountCents: Math.round(payment.amount * 100),
+      currency: payment.currency,
+      providerCreatedAt: payment.dateCreated,
+    });
+    proposal = reconciliation.proposal;
+  }
+  return { proposal, paymentsFound: ordered.length };
+}
+
 export async function reconcilePackageProposalsOnSchedule(
   env: Bindings,
   scheduledTime: number,
@@ -453,28 +527,13 @@ export async function reconcilePackageProposalsOnSchedule(
   for (const candidate of candidates) {
     if (!candidate.providerPreferenceId) continue;
     try {
-      const found = await searchMercadoPagoPayments({
+      const result = await reconcilePackageProposalWithProvider({
+        env,
+        proposal: candidate,
         accessToken: accessToken!,
-        externalReference: candidate.id,
       });
-      let proposal: PackageProposal = candidate;
-      const ordered = [...found].sort(
-        (left, right) => paymentTimestamp(left.dateCreated) - paymentTimestamp(right.dateCreated),
-      );
-      for (const payment of ordered) {
-        assertPaymentMatchesProposal(payment, proposal);
-        const reconciliation = await repos.lmwaresPayments.reconcilePayment({
-          id: proposal.id,
-          paymentId: payment.id,
-          providerStatus: payment.status,
-          amountCents: Math.round(payment.amount * 100),
-          currency: payment.currency,
-          providerCreatedAt: payment.dateCreated,
-        });
-        proposal = reconciliation.proposal;
-      }
       processed += 1;
-      if (proposal.status !== candidate.status) {
+      if (result.proposal.status !== candidate.status) {
         await repos.audit.record({
           actorType: 'system',
           actorId: 'subscription_reconciliation_cron',
@@ -484,8 +543,8 @@ export async function reconcilePackageProposalsOnSchedule(
           metadata: {
             scheduledTime,
             previousStatus: candidate.status,
-            status: proposal.status,
-            paymentsFound: ordered.length,
+            status: result.proposal.status,
+            paymentsFound: result.paymentsFound,
           },
           ip: null,
           userAgent: null,

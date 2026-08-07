@@ -100,3 +100,18 @@ test('absorbs rounding remainders in the last phase so the total never drifts', 
   assert.equal(phases[2].amountCents, 25_000);
   assert.equal(phases[3].amountCents, 25_001);
 });
+
+test('rejects implementation totals that would create phases below the provider minimum', () => {
+  assert.throws(
+    () => splitImplementationIntoPhases(3_999),
+    /al menos MXN 40/,
+  );
+  assert.deepEqual(
+    splitImplementationIntoPhases(4_000).map((phase) => phase.amountCents),
+    [1_000, 1_000, 1_000, 1_000],
+  );
+  assert.deepEqual(
+    splitImplementationIntoPhases(4_002).map((phase) => phase.amountCents),
+    [1_000, 1_001, 1_001, 1_000],
+  );
+});

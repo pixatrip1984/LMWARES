@@ -25,7 +25,16 @@ Access y CORS con infraestructura real.
 - [ ] `wrangler d1 create <slug>-db` y `database_id` copiado en los 3 `wrangler.toml`.
 - [ ] `wrangler r2 bucket create <slug>-media`.
 - [ ] Migraciones aplicadas en remoto: `npm run db:migrate:remote`.
+- [ ] El preflight confirma migraciones 0026, 0031, 0032, 0033 y 0034, tablas
+      de proyectos Starter/dominios, hostnames reutilizables y cero violaciones
+      de claves foraneas:
+      `pwsh -NoProfile -File scripts/lmwares-commercial-preflight.ps1 -RequireReady Report`.
+- [ ] El preflight no reporta ofertas con plan/importe incoherentes, ordenes
+      listas sin decision o autorizacion de mantenimiento, ni dominios activos
+      sin certificado/proyecto valido.
 - [ ] (Opcional) Seed/datos iniciales cargados.
+- [ ] Ver `docs/domains-runbook.md` para activar `DOMAIN_PROVIDER=cloudflare-saas`,
+      dónde pegar cada secreto y el criterio de activación gradual.
 
 ## Cloudflare Access (portal admin)
 
@@ -60,10 +69,28 @@ Access y CORS con infraestructura real.
 
 ## Verificación final
 
-- [ ] `npm run typecheck` y `npm run build` sin errores.
+- [ ] `npm run release:validate` sin errores (incluye typecheck, tests, build,
+      lint, dry-run de Workers y validacion local de mantenimiento).
+- [ ] No se ejecutan despliegues ni migraciones remotas hasta revisar el
+      preflight y confirmar el entorno explicitamente.
+- [ ] Las cuatro fases de implementación aparecen una sola vez y el pago de
+      fase 1 crea un proyecto Starter de cliente idempotente.
+- [ ] El proyecto de cliente y el repositorio técnico Oracle se muestran como
+      entidades distintas; el enlace interno es explícito.
+- [ ] Una oferta `none` llega a publicación sin crear una mensualidad; `basic` y
+      `advanced` no publican hasta que Mercado Pago confirme `active`.
+- [ ] El subdominio `slug.lmwares.com` funciona antes y después de un dominio
+      personalizado.
+- [ ] Los dominios propios sólo muestran instrucciones CNAME/TXT hasta que haya
+      proveedor y sandbox; ningún hostname no verificado entra al router.
 - [ ] Flujo público: catálogo → detalle → envío de formulario (con Turnstile real).
 - [ ] Flujo admin: login por Access → CRUD publicaciones → imágenes → solicitudes.
+- [ ] Pagos atascados: el admin ve detalle accionable y "Reconciliar ahora"
+      funciona sólo si `OPS_RECOVERY_TOKEN` está cargado idéntico en ambos
+      Workers (revisa `docs/env.md`).
 - [ ] CORS: el navegador no muestra errores entre frontends y Workers.
 - [ ] Auditoría: los eventos se registran (revisa `/admin/audit`).
 - [ ] Revisar [security-checklist.md](./security-checklist.md).
+- [ ] Revisar [rollback-runbook.md](./rollback-runbook.md) antes del primer
+      despliegue productivo real (Worker, Pages y migración D1).
 - [ ] El cliente usa datos de prueba hasta aprobar operacion real.

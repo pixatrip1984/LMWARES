@@ -48,6 +48,8 @@ routes = [
 
 [env.production.vars]
 ALLOWED_ORIGINS = "https://admin.lmwares.com,https://lmwares-admin.pages.dev"
+CLOUDFLARE_ZONE_ID = "fa8b7b1e5c20243be0e49ec794167eca"
+CLOUDFLARE_SAAS_CNAME_TARGET = "customers.lmwares.com"
 MEDIA_BASE_URL = ""
 MEDIA_BUCKET_NAME = "starter-media"
 PUBLIC_API_URL = "https://api.lmwares.com"

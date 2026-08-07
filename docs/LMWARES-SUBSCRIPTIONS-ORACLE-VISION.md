@@ -1,7 +1,7 @@
 # LMWares: suscripciones, incorporación de clientes y operación con Oracle
 
 Fecha: 2026-07-23  
-Estado: visión de producto y arquitectura propuesta; sin implementación  
+Estado: visión de producto y arquitectura de operación; implementación
 Alcance: LMWares, Mercado Pago, Cloudflare y Oracle. AstraMuses queda fuera de este ciclo:
 se mostrará como `Próximamente`, se usará internamente para promocionar LMWares
 con contenido SaaS UGC y no podrá seleccionarse, cotizarse ni cobrarse.
@@ -75,6 +75,9 @@ Reglas ya acordadas:
 - Starter y Pro pueden migrar después a un dominio personalizado.
 - El dominio final no sustituye el subdominio; éste conserva valor como ruta de
   revisión, recuperación y operación administrada.
+- El pago de la fase 1 crea una entidad de proyecto del cliente separada del
+  registro técnico `lmwares_projects`; el sitio puede mostrar “preparando” antes
+  de que un operador enlace el repositorio de Oracle.
 - Compartir el patrón público `slug.lmwares.com` no elimina el aislamiento
   técnico de Starter y Pro: cada proyecto pagado conserva su propio contrato,
   repositorio, runtime y recursos cuando corresponda.
@@ -124,6 +127,19 @@ El cliente no necesita operar el motor de optimización. Necesita comprender qu�
 se aprendió, qué se hizo y qué resultado produjo.
 
 ## 5. Flujo completo del cliente
+
+### 5.0 Proyecto y subdominio desde la fase 1
+
+La confirmación idempotente de la primera fase crea el proyecto Starter del
+cliente y reserva un slug estable bajo `*.lmwares.com`. La URL puede mostrar
+una página de preparación mientras el operador enlaza el proyecto técnico y
+avanza las fases. Esa entidad no es un repositorio, no concede permisos por sí
+misma y no se inserta en `lmwares_projects`.
+
+El dominio personalizado se solicita al final del ciclo. En la primera versión
+sólo se aceptan subdominios delegados (`www.` o `app.`), se verifica con CNAME/TXT
+y se mantiene el subdominio LMWares como fallback. La activación automática de
+DNS, SSL y routing queda bloqueada hasta seleccionar y configurar un proveedor.
 
 ### 5.1 Identidad
 

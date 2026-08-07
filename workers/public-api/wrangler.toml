@@ -5,6 +5,8 @@ compatibility_date = "2026-06-28"
 # Config NO sensible. Los secretos van en .dev.vars (local) o `wrangler secret put`.
 [vars]
 ALLOWED_ORIGINS = "http://localhost:5273,http://127.0.0.1:5273,http://localhost:5274,http://127.0.0.1:5274,http://localhost:4273,http://127.0.0.1:4273,http://localhost:4274,http://127.0.0.1:4274"
+DOMAIN_PROVIDER = "manual"
+DOMAIN_REGISTRAR_PROVIDER = "manual"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "starter"
 FREE_SITE_BASE_DOMAIN = "lmwares.com"
@@ -45,6 +47,10 @@ routes = [
 
 [env.production.vars]
 ALLOWED_ORIGINS = "https://lmwares.com,https://www.lmwares.com,https://contratar.lmwares.com,https://lmwares-public.pages.dev"
+DOMAIN_PROVIDER = "cloudflare-saas"
+DOMAIN_REGISTRAR_PROVIDER = "porkbun"
+CLOUDFLARE_ZONE_ID = "fa8b7b1e5c20243be0e49ec794167eca"
+CLOUDFLARE_SAAS_CNAME_TARGET = "customers.lmwares.com"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "lmwares"
 FREE_SITE_BASE_DOMAIN = "lmwares.com"

@@ -56,6 +56,49 @@ try {
     '--config', $configPath, '--file', $fixturePath
   )
 
+  Write-Host 'Comprobando que un dominio retirado pueda registrarse otra vez...'
+  $null = Invoke-D1Json @'
+INSERT OR IGNORE INTO lmw_slug_reservations
+  (slug, intake_id, status, expires_at, created_at, updated_at)
+VALUES
+  ('starter-domain-fixture', 'intake-one-time', 'permanent', NULL,
+   '2026-08-03T00:00:00.000Z', '2026-08-03T00:00:00.000Z');
+INSERT OR IGNORE INTO lmw_starter_client_projects
+  (id, work_order_id, intake_id, user_id, slug, site_name, status, created_at, updated_at)
+VALUES
+  ('domain-project', 'work-one-time', 'intake-one-time', 'maintenance-user',
+   'starter-domain-fixture', 'Domain Fixture', 'active',
+   '2026-08-03T00:00:00.000Z', '2026-08-03T00:00:00.000Z');
+INSERT INTO lmw_custom_domains
+  (id, client_project_id, user_id, hostname, type, status, verification_method,
+   verification_token_hash, dns_instructions, provider, external_id,
+   certificate_status, created_at, updated_at, removed_at)
+VALUES
+  ('domain-removed', 'domain-project', 'maintenance-user', 'www.domain-fixture.test',
+   'www', 'removed', 'txt', 'removed-hash', '{}', 'manual_cname', NULL,
+   'not_requested', '2026-08-03T00:00:00.000Z', '2026-08-03T00:00:00.000Z',
+   '2026-08-03T00:01:00.000Z');
+INSERT INTO lmw_custom_domains
+  (id, client_project_id, user_id, hostname, type, status, verification_method,
+   verification_token_hash, dns_instructions, provider, external_id,
+   certificate_status, created_at, updated_at)
+VALUES
+  ('domain-replacement', 'domain-project', 'maintenance-user', 'www.domain-fixture.test',
+   'www', 'pending_verification', 'txt', 'replacement-hash', '{}', 'manual_cname', NULL,
+   'not_requested', '2026-08-03T00:02:00.000Z', '2026-08-03T00:02:00.000Z');
+'@
+  $domainReuse = Invoke-D1Json @'
+SELECT
+  COUNT(*) AS total,
+  SUM(CASE WHEN status = 'removed' THEN 1 ELSE 0 END) AS removed,
+  SUM(CASE WHEN status = 'pending_verification' THEN 1 ELSE 0 END) AS replacement
+FROM lmw_custom_domains
+WHERE hostname = 'www.domain-fixture.test';
+'@
+  Assert-Equal ([int]$domainReuse[0].total) 2 'El hostname retirado debe poder registrarse de nuevo.'
+  Assert-Equal ([int]$domainReuse[0].removed) 1 'El historial del dominio retirado debe conservarse.'
+  Assert-Equal ([int]$domainReuse[0].replacement) 1 'El nuevo registro debe quedar pendiente de verificación.'
+
   $repositorySource = Get-Content -LiteralPath $repositoryPath -Raw
   foreach ($requiredClause in @(
     "w.status = 'ready_to_publish'",
@@ -71,7 +114,10 @@ try {
   }
   $workOrderRepositorySource = Get-Content -LiteralPath $workOrderRepositoryPath -Raw
   foreach ($requiredClause in @(
-    'publicationGate.monthly_amount_cents > 0',
+    'publicationGate.monthly_amount_cents <= 0',
+    'publicationGate.subscription_id',
+    'publicationGate.maintenance_plan_selected === null',
+    'o.maintenance_plan_selected IS NOT NULL',
     'o.monthly_amount_cents = 0',
     "s.status = 'active'",
     'PHASE_GATE_BY_TARGET_STATUS',
@@ -115,6 +161,18 @@ ORDER BY w.id;
   foreach ($blocked in @('work-no-project', 'work-unpaid', 'work-review', 'work-offer', 'work-building', 'work-one-time')) {
     Assert-Equal $eligibilityById[$blocked] 0 "La orden $blocked no debe ser elegible."
   }
+
+  Write-Host 'Comprobando que una decisión de mantenimiento pendiente bloquea la publicación...'
+  $pendingPlan = Invoke-D1Json @'
+SELECT CASE WHEN o.status = 'accepted' AND o.maintenance_plan_selected IS NULL
+  THEN 1 ELSE 0 END AS pending
+FROM lmw_starter_work_orders w
+JOIN lmw_commercial_offers o ON o.id = w.commercial_offer_id
+WHERE w.id = 'work-one-time';
+'@
+  Assert-Equal ([int]$pendingPlan[0].pending) 1 'La oferta sin decisión de mantenimiento debe seguir pendiente.'
+  $null = Invoke-D1Json "UPDATE lmw_commercial_offers SET maintenance_plan_selected = 'basic' WHERE id = 'offer-good';"
+  $null = Invoke-D1Json "UPDATE lmw_commercial_offers SET maintenance_plan_selected = 'none' WHERE id = 'offer-one-time';"
 
   $claimSql = @'
 INSERT OR IGNORE INTO lmw_maintenance_subscriptions

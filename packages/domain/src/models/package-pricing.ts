@@ -35,6 +35,14 @@ export function normalizeCommercialMarketing(marketing: boolean): false {
  */
 export const IMPLEMENTATION_PAYMENT_PHASE_PERCENTAGES = [25, 25, 25, 25] as const;
 export const IMPLEMENTATION_PAYMENT_PHASE_COUNT = IMPLEMENTATION_PAYMENT_PHASE_PERCENTAGES.length;
+/**
+ * Mercado Pago rejects checkout amounts below MXN 10. Keep every phase above
+ * that provider floor instead of creating an accepted offer that can never be
+ * paid through the configured checkout.
+ */
+export const IMPLEMENTATION_MINIMUM_PHASE_AMOUNT_CENTS = 1_000;
+export const IMPLEMENTATION_MINIMUM_TOTAL_AMOUNT_CENTS =
+  IMPLEMENTATION_MINIMUM_PHASE_AMOUNT_CENTS * IMPLEMENTATION_PAYMENT_PHASE_COUNT;
 
 export interface ImplementationPaymentPhaseSplit {
   phase: 1 | 2 | 3 | 4;
@@ -43,11 +51,19 @@ export interface ImplementationPaymentPhaseSplit {
 
 /**
  * Divide el importe total de implementación en 4 fases del 25%. La última
- * fase absorbe el residuo del redondeo para que la suma sea exacta al total.
+ * fase absorbe el residuo del redondeo para que la suma sea exacta al total;
+ * si ese residuo deja una fase por debajo del mínimo del proveedor, se
+ * redistribuye desde las fases que tienen céntimos disponibles.
  */
 export function splitImplementationIntoPhases(totalCents: number): ImplementationPaymentPhaseSplit[] {
-  if (!Number.isSafeInteger(totalCents) || totalCents <= 0) {
-    throw new AppError('validation_error', 'El importe de implementación no es válido.');
+  if (
+    !Number.isSafeInteger(totalCents) ||
+    totalCents < IMPLEMENTATION_MINIMUM_TOTAL_AMOUNT_CENTS
+  ) {
+    throw new AppError(
+      'validation_error',
+      `La implementación debe sumar al menos MXN ${IMPLEMENTATION_MINIMUM_TOTAL_AMOUNT_CENTS / 100} para respetar el mínimo de cada fase.`,
+    );
   }
   const shares: number[] = [];
   let allocated = 0;
@@ -57,6 +73,30 @@ export function splitImplementationIntoPhases(totalCents: number): Implementatio
     allocated += share;
     shares.push(share);
   });
+  let minimumDeficit = shares.reduce(
+    (deficit, amountCents) =>
+      deficit + Math.max(0, IMPLEMENTATION_MINIMUM_PHASE_AMOUNT_CENTS - amountCents),
+    0,
+  );
+  for (let index = 0; index < shares.length - 1 && minimumDeficit > 0; index += 1) {
+    const current = shares[index];
+    const lastIndex = shares.length - 1;
+    const last = shares[lastIndex];
+    if (current === undefined || last === undefined) {
+      throw new AppError('internal_error', 'No se pudo distribuir el importe de implementación.');
+    }
+    const transferable = Math.max(0, current - IMPLEMENTATION_MINIMUM_PHASE_AMOUNT_CENTS);
+    const transfer = Math.min(transferable, minimumDeficit);
+    shares[index] = current - transfer;
+    shares[lastIndex] = last + transfer;
+    minimumDeficit -= transfer;
+  }
+  if (shares.some((amountCents) => amountCents < IMPLEMENTATION_MINIMUM_PHASE_AMOUNT_CENTS)) {
+    throw new AppError(
+      'validation_error',
+      'Cada fase de implementación debe respetar el mínimo de pago del proveedor.',
+    );
+  }
   return shares.map((amountCents, index) => ({
     phase: (index + 1) as 1 | 2 | 3 | 4,
     amountCents,

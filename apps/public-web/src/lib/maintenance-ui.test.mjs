@@ -10,10 +10,15 @@ test('active maintenance never claims that publication already happened', () => 
   const presentation = maintenancePresentation('active');
   assert.equal(presentation.heading, 'Mantenimiento autorizado');
   assert.match(presentation.description, /publicación por separado/);
-  assert.match(reconciliationMessage('active', 'authorized'), /publicación se confirma por separado/);
+  assert.match(
+    reconciliationMessage('active', 'authorized'),
+    /publicación se confirma por separado/,
+  );
 });
 
 test('every non-happy maintenance state has a precise account action', () => {
+  assert.equal(maintenanceActionLabel(null), 'Elige tu plan de mantenimiento');
+  assert.equal(maintenanceActionLabel(null, true), 'Activar mantenimiento');
   assert.equal(maintenanceActionLabel('payment_attention'), 'Resolver mensualidad');
   assert.equal(maintenanceActionLabel('paused'), 'Revisar mensualidad pausada');
   assert.equal(maintenanceActionLabel('disputed'), 'Revisar cobro en aclaración');
@@ -24,4 +29,11 @@ test('canceled maintenance is not presented as a fresh authorization', () => {
   const presentation = maintenancePresentation('canceled');
   assert.equal(presentation.heading, 'Mantenimiento cancelado');
   assert.match(reconciliationMessage('canceled', 'canceled'), /no se programarán cobros futuros/);
+});
+
+test('none maintenance is presented as a one-time delivery', () => {
+  const presentation = maintenancePresentation(null, true, 'none');
+  assert.equal(presentation.heading, 'Sin mantenimiento mensual');
+  assert.match(presentation.description, /pago único/);
+  assert.match(presentation.projectMessage, /publicación/);
 });

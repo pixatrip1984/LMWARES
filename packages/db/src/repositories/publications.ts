@@ -31,7 +31,7 @@ export interface CreatePublicationData {
   sortOrder: number;
 }
 
-export type UpdatePublicationData = Partial<CreatePublicationData>;
+export type UpdatePublicationData = Partial<Omit<CreatePublicationData, 'status'>>;
 
 export class PublicationsRepository {
   constructor(private readonly db: D1Database) {}
@@ -137,12 +137,12 @@ export class PublicationsRepository {
     const existing = await this.getById(id);
     if (!existing) return null;
 
-    const next = { ...existing, ...patch } as Publication & UpdatePublicationData;
+    const next = { ...existing, ...patch };
     const now = nowIso();
     await this.db
       .prepare(
         `UPDATE publications SET
-          slug = ?, title = ?, summary = ?, body = ?, status = ?,
+          slug = ?, title = ?, summary = ?, body = ?,
           cover_image_id = ?, metadata = ?, sort_order = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -151,7 +151,6 @@ export class PublicationsRepository {
         next.title,
         nullable(next.summary),
         nullable(next.body),
-        next.status,
         nullable(next.coverImageId),
         JSON.stringify(next.metadata ?? {}),
         next.sortOrder,

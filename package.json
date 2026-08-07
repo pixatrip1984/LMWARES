@@ -42,6 +42,7 @@
     "lmwares:free:run": "node scripts/lmwares-free-site-runner/cli.mjs",
     "lmwares:free:test": "node --test scripts/lmwares-free-site-runner/*.test.mjs",
     "lmwares:maintenance:validate": "pwsh -NoProfile -File ./scripts/validate-lmwares-maintenance-policy.ps1",
+    "release:validate": "powershell -ExecutionPolicy Bypass -File ./scripts/lmwares-release-validate.ps1",
     "lmwares:wildcard:audit": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/configure-lmwares-free-wildcard.ps1",
     "lmwares:wildcard:apply": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/configure-lmwares-free-wildcard.ps1 -Apply",
     "lint": "turbo run lint",

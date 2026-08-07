@@ -20,17 +20,26 @@ export function RequestsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Solicitudes"
+        subtitle="Bandeja de contacto y solicitudes Free. Los paquetes comerciales Starter se operan en “Paquetes”."
         actions={
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as RequestStatus | '')}
-            className="rounded-lg border border-surface-border px-3 py-2 text-sm"
-          >
-            <option value="">Todas</option>
-            {REQUEST_STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/commercial-intakes"
+              className="rounded-lg border border-surface-border px-3 py-2 text-sm font-medium text-brand-700 hover:bg-surface-muted"
+            >
+              Ir a paquetes comerciales
+            </Link>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as RequestStatus | '')}
+              className="rounded-lg border border-surface-border px-3 py-2 text-sm"
+            >
+              <option value="">Todas</option>
+              {REQUEST_STATUSES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
         }
       />
       {!items ? (

@@ -192,6 +192,12 @@ export class LmwaresMaintenanceSubscriptionsRepository {
   async resetForPlanChange(workOrderId: string): Promise<MaintenanceSubscription | null> {
     const existing = await this.getByWorkOrderId(workOrderId);
     if (!existing) return null;
+    if (existing.status === 'creating' && !existing.providerPreapprovalId) {
+      throw new AppError(
+        'conflict',
+        'La mensualidad se está preparando. Espera a que termine antes de cambiar el plan.',
+      );
+    }
     if (!['creating', 'creation_failed', 'pending_authorization'].includes(existing.status)) {
       return existing;
     }
@@ -200,7 +206,7 @@ export class LmwaresMaintenanceSubscriptionsRepository {
     // encontraría la preapproval anterior (creada con el monto viejo) al
     // buscarla por `external_reference` y el monto ya no coincidiría.
     const freshReference = `lmw-maintenance:${newId()}`;
-    await this.db
+    const result = await this.db
       .prepare(
         `UPDATE lmw_maintenance_subscriptions
          SET status = 'creation_failed',
@@ -238,6 +244,7 @@ export class LmwaresMaintenanceSubscriptionsRepository {
 
   async savePreapproval(input: {
     id: string;
+    externalReference: string;
     providerPreapprovalId: string;
     authorizationUrl: string | null;
     providerStatus: string;
@@ -245,7 +252,7 @@ export class LmwaresMaintenanceSubscriptionsRepository {
   }): Promise<MaintenanceSubscription> {
     const now = nowIso();
     const status = subscriptionStatusFromProvider(input.providerStatus);
-    await this.db
+    const result = await this.db
       .prepare(
         `UPDATE lmw_maintenance_subscriptions
          SET status = CASE WHEN status IN ('canceled', 'disputed') THEN status ELSE ? END,
@@ -258,7 +265,8 @@ export class LmwaresMaintenanceSubscriptionsRepository {
                WHEN status <> 'disputed' AND ? = 'canceled'
                THEN COALESCE(canceled_at, ?) ELSE canceled_at END,
              updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ? AND external_reference = ?
+           AND status NOT IN ('canceled', 'disputed')`,
       )
       .bind(
         status,
@@ -272,8 +280,12 @@ export class LmwaresMaintenanceSubscriptionsRepository {
         now,
         now,
         input.id,
+        input.externalReference,
       )
       .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      throw new AppError('conflict', 'La mensualidad cambió mientras se actualizaba.');
+    }
     return (await this.getById(input.id))!;
   }
 
@@ -287,6 +299,52 @@ export class LmwaresMaintenanceSubscriptionsRepository {
       )
       .bind(`creation_error:${safe}`.slice(0, 80), nowIso(), id)
       .run();
+  }
+
+  /**
+   * Conserva la evidencia local de un intento anterior, pero lo deja fuera
+   * del ciclo de reconciliación cuando el cliente decide no contratar
+   * mantenimiento. El importe se mantiene positivo porque la tabla representa
+   * intentos de mensualidad; la oferta es la fuente de verdad para la decisión
+   * final y ya quedó fijada en `none`.
+   */
+  async markNotRequired(workOrderId: string): Promise<MaintenanceSubscription | null> {
+    const current = await this.getByWorkOrderId(workOrderId);
+    if (!current) return null;
+    if (current.status === 'canceled') return current;
+    if (current.status === 'creating' && !current.providerPreapprovalId) {
+      throw new AppError(
+        'conflict',
+        'La mensualidad se está preparando. Espera a que termine antes de cambiar el plan.',
+      );
+    }
+    if (!['creating', 'creation_failed', 'pending_authorization'].includes(current.status)) {
+      throw new AppError(
+        'conflict',
+        'La mensualidad ya está activa o requiere atención; no puede descartarse automáticamente.',
+      );
+    }
+    const now = nowIso();
+    const result = await this.db
+      .prepare(
+        `UPDATE lmw_maintenance_subscriptions
+         SET status = 'canceled',
+             provider_preapproval_id = NULL,
+             authorization_url = NULL,
+             provider_status = 'not_required',
+             next_payment_date = NULL,
+             canceled_at = COALESCE(canceled_at, ?),
+             updated_at = ?
+         WHERE id = ? AND status IN ('creating', 'creation_failed', 'pending_authorization')`,
+      )
+      .bind(now, now, current.id)
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      const updated = await this.getById(current.id);
+      if (updated?.status === 'canceled') return updated;
+      throw new AppError('conflict', 'La mensualidad cambió mientras se descartaba.');
+    }
+    return this.getById(current.id);
   }
 
   async reconcileAuthorizedPayment(input: {

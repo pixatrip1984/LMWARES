@@ -8,7 +8,11 @@ import {
   type CSSProperties,
 } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import type { AccountOverview } from '@starter/api-client';
+import type {
+  AccountOverview,
+  CreatePublicCustomDomainResult,
+  PublicDomainAvailability,
+} from '@starter/api-client';
 import { AppError, type PublicUser } from '@starter/domain';
 import {
   FREE_LAYOUT_PRESETS,
@@ -335,6 +339,41 @@ export function PackageBuilderPage() {
   ) => {
     await api.acceptCommercialOffer(intakeId, offerId, termsVersion);
     await loadAccount();
+  }, [loadAccount]);
+
+  const createStarterDomain = useCallback(async (
+    clientProjectId: string,
+    input: { hostname: string; type: 'www' | 'app' },
+  ): Promise<CreatePublicCustomDomainResult> => {
+    const result = await api.createStarterDomain(clientProjectId, input);
+    await loadAccount();
+    return result;
+  }, [loadAccount]);
+
+  const removeStarterDomain = useCallback(async (
+    clientProjectId: string,
+    domainId: string,
+  ) => {
+    const result = await api.removeStarterDomain(clientProjectId, domainId);
+    await loadAccount();
+    return result;
+  }, [loadAccount]);
+
+  const searchStarterDomains = useCallback(async (
+    clientProjectId: string,
+    input: { sld: string },
+  ): Promise<PublicDomainAvailability[]> => {
+    const result = await api.searchStarterDomains(clientProjectId, input);
+    return result.results;
+  }, []);
+
+  const purchaseStarterDomain = useCallback(async (
+    clientProjectId: string,
+    input: { domain: string },
+  ): Promise<CreatePublicCustomDomainResult> => {
+    const result = await api.purchaseStarterDomain(clientProjectId, input);
+    await loadAccount();
+    return result;
   }, [loadAccount]);
 
   useEffect(() => {
@@ -1807,9 +1846,13 @@ export function PackageBuilderPage() {
         loading={accountLoading}
         onClose={() => setAccountOpen(false)}
         onAcceptOffer={acceptCommercialOffer}
+        onCreateStarterDomain={createStarterDomain}
         onMarkAllRead={markAllAccountNotificationsRead}
         onMarkRead={markAccountNotificationRead}
+        onPurchaseStarterDomain={purchaseStarterDomain}
         onReload={loadAccount}
+        onRemoveStarterDomain={removeStarterDomain}
+        onSearchStarterDomains={searchStarterDomains}
         onSignOut={signOut}
         open={accountOpen}
         overview={accountOverview}

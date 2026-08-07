@@ -724,13 +724,15 @@ export class SiteDocsRepository {
           `UPDATE lmwares_doc_versions
            SET status = 'clean', published_at = NULL
            WHERE id = (
-             SELECT version_id FROM lmwares_doc_publications WHERE document_id = ?
+            SELECT version_id
+            FROM lmwares_doc_publications
+            WHERE document_id = ? AND project_id = ?
            ) AND document_id = ?`,
         )
-        .bind(documentId, documentId),
+        .bind(documentId, projectId, documentId),
       this.db
-        .prepare(`DELETE FROM lmwares_doc_publications WHERE document_id = ?`)
-        .bind(documentId),
+        .prepare(`DELETE FROM lmwares_doc_publications WHERE document_id = ? AND project_id = ?`)
+        .bind(documentId, projectId),
       this.db
         .prepare(
           `UPDATE lmwares_docs
@@ -747,12 +749,13 @@ export class SiteDocsRepository {
     if (!document) throw AppError.notFound('Documento');
     const { results } = await this.db
       .prepare(
-        `SELECT *
-         FROM lmwares_doc_versions
-         WHERE document_id = ?
+        `SELECT v.*
+         FROM lmwares_doc_versions v
+         INNER JOIN lmwares_docs d ON d.id = v.document_id
+         WHERE d.project_id = ? AND d.id = ?
          ORDER BY version DESC`,
       )
-      .bind(documentId)
+      .bind(projectId, documentId)
       .all<SiteDocVersionRow>();
     return results.map(mapVersion);
   }

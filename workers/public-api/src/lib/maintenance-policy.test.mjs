@@ -48,6 +48,9 @@ test('publication remains gated by an active maintenance subscription', () => {
 
   assert.ok(publishStart >= 0 && publishEnd > publishStart);
   assert.match(publishSource, /current\.status !== 'ready_to_publish'/);
+  assert.match(publishSource, /publicationGate\.maintenance_plan_selected === null/);
+  assert.match(publishSource, /maintenance_plan_selected === 'none'/);
+  assert.match(publishSource, /maintenance_plan_selected IN \('basic', 'advanced'\)/);
   assert.match(publishSource, /s\.status = 'active'/);
   assert.match(publishSource, /status = 'live'/);
 });
@@ -66,6 +69,18 @@ test('provider reconciliation cannot race a canceled or disputed lifecycle back 
   }
 });
 
+test('disputed maintenance subscriptions are rejected before provider cancellation', () => {
+  const cancelStart = routeSource.indexOf("maintenanceSubscriptions.post('/:id/cancel'");
+  const cancelEnd = routeSource.indexOf('async function ownedWorkOrder', cancelStart);
+  const cancelSource = routeSource.slice(cancelStart, cancelEnd);
+
+  assert.ok(cancelStart >= 0 && cancelEnd > cancelStart);
+  const disputedGuard = cancelSource.indexOf("subscription.status === 'disputed'");
+  const providerCancel = cancelSource.indexOf('cancelMercadoPagoPreapproval');
+  assert.ok(disputedGuard >= 0 && providerCancel > disputedGuard);
+  assert.match(cancelSource, /La mensualidad está en aclaración/);
+});
+
 test('a live publication can recover its receipt after a concurrent cancellation', () => {
   const notificationStart = workOrderSource.indexOf('private async ensurePublishedNotifications');
   const notificationSource = workOrderSource.slice(notificationStart);
@@ -80,4 +95,21 @@ test('a live publication can recover its receipt after a concurrent cancellation
   );
   assert.match(notificationSource, /starter-site-published:\$\{workOrder\.id\}/);
   assert.match(notificationSource, /INSERT OR IGNORE INTO lmw_notifications/);
+});
+
+test('repeated maintenance-plan selection resumes cleanup after a partial local write', () => {
+  const selectionStart = routeSource.indexOf(
+    "maintenanceSubscriptions.post('/work-orders/:workOrderId/maintenance-plan'",
+  );
+  const selectionEnd = routeSource.indexOf(
+    "maintenanceSubscriptions.post('/work-orders/:workOrderId'",
+    selectionStart,
+  );
+  const selectionSource = routeSource.slice(selectionStart, selectionEnd);
+
+  assert.ok(selectionStart >= 0 && selectionEnd > selectionStart);
+  assert.match(selectionSource, /currentOffer\.maintenancePlanSelected !== null/);
+  assert.match(selectionSource, /markNotRequired\(workOrder\.id\)/);
+  assert.match(selectionSource, /existing\.amountCents !== currentOffer\.monthlyAmountCents/);
+  assert.match(selectionSource, /resetForPlanChange\(workOrder\.id\)/);
 });
