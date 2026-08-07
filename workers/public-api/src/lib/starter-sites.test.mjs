@@ -12,9 +12,9 @@ test('Starter wildcard responses are operational, escaped and never cached', () 
   assert.match(source, /await repos\.lmwaresStarterClientProjects\.getBySlug\(slug\)/);
 });
 
-test('Starter published links are restricted to HTTPS LMWares hostnames', () => {
+test('Starter published links are restricted to HTTPS hostnames on the configured base domain', () => {
   assert.match(source, /url\.protocol === ['"]https:['"]/);
-  assert.match(source, /url\.hostname\.toLowerCase\(\)\.endsWith\(['"]\.lmwares\.com['"]\)/);
+  assert.match(source, /hostname\.endsWith\(suffix\)/);
   assert.match(source, /return null/);
 });
 

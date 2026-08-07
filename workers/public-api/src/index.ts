@@ -75,8 +75,10 @@ app.route('/sites', freeSites);
 app.route('/starter-sites', starterSites);
 app.route('/starter-projects', starterDomains);
 
-// El mismo Worker atiende el wildcard `*.lmwares.com/*` y los hostnames
-// personalizados activos de Cloudflare for SaaS en producción.
+// El mismo Worker atiende el wildcard `*.sitios.lmwares.com/*` (sitios de
+// clientes, namespace dedicado y separado de nuestras herramientas propias
+// como contratar/admin/api) y los hostnames personalizados activos de
+// Cloudflare for SaaS en producción.
 app.get('/', async (c) => {
   const hostname = hostnameFromHostHeader(c.req.header('Host'));
   const slug = freeSlugFromHost(hostname, c.env.FREE_SITE_BASE_DOMAIN);

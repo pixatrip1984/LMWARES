@@ -9,7 +9,7 @@ DOMAIN_PROVIDER = "manual"
 DOMAIN_REGISTRAR_PROVIDER = "manual"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "starter"
-FREE_SITE_BASE_DOMAIN = "lmwares.com"
+FREE_SITE_BASE_DOMAIN = "sitios.lmwares.com"
 PUBLIC_WEB_URL = "http://127.0.0.1:5273"
 PUBLIC_API_URL = "http://127.0.0.1:8887"
 MAP_SEARCH_BASE_URL = "https://nominatim.openstreetmap.org"
@@ -42,7 +42,8 @@ allowed_sender_addresses = ["notificaciones@lmwares.com"]
 name = "starter-public-api"
 routes = [
   { pattern = "api.lmwares.com", custom_domain = true },
-  { pattern = "*.lmwares.com/*", zone_name = "lmwares.com" }
+  { pattern = "*.lmwares.com/*", zone_name = "lmwares.com" },
+  { pattern = "*.sitios.lmwares.com/*", zone_name = "lmwares.com" }
 ]
 
 [env.production.vars]
@@ -53,7 +54,7 @@ CLOUDFLARE_ZONE_ID = "fa8b7b1e5c20243be0e49ec794167eca"
 CLOUDFLARE_SAAS_CNAME_TARGET = "customers.lmwares.com"
 MEDIA_BASE_URL = ""
 PROJECT_SLUG = "lmwares"
-FREE_SITE_BASE_DOMAIN = "lmwares.com"
+FREE_SITE_BASE_DOMAIN = "sitios.lmwares.com"
 PUBLIC_WEB_URL = "https://contratar.lmwares.com"
 PUBLIC_API_URL = "https://api.lmwares.com"
 MAP_SEARCH_BASE_URL = "https://nominatim.openstreetmap.org"

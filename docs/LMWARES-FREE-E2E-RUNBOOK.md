@@ -1,5 +1,12 @@
 # LMWares Free: estado E2E y puerta de producción
 
+> **Actualización (2026-08-07)**: el dominio base de los sitios de clientes
+> cambió de `{slug}.lmwares.com` a `{slug}.sitios.lmwares.com` (namespace
+> dedicado, separado de subdominios propios como `contratar`/`admin`/`api`).
+> El valor vive en `FREE_SITE_BASE_DOMAIN`. Las referencias a `slug.lmwares.com`
+> más abajo documentan el estado histórico de esta validación y no reflejan el
+> dominio actual.
+
 Fecha de validación local: 2026-07-28
 
 Fecha de aprobación remota: 2026-07-31

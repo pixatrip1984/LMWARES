@@ -21,17 +21,29 @@ import {
 
 export const freeIntakes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// Nota (2026-08-07): tras mover los sitios de clientes a un namespace
+// dedicado (`{slug}.sitios.lmwares.com`, ver FREE_SITE_BASE_DOMAIN), esta
+// lista ya NO es la única defensa contra colisiones técnicas con nuestras
+// propias herramientas — ambas viven en árboles DNS distintos. Se conserva
+// por dos razones: (1) protección de marca/confusión (evitar que un cliente
+// use un slug idéntico al de una herramienta interna, aunque no choque
+// técnicamente), y (2) defensa en profundidad mientras se completa la
+// migración del DNS wildcard nuevo.
 const RESERVED_SLUGS = new Set([
   'admin',
   'api',
   'app',
   'assets',
   'astramuses',
+  'blog',
   'cdn',
+  'contratar',
+  'help',
   'login',
   'mail',
   'media',
   'oracle',
+  'sitios',
   'soporte',
   'status',
   'www',

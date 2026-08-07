@@ -63,6 +63,7 @@ async function serveStarterSiteProject(
     projectStatus: project.status,
     workOrderStatus: workOrder.status,
     publishedUrl: workOrder.publishedUrl,
+    baseDomain: c.env.FREE_SITE_BASE_DOMAIN,
   });
 }
 
@@ -72,8 +73,9 @@ export function renderStarterSiteStatus(input: {
   projectStatus: string;
   workOrderStatus: string;
   publishedUrl: string | null;
+  baseDomain: string;
 }): Response {
-  const publishedUrl = safePublishedUrl(input.publishedUrl);
+  const publishedUrl = safePublishedUrl(input.publishedUrl, input.baseDomain);
   const state = starterStatusCopy(input.workOrderStatus);
   const link = publishedUrl
     ? `<p><a href="${escapeHtml(publishedUrl)}">Abrir la entrega publicada</a></p>`
@@ -100,7 +102,7 @@ export function renderStarterSiteStatus(input: {
       <p>${state.title}</p>
       <p>${state.description}</p>
       ${link}
-      <small>Estado técnico: ${escapeHtml(input.projectStatus)} · ${escapeHtml(input.slug)}.lmwares.com</small>
+      <small>Estado técnico: ${escapeHtml(input.projectStatus)} · ${escapeHtml(input.slug)}.${escapeHtml(input.baseDomain)}</small>
     </main>
   </body>
 </html>`;
@@ -157,11 +159,13 @@ export function starterStatusCopy(workOrderStatus: string): {
   }
 }
 
-function safePublishedUrl(value: string | null): string | null {
+function safePublishedUrl(value: string | null, baseDomain: string): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && url.hostname.toLowerCase().endsWith('.lmwares.com')
+    const suffix = `.${baseDomain.toLowerCase()}`;
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (hostname === baseDomain.toLowerCase() || hostname.endsWith(suffix))
       ? url.toString()
       : null;
   } catch {

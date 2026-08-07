@@ -358,21 +358,10 @@ export class CloudflareSaasDomainProvider implements DomainProvider {
       };
     }
     if (!response.ok) {
-      let rawBody = '';
-      try {
-        rawBody = (await response.text()).slice(0, 500);
-      } catch {
-        // ignore parse failures, keep rawBody empty
-      }
-      const headerHints = {
-        contentType: response.headers.get('content-type'),
-        cfRay: response.headers.get('cf-ray'),
-      };
       console.warn('cloudflare_domain_provider_http_error', {
         operation,
         status: response.status,
-        body: rawBody,
-        headers: headerHints,
+        cfRay: response.headers.get('cf-ray'),
       });
       throw providerHttpError(response.status);
     }
