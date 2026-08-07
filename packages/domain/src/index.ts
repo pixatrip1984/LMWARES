@@ -37,3 +37,4 @@ export * from './cloudflare-saas-domain-provider';
 export * from './namesilo-domain-registrar';
 export * from './porkbun-domain-registrar';
 export * from './domain-provider-dns-mapping';
+export * from './google-indexing';

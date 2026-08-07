@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { AppError, normalizeCommercialMarketing, normalizePaidPackageModules } from '@starter/domain';
 import { createRepositories } from '@starter/db';
 import {
@@ -109,8 +109,79 @@ commercialIntakesAdmin.post('/:id/work-order/go-live', requireWrite, async (c) =
       publishedAt: updated.publishedAt,
     },
   });
+  await notifyGoogleIndexingBestEffort(c, repos, updated);
   return c.json({ workOrder: updated });
 });
+
+/**
+ * Notifica a Google Indexing API la URL canónica del sitio recién publicado.
+ * Regla de negocio: sin mantenimiento activo, o con mantenimiento pero sin
+ * dominio propio `active`, se indexa el subdominio `slug.sitios.lmwares.com`
+ * (el `publicUrl` guardado). Con mantenimiento activo Y un dominio propio ya
+ * `active`, se indexa ese dominio en su lugar. Nunca bloquea ni falla la
+ * respuesta HTTP: cualquier error (credenciales ausentes, red, cuota) se
+ * registra en auditoría y se ignora.
+ */
+async function notifyGoogleIndexingBestEffort(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  repos: ReturnType<typeof createRepositories>,
+  workOrder: { id: string; intakeId: string; publishedUrl: string | null },
+) {
+  if (!workOrder.publishedUrl) return;
+  const token = c.env.OPS_RECOVERY_TOKEN?.trim();
+  if (!token || !c.env.PUBLIC_API_URL) return;
+
+  let urlToIndex = workOrder.publishedUrl;
+  try {
+    const [clientProject, offers] = await Promise.all([
+      repos.lmwaresStarterClientProjects.getByWorkOrderId(workOrder.id),
+      repos.lmwaresCommercialOffers.listForIntake(workOrder.intakeId),
+    ]);
+    const acceptedOffer = offers.find((offer) => offer.status === 'accepted') ?? null;
+    const maintenanceActive =
+      acceptedOffer?.maintenancePlanSelected === 'basic' ||
+      acceptedOffer?.maintenancePlanSelected === 'advanced';
+    if (maintenanceActive && clientProject) {
+      const domains = await repos.lmwaresCustomDomains.listForAdmin(clientProject.id);
+      const activeDomain = domains.find((domain) => domain.status === 'active') ?? null;
+      if (activeDomain) {
+        urlToIndex = `https://${activeDomain.hostname}`;
+      }
+    }
+  } catch (error) {
+    console.warn('google_indexing_url_resolution_failed', {
+      workOrderId: workOrder.id,
+      error: error instanceof Error ? error.message : 'unknown error',
+    });
+  }
+
+  try {
+    const response = await fetch(`${c.env.PUBLIC_API_URL}/internal/google-indexing/notify`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ url: urlToIndex }),
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | { ok?: boolean; reason?: string }
+      | null;
+    await repos.audit.record({
+      actorType: 'admin',
+      actorId: c.get('admin').email,
+      action: 'lmwares.starter_work_order.google_indexing_notified',
+      entityType: 'lmwares_starter_work_order',
+      entityId: workOrder.id,
+      metadata: { url: urlToIndex, ok: payload?.ok ?? false, reason: payload?.reason ?? null },
+    });
+  } catch (error) {
+    console.warn('google_indexing_notify_failed', {
+      workOrderId: workOrder.id,
+      error: error instanceof Error ? error.message : 'unknown error',
+    });
+  }
+}
 
 commercialIntakesAdmin.patch('/:id/review', requireWrite, async (c) => {
   const input = parseInput(reviewPackageIntakeSchema, await readJson(c));
