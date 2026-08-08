@@ -63,7 +63,7 @@ export function FaqQuestionArtwork({
       decoding="async"
       draggable={false}
       loading="eager"
-      src={`/assets/lmwares/faq/${groupId}-q${questionIndex + 1}-thumb-v3.jpg?v=20260722b`}
+      src={`/assets/lmwares/faq/${groupId}-q${questionIndex + 1}-thumb-v3.webp?v=20260722b`}
     />
   );
 }
@@ -80,7 +80,7 @@ export function FaqGraphic({ group, questionIndex }: { group: FaqGroup; question
         decoding="async"
         draggable={false}
         loading="eager"
-        src={`/assets/lmwares/faq/${group.id}-q${questionIndex + 1}-answer-v3.jpg?v=20260722b`}
+        src={`/assets/lmwares/faq/${group.id}-q${questionIndex + 1}-answer-v3.webp?v=20260722b`}
       />
     </div>
   );
