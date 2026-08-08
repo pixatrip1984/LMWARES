@@ -3922,6 +3922,7 @@ button {
   .lmw-page[data-channel='1'] .lmw-main {
     bottom: 88px;
     left: 9px;
+    overscroll-behavior-y: contain;
     overflow-x: hidden;
     overflow-y: auto;
     right: 9px;
@@ -4048,6 +4049,15 @@ button {
     grid-template-columns: 1fr;
     grid-template-rows: 58% 42%;
   }
+
+  .lmw-section--plans .lmw-stage,
+  .lmw-section--plans .lmw-plans-grid {
+    height: auto;
+  }
+
+  .lmw-section--plans .lmw-plans-grid {
+    overflow: visible;
+  }
   .lmw-faq-graphic__node {
     height: 48px;
     width: 48px;
@@ -4098,7 +4108,6 @@ button {
   }
   .lmw-plans-grid {
     grid-template-columns: 1fr;
-    overflow-y: auto;
   }
   .lmw-plan-card {
     min-height: 340px;
@@ -4121,11 +4130,91 @@ button {
     margin-top: 12px;
     padding: 7px 9px;
   }
-  .lmw-faq-questions {
-    grid-template-columns: 1fr;
+  .lmw-faq .lmw-faq-intro {
+    min-height: 390px;
   }
+
   .lmw-faq-workspace {
-    grid-template-rows: auto 340px 420px;
+    height: 610px;
+    grid-template-rows: 42px 172px 376px;
+  }
+
+  .lmw-faq-groups {
+    gap: 2px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .lmw-faq-groups button {
+    font-size: 5px;
+    letter-spacing: -0.02em;
+    min-height: 40px;
+    overflow: hidden;
+    padding: 3px 2px;
+  }
+
+  .lmw-faq-questions {
+    gap: 5px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lmw-faq-questions button {
+    gap: 5px;
+    grid-template-columns: 25px minmax(0, 1fr) 42px;
+    padding: 5px;
+  }
+
+  .lmw-faq-questions button > span {
+    font-size: 7px;
+    height: 25px;
+    width: 25px;
+  }
+
+  .lmw-faq-questions button > strong {
+    font-size: 7px;
+    line-height: 1.16;
+  }
+
+  .lmw-faq-question-image {
+    height: calc(100% - 4px);
+    margin: 2px 2px 2px 0;
+    width: calc(100% - 2px);
+  }
+
+  .lmw-faq-answer__layer {
+    grid-template-columns: minmax(0, 0.56fr) minmax(0, 0.44fr);
+    grid-template-rows: 1fr;
+  }
+
+  .lmw-faq-answer__copy {
+    padding: 10px;
+  }
+
+  .lmw-faq-answer h2 {
+    font-size: 16px;
+    margin: 7px 0 6px;
+  }
+
+  .lmw-faq-answer p {
+    font-size: 8px;
+    line-height: 1.4;
+  }
+
+  .lmw-faq-answer__badges {
+    gap: 4px;
+    padding-top: 7px;
+  }
+
+  .lmw-faq-answer__badges b {
+    font-size: 5px;
+    min-height: 25px;
+    padding: 4px 6px;
+  }
+
+  .lmw-faq-answer__copy > small {
+    font-size: 5px;
+    margin-top: 5px;
   }
 }
 

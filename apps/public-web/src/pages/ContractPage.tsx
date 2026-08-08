@@ -71,6 +71,7 @@ export function ContractPage() {
   const [direction, setDirection] = useState<Direction>(1);
   const [pageTransition, setPageTransition] = useState<PageTransition | null>(null);
   const pageRef = useRef<HTMLElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
   const lockUntilRef = useRef(0);
   const transitionTimerRef = useRef<number | null>(null);
   const wheelBufferRef = useRef(0);
@@ -137,6 +138,16 @@ export function ContractPage() {
       setScenePosition(targetScenePosition);
       setActiveIndex(nextIndex);
       window.history.replaceState(null, '', `#${nextTab.id}`);
+
+      if (window.innerWidth <= 700) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const main = mainRef.current;
+            if (!main) return;
+            main.scrollTop = nextDirection > 0 ? 0 : main.scrollHeight - main.clientHeight;
+          });
+        });
+      }
 
       if (transitionTimerRef.current !== null) window.clearTimeout(transitionTimerRef.current);
       transitionTimerRef.current = window.setTimeout(() => {
@@ -209,7 +220,16 @@ export function ContractPage() {
 
     const deltaX = start.x - touch.clientX;
     const deltaY = start.y - touch.clientY;
-    if (window.innerWidth <= 700 && Math.abs(deltaY) > Math.abs(deltaX)) return;
+    if (window.innerWidth <= 700 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      const main = mainRef.current;
+      if (!main || Math.abs(deltaY) <= 36) return;
+      const atTop = main.scrollTop <= 2;
+      const atBottom = main.scrollTop + main.clientHeight >= main.scrollHeight - 2;
+      if ((deltaY > 0 && atBottom) || (deltaY < 0 && atTop)) {
+        step(deltaY > 0 ? 1 : -1);
+      }
+      return;
+    }
     const strongest = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
     if (Math.abs(strongest) > 36) step(strongest > 0 ? 1 : -1);
   };
@@ -267,7 +287,7 @@ export function ContractPage() {
         Evaluar proyecto <span>↗</span>
       </a>
 
-      <main className="lmw-main" aria-live="polite">
+      <main className="lmw-main" aria-live="polite" ref={mainRef}>
         <div className="lmw-content-stack">
           {pageTransition ? (
             <>
