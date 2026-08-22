@@ -25,7 +25,8 @@ test('every mounted admin mutator declares requireWrite or requireApproval', asy
     assert.ok(ROUTES[route], `Falta registrar la ruta Admin montada: ${route}`);
     const source = await readFile(new URL(`../routes/${ROUTES[route].file}.ts`, import.meta.url), 'utf8');
     const routerName = ROUTES[route].router;
-    for (const match of source.matchAll(new RegExp(`${routerName}\\.(post|patch|put|delete)\\([^\\n]+`, 'g'))) {
+    // Route declarations may wrap the middleware and handler across lines.
+    for (const match of source.matchAll(new RegExp(`${routerName}\\.(post|patch|put|delete)\\([\\s\\S]*?\\basync\\s*\\(`, 'g'))) {
       assert.match(match[0], /requireWrite|requireApproval/, `${route}: ${match[0]}`);
     }
   }
