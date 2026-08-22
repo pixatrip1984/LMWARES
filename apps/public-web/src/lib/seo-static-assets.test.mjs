@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const publicAsset = (name) => new URL(`../../public/${name}`, import.meta.url);
+const appAsset = (name) => new URL(`../../${name}`, import.meta.url);
 
 test('the public sitemap lists only canonical, indexable marketing URLs', async () => {
   const sitemap = await readFile(publicAsset('sitemap.xml'), 'utf8');
@@ -26,5 +27,13 @@ test('robots advertises the canonical sitemap to crawlers', async () => {
 test('the retired contact route permanently redirects to the canonical home page', async () => {
   const redirects = await readFile(publicAsset('_redirects'), 'utf8');
 
-  assert.match(redirects, /^\/contacto\s+\/\s+301$/m);
+  assert.match(redirects, /^\/contacto\s+https:\/\/lmwares\.com\/\s+301$/m);
+});
+
+test('the public document and retired route force the canonical home URL', async () => {
+  const index = await readFile(appAsset('index.html'), 'utf8');
+  const contactRedirect = await readFile(appAsset('functions/contacto.js'), 'utf8');
+
+  assert.match(index, /<link rel="canonical" href="https:\/\/lmwares\.com\/" \/>/);
+  assert.match(contactRedirect, /Response\.redirect\('https:\/\/lmwares\.com\/', 301\)/);
 });
