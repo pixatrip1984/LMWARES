@@ -4062,6 +4062,11 @@ button {
     height: 48px;
     width: 48px;
   }
+
+  .lmw-page[data-tab='objeciones'] .lmw-content,
+  .lmw-page[data-tab='objeciones'] .lmw-faq {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 430px) {

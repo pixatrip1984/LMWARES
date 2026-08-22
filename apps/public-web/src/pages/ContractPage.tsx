@@ -76,7 +76,12 @@ export function ContractPage() {
   const transitionTimerRef = useRef<number | null>(null);
   const wheelBufferRef = useRef(0);
   const lastWheelRef = useRef(0);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchStartRef = useRef<{
+    x: number;
+    y: number;
+    atTop: boolean;
+    atBottom: boolean;
+  } | null>(null);
   const activeTab = TABS[activeIndex] ?? FIRST_TAB;
   const channelTabs = TABS.filter((tab) => tab.channel === activeTab.channel);
 
@@ -209,7 +214,16 @@ export function ContractPage() {
 
   const handleTouchStart = (event: ReactTouchEvent<HTMLElement>) => {
     const touch = event.touches[0];
-    if (touch) touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    if (!touch) return;
+    const main = mainRef.current;
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      atTop: Boolean(main && main.scrollTop <= 2),
+      atBottom: Boolean(
+        main && main.scrollTop + main.clientHeight >= main.scrollHeight - 2,
+      ),
+    };
   };
 
   const handleTouchEnd = (event: ReactTouchEvent<HTMLElement>) => {
@@ -221,11 +235,8 @@ export function ContractPage() {
     const deltaX = start.x - touch.clientX;
     const deltaY = start.y - touch.clientY;
     if (window.innerWidth <= 700 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      const main = mainRef.current;
-      if (!main || Math.abs(deltaY) <= 36) return;
-      const atTop = main.scrollTop <= 2;
-      const atBottom = main.scrollTop + main.clientHeight >= main.scrollHeight - 2;
-      if ((deltaY > 0 && atBottom) || (deltaY < 0 && atTop)) {
+      if (Math.abs(deltaY) <= 56) return;
+      if ((deltaY > 0 && start.atBottom) || (deltaY < 0 && start.atTop)) {
         step(deltaY > 0 ? 1 : -1);
       }
       return;
@@ -548,14 +559,14 @@ function PlanesTab() {
           kind="basic"
           eyebrow="LMWares · desde $299/mes"
           title="Mantenimiento básico"
-          items={['Cambios ligeros', 'Actualizaciones mensuales', 'Soporte básico']}
+          items={['Dominio incluido', 'Cambios ligeros mensuales', 'Soporte básico']}
           note="Para sitios estables"
         />
         <PlanCard
           kind="advanced"
           eyebrow="LMWares · desde $599/mes"
           title="Mantenimiento avanzado"
-          items={['Cambios semanales', 'Mayor flexibilidad', 'Catálogo activo']}
+          items={['Dominio incluido', 'Cambios ligeros semanales', 'Catálogo activo']}
           note="Para sistemas vivos"
         />
         <PlanCard

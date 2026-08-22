@@ -32,6 +32,12 @@ export const createPackageIntakeSchema = z.object({
   modules: z.array(z.enum(PACKAGE_MODULE_IDS)).min(2).max(PACKAGE_MODULE_IDS.length),
   marketing: z.boolean(),
   brief: packageIntakeBriefSchema,
+  discountCode: z
+    .string()
+    .trim()
+    .max(40)
+    .nullish()
+    .transform((value) => (value ? value.toUpperCase().replace(/\s+/g, '') : null)),
 });
 
 export type CreatePackageIntakeInput = z.infer<typeof createPackageIntakeSchema>;

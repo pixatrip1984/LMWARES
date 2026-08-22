@@ -1,9 +1,7 @@
 import {
   COMMERCIAL_PACKAGE_PRICING_CENTS,
-  estimateCommercialPackage,
   isPaidPackageModuleAvailable,
   type PaidPackageModuleId,
-  type PaidPackagePlan,
 } from '@starter/domain';
 
 export type PlanId = 'free' | 'starter' | 'pro';
@@ -185,14 +183,12 @@ export const FREE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const PACKAGE_PRICING = {
   implementation: {
     free: 0,
-    starterOneComplement:
-      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.starterOneComplement / 100,
-    starterTwoComplements:
-      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.starterTwoComplements / 100,
-    proBase: COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proBase / 100,
-    proWithCartOrOptimization:
-      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proWithCartOrOptimization / 100,
-    proFull: COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proFull / 100,
+    baseOneComplement:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.baseOneComplement / 100,
+    perAdditionalComplement:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.perAdditionalComplement / 100,
+    perPremiumModule:
+      COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.perPremiumModule / 100,
   },
   monthly: {
     maintenanceFrom: COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.maintenanceFrom / 100,
@@ -224,12 +220,35 @@ export function getRecommendedPlan(modules: PackageModuleId[], _marketing: boole
 
 export function getPlanSeed(plan: PlanId): PackageModuleId[] {
   if (plan === 'free') return [];
-  if (plan === 'pro') return ['landing', 'panel', 'catalog'];
+  if (plan === 'pro') return ['landing', 'panel', 'catalog', 'quote', 'blog'];
   return ['landing', 'panel', 'catalog'];
 }
 
 export function getSelectedComplements(modules: PackageModuleId[]) {
   return modules.filter((moduleId) => !FOUNDATION_MODULES.includes(moduleId));
+}
+
+export type ModuleSelectionError =
+  | { kind: 'starter-needs-complement' }
+  | { kind: 'pro-needs-three' };
+
+/**
+ * Reglas de selección de complementos por plan. Starter exige al menos un
+ * complemento; Pro exige al menos tres (con dos, se sugiere Starter).
+ */
+export function getModuleSelectionError(
+  plan: PlanId,
+  modules: PackageModuleId[],
+): ModuleSelectionError | null {
+  if (plan === 'free') return null;
+  const complementCount = getSelectedComplements(modules).length;
+  if (plan === 'starter' && complementCount < 1) {
+    return { kind: 'starter-needs-complement' };
+  }
+  if (plan === 'pro' && complementCount < 3) {
+    return { kind: 'pro-needs-three' };
+  }
+  return null;
 }
 
 export function getPackageLabel(plan: PlanId, modules: PackageModuleId[]) {
@@ -261,20 +280,42 @@ export function estimatePackagePrice(draft: Pick<PackageDraft, 'plan' | 'modules
       monthlyOptionalFrom: 0,
     };
   }
-  const estimate = estimateCommercialPackage({
-    plan: draft.plan as PaidPackagePlan,
-    modules: draft.modules as PaidPackageModuleId[],
-    marketing: draft.marketing,
-  });
+
+  // El precio se calcula de forma incremental y tolerante: no lanza aunque el
+  // estado sea inválido (p. ej. Pro con menos de tres complementos), para que
+  // el importe se refresque en tiempo real mientras el usuario ajusta módulos.
+  // La validación de mínimos se muestra por separado en "Ver ejemplo"/enviar.
+  const complements = getSelectedComplements(draft.modules);
+  const premiumCount = complements.filter((id) => id === 'cart' || id === 'data').length;
+  const standardCount = complements.length - premiumCount;
+  const implementation =
+    PACKAGE_PRICING.implementation.baseOneComplement
+    + Math.max(0, standardCount - 1) * PACKAGE_PRICING.implementation.perAdditionalComplement
+    + premiumCount * PACKAGE_PRICING.implementation.perPremiumModule;
+
+  const implementationLabel =
+    draft.plan === 'starter'
+      ? complements.length >= 2
+        ? `Starter · ${complements.length} complementos`
+        : complements.length === 1
+          ? 'Starter · 1 complemento'
+          : 'Starter · base mínima'
+      : complements.length >= 3
+        ? `Pro · ${complements.length} complementos`
+        : complements.length === 2
+          ? 'Pro · 2 complementos'
+          : complements.length === 1
+            ? 'Pro · 1 complemento'
+            : 'Pro base';
 
   return {
-    implementation: estimate.implementationAmountCents / 100,
-    implementationLabel: estimate.implementationLabel,
-    maintenanceFrom: estimate.maintenanceAmountCents / 100,
-    operationalMaintenanceFrom: estimate.operationalMaintenanceAmountCents / 100,
-    securityAddOnFrom: estimate.securityAddOnAmountCents / 100,
-    astramusesMonthly: estimate.astramusesAmountCents / 100,
-    monthlyOptionalFrom: estimate.astramusesAmountCents / 100,
+    implementation,
+    implementationLabel,
+    maintenanceFrom: PACKAGE_PRICING.monthly.maintenanceFrom,
+    operationalMaintenanceFrom: PACKAGE_PRICING.monthly.operationalMaintenanceFrom,
+    securityAddOnFrom: PACKAGE_PRICING.monthly.securityAddOnFrom,
+    astramusesMonthly: PACKAGE_PRICING.monthly.astramusesStaticFrom,
+    monthlyOptionalFrom: PACKAGE_PRICING.monthly.astramusesStaticFrom,
   };
 }
 
@@ -405,19 +446,19 @@ export function getMaintenancePlanOptions(): MaintenancePlanOption[] {
       id: 'none',
       name: 'Sin mantenimiento',
       priceLabel: '$0/mes',
-      description: 'Conservas la versión entregada como definitiva y avanzas directo a indexarla en tu dominio.',
+      description: 'No incluye dominio: tú lo compras; nosotros montamos tu sitio en él.',
     },
     {
       id: 'basic',
       name: 'Mantenimiento básico',
       priceLabel: `Desde ${formatMxPrice(PACKAGE_PRICING.monthly.maintenanceFrom)}/mes`,
-      description: 'Cambios ligeros y actualizaciones mensuales.',
+      description: 'Incluye un dominio y cambios ligeros mensuales.',
     },
     {
       id: 'advanced',
       name: 'Mantenimiento avanzado',
       priceLabel: `Desde ${formatMxPrice(PACKAGE_PRICING.monthly.operationalMaintenanceFrom)}/mes`,
-      description: 'Cambios semanales, mayor flexibilidad.',
+      description: 'Incluye un dominio y cambios ligeros semanales.',
     },
   ];
 }

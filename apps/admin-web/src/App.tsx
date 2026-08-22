@@ -10,6 +10,7 @@ import { RequestDetailPage } from './pages/RequestDetailPage';
 import { SiteModulesPage } from './pages/SiteModulesPage';
 import { CommercialIntakesPage } from './pages/CommercialIntakesPage';
 import { StarterDomainsPage } from './pages/StarterDomainsPage';
+import { DiscountCodesPage } from './pages/DiscountCodesPage';
 
 export function App() {
   return (
@@ -29,6 +30,7 @@ export function App() {
         <Route path="/requests/:id" element={<RequestDetailPage />} />
         <Route path="/commercial-intakes" element={<CommercialIntakesPage />} />
         <Route path="/starter-domains" element={<StarterDomainsPage />} />
+        <Route path="/discount-codes" element={<DiscountCodesPage />} />
       </Route>
     </Routes>
   );

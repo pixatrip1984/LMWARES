@@ -1238,8 +1238,53 @@
     order: 0;
   }
 
+  .lmw-admin-preview {
+    grid-template-columns: 152px minmax(0, 1fr);
+  }
+
   .lmw-admin-preview__sidebar {
+    gap: 12px;
+    padding: 14px 9px;
+  }
+
+  .lmw-admin-preview__brand {
+    gap: 7px;
+    padding: 3px 4px 11px;
+  }
+
+  .lmw-admin-preview__brand strong {
+    font-size: 9px;
+  }
+
+  .lmw-admin-preview__brand small {
+    font-size: 7px;
+  }
+
+  .lmw-admin-nav-item {
+    font-size: 9px;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 7px;
+  }
+
+  .lmw-admin-preview__main {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 560px) {
+  .lmw-admin-preview {
+    grid-template-columns: 118px minmax(0, 1fr);
+  }
+
+  .lmw-admin-preview__brand small {
     display: none;
+  }
+
+  .lmw-admin-nav-item {
+    font-size: 8px;
+    gap: 5px;
+    padding: 0 5px;
   }
 }
 

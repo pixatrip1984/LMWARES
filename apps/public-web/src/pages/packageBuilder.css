@@ -1946,6 +1946,73 @@ button.lmw-free-assets__status.is-published {
   margin: 0;
 }
 
+.lmw-discount-box {
+  border-top: 1px solid rgba(92, 155, 255, 0.18);
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+  padding-top: 10px;
+}
+
+.lmw-discount-box label {
+  color: rgba(220, 233, 252, 0.72);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.lmw-discount-row {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr auto;
+}
+
+.lmw-discount-row input {
+  background: rgba(5, 13, 30, 0.6);
+  border: 1px solid rgba(92, 155, 255, 0.34);
+  color: #f7fbff;
+  font-family: var(--builder-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 8px 10px;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.lmw-discount-row input::placeholder {
+  color: rgba(206, 224, 252, 0.4);
+}
+
+.lmw-discount-row input:focus {
+  border-color: var(--builder-blue);
+  outline: none;
+}
+
+.lmw-discount-row button {
+  background: var(--builder-blue);
+  border: 1px solid var(--builder-blue);
+  color: #04101f;
+  cursor: pointer;
+  font-family: var(--builder-mono);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.lmw-discount-row button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.lmw-discount-ok {
+  color: #7ee2a8 !important;
+}
+
+.lmw-discount-error {
+  color: #ff6048 !important;
+}
+
 .lmw-marketing-toggle {
   align-items: center;
   background: rgba(21, 23, 7, 0.18);

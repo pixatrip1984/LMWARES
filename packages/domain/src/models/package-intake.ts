@@ -1,5 +1,6 @@
 import type { Id, IsoDateTime, Metadata, Timestamps } from '../common';
 import type { PaidPackageModuleId, PaidPackagePlan } from './package-payment';
+import type { DiscountPercent } from './discount-code';
 
 export const PACKAGE_INTAKE_STATUSES = [
   'submitted',
@@ -49,6 +50,9 @@ export interface PackageIntake extends Timestamps {
   pricingVersion: string;
   maintenanceStartPolicy: MaintenanceStartPolicy;
   packageSnapshot: Metadata;
+  discountCode: string | null;
+  discountPercent: DiscountPercent | null;
+  discountRedemptionId: Id | null;
   proposalId: Id | null;
   reviewedBy: string | null;
   reviewedAt: IsoDateTime | null;

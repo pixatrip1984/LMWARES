@@ -11,6 +11,7 @@ const NAV = [
   { to: '/requests', label: 'Solicitudes' },
   { to: '/commercial-intakes', label: 'Paquetes' },
   { to: '/starter-domains', label: 'Dominios' },
+  { to: '/discount-codes', label: 'Descuentos' },
 ] as const;
 
 export function AdminLayout() {

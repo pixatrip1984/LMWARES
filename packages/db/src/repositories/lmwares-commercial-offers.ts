@@ -309,6 +309,38 @@ export class LmwaresCommercialOffersRepository {
     }
     return { offer: (await this.getById(input.offerId))!, changed: true };
   }
+
+  /**
+   * Aplica el importe descontado a una oferta aceptada. Solo funciona una vez
+   * (mientras el importe no haya sido descontado) y solo sobre la oferta
+   * aceptada del cliente. El importe descontado es el que se usa para crear
+   * las fases de pago.
+   */
+  async applyDiscountToOffer(input: {
+    offerId: string;
+    userId: string;
+    discountedCents: number;
+  }): Promise<{ offer: CommercialOffer; changed: boolean }> {
+    const current = await this.getById(input.offerId);
+    if (!current || current.userId !== input.userId) {
+      throw AppError.notFound('Oferta comercial');
+    }
+    if (current.status !== 'accepted') {
+      throw new AppError('conflict', 'La oferta todavía no está aceptada.');
+    }
+    const result = await this.db
+      .prepare(
+        `UPDATE lmw_commercial_offers
+         SET implementation_amount_cents = ?, updated_at = ?
+         WHERE id = ? AND user_id = ? AND status = 'accepted'`,
+      )
+      .bind(input.discountedCents, nowIso(), input.offerId, input.userId)
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      throw new AppError('conflict', 'La oferta cambió mientras se aplicaba el descuento.');
+    }
+    return { offer: (await this.getById(input.offerId))!, changed: true };
+  }
 }
 
 function mapCommercialOffer(row: CommercialOfferRow): CommercialOffer {

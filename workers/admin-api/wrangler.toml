@@ -1,6 +1,7 @@
 name = "starter-admin-api"
 main = "src/index.ts"
 compatibility_date = "2026-06-28"
+workers_dev = false
 
 # Fase 2 (admin con Access): descomenta y reemplaza <DOMINIO>.
 # IMPORTANTE: 'routes' va a NIVEL SUPERIOR (antes de [vars]); si queda dentro
@@ -22,9 +23,12 @@ ACCESS_TEAM_DOMAIN = "https://REEMPLAZAR.cloudflareaccess.com"
 # AUD tag de la aplicación de Access que protege este Worker.
 ACCESS_AUD = "REEMPLAZAR_CON_TU_AUD"
 # Crea automáticamente un AdminUser (rol viewer) al primer login válido.
-AUTO_PROVISION_ADMINS = "1"
-# En local deja "1" para saltar Access (usa X-Dev-Email). En producción pon "0".
+AUTO_PROVISION_ADMINS = "0"
+# En local se usa el Admin owner sembrado y el header X-Dev-Email; en producción
+# Access permanece obligatorio y el allowlist se define en [env.production.vars].
+ADMIN_EMAIL_ALLOWLIST = "admin@example.com"
 ACCESS_DISABLED = "1"
+TEST_FIXTURES_ENABLED = "1"
 
 [[d1_databases]]
 binding = "DB"
@@ -47,7 +51,7 @@ routes = [
 ]
 
 [env.production.vars]
-ALLOWED_ORIGINS = "https://admin.lmwares.com,https://lmwares-admin.pages.dev"
+ALLOWED_ORIGINS = "https://admin.lmwares.com"
 CLOUDFLARE_ZONE_ID = "fa8b7b1e5c20243be0e49ec794167eca"
 CLOUDFLARE_SAAS_CNAME_TARGET = "customers.lmwares.com"
 MEDIA_BASE_URL = ""
@@ -56,8 +60,11 @@ PUBLIC_API_URL = "https://api.lmwares.com"
 PROJECT_SLUG = "lmwares"
 ACCESS_TEAM_DOMAIN = "https://lmwares.cloudflareaccess.com"
 ACCESS_AUD = "f4e643927f9d80e438f3f4d340a889444e0beaf5d21f6994991ebd4a0896a7d6"
-AUTO_PROVISION_ADMINS = "1"
+# Fail closed until the exact Access identities are supplied at deploy time.
+ADMIN_EMAIL_ALLOWLIST = "lmwareservice@gmail.com"
+AUTO_PROVISION_ADMINS = "0"
 ACCESS_DISABLED = "0"
+TEST_FIXTURES_ENABLED = "0"
 
 [[env.production.d1_databases]]
 binding = "DB"

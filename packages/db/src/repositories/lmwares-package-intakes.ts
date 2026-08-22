@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import {
   AppError,
+  type DiscountPercent,
   type Metadata,
   type PackageIntake,
   type PackageIntakeBrief,
@@ -8,7 +9,7 @@ import {
   type PaidPackageModuleId,
   type PaidPackagePlan,
 } from '@starter/domain';
-import { boolFromDb, boolToDb, newId, nowIso, parseMetadata } from '../helpers';
+import { boolFromDb, boolToDb, newId, nowIso, nullable, parseMetadata } from '../helpers';
 
 interface PackageIntakeRow {
   id: string;
@@ -34,6 +35,9 @@ interface PackageIntakeRow {
   pricing_version: string;
   maintenance_start_policy: string;
   package_snapshot: string;
+  discount_code: string | null;
+  discount_percent: number | null;
+  discount_redemption_id: string | null;
   proposal_id: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -57,6 +61,9 @@ export class LmwaresPackageIntakesRepository {
     estimatedMonthlyCents: number;
     pricingVersion: string;
     packageSnapshot: Metadata;
+    discountCode?: string | null;
+    discountPercent?: number | null;
+    discountRedemptionId?: string | null;
   }): Promise<{ intake: PackageIntake; created: boolean }> {
     const existing = await this.getBySubmissionKey(input.submissionKey);
     if (existing) {
@@ -85,8 +92,9 @@ export class LmwaresPackageIntakesRepository {
            maintenance_plan_preference, maintenance_security_add_on, status,
            estimated_implementation_cents, estimated_monthly_cents, currency,
            pricing_version, maintenance_start_policy, package_snapshot,
+           discount_code, discount_percent, discount_redemption_id,
            submitted_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, 'MXN', ?, 'on_go_live', ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, 'MXN', ?, 'on_go_live', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -109,6 +117,9 @@ export class LmwaresPackageIntakesRepository {
         input.estimatedMonthlyCents,
         input.pricingVersion,
         JSON.stringify(input.packageSnapshot),
+        nullable(input.discountCode),
+        nullable(input.discountPercent),
+        nullable(input.discountRedemptionId),
         now,
         now,
         now,
@@ -200,6 +211,38 @@ export class LmwaresPackageIntakesRepository {
     }
     return (await this.getById(input.id))!;
   }
+
+  /**
+   * Registra que el código de descuento del intake fue consumido al aceptar la
+   * oferta. Solo funciona una vez (mientras `discount_redemption_id` sea null).
+   */
+  async markDiscountRedeemed(input: {
+    id: string;
+    discountPercent: number;
+    discountRedemptionId: string;
+  }): Promise<PackageIntake> {
+    const now = nowIso();
+    const result = await this.db
+      .prepare(
+        `UPDATE lmw_package_intakes
+         SET discount_percent = ?, discount_redemption_id = ?, updated_at = ?
+         WHERE id = ? AND discount_code IS NOT NULL AND discount_redemption_id IS NULL`,
+      )
+      .bind(input.discountPercent, input.discountRedemptionId, now, input.id)
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      const current = await this.getById(input.id);
+      if (!current) throw AppError.notFound('Solicitud comercial');
+      if (
+        current.discountRedemptionId === input.discountRedemptionId &&
+        current.discountPercent === input.discountPercent
+      ) {
+        return current;
+      }
+      throw new AppError('conflict', 'El descuento de esta solicitud ya fue aplicado.');
+    }
+    return (await this.getById(input.id))!;
+  }
 }
 
 function isOpenPackageIntakeStatus(status: PackageIntakeStatus | string): boolean {
@@ -233,6 +276,9 @@ function mapPackageIntake(row: PackageIntakeRow): PackageIntake {
     pricingVersion: row.pricing_version,
     maintenanceStartPolicy: 'on_go_live',
     packageSnapshot: parseMetadata(row.package_snapshot),
+    discountCode: row.discount_code,
+    discountPercent: (row.discount_percent as DiscountPercent | null) ?? null,
+    discountRedemptionId: row.discount_redemption_id,
     proposalId: row.proposal_id,
     reviewedBy: row.reviewed_by,
     reviewedAt: row.reviewed_at,

@@ -32,6 +32,10 @@ export function accessMiddleware(): MiddlewareHandler<{
       identity = { email: claims.email, name: claims.name ?? null };
     }
 
+    if (!isAllowlistedAdmin(identity.email, c.env.ADMIN_EMAIL_ALLOWLIST)) {
+      throw AppError.forbidden('Tu identidad de Access no está autorizada para el panel.');
+    }
+
     const repos = createRepositories(c.env.DB);
     const admin = await repos.adminUsers.syncFromAccess(
       identity.email,
@@ -46,6 +50,14 @@ export function accessMiddleware(): MiddlewareHandler<{
     c.set('admin', admin);
     await next();
   };
+}
+
+function isAllowlistedAdmin(email: string, rawAllowlist: string | undefined): boolean {
+  const allowlist = (rawAllowlist ?? '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return allowlist.includes(email.trim().toLowerCase());
 }
 
 /** Exige rol con permisos de escritura. Úsalo en endpoints mutantes. */

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { createRepositories } from '@starter/db';
 import { AppError } from '@starter/domain';
 import type { Bindings, Variables } from '../env';
+import { requireApproval } from '../middleware/auth';
 
 export const stuckPayments = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -45,10 +46,10 @@ interface StuckPaymentRow {
  * `OPS_RECOVERY_TOKEN` configurado en ambos Workers; si falta, responde
  * `conflict` sin intentar la llamada.
  */
-stuckPayments.post('/:kind/:id/reconcile', async (c) => {
+stuckPayments.post('/:kind/:id/reconcile', requireApproval, async (c) => {
   const admin = c.get('admin');
-  const kind = c.req.param('kind');
-  const id = c.req.param('id');
+  const kind = c.req.param('kind') ?? '';
+  const id = c.req.param('id') ?? '';
   const knownKinds = [
     'implementation_phase',
     'package_proposal',

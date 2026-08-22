@@ -11,6 +11,7 @@ import {
   acceptCommercialOfferSchema,
   createPackageIntakeSchema,
   parseInput,
+  previewDiscountCodeSchema,
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
@@ -31,6 +32,21 @@ commercialIntakes.post('/', async (c) => {
   const marketing = normalizeCommercialMarketing(input.marketing);
   const estimate = estimateCommercialPackage({ ...input, modules, marketing });
   const repos = createRepositories(c.env.DB);
+
+  // Reintento idempotente: si ya existe un intake para esta clave, devuélvelo
+  // tal cual sin volver a consumir el código de descuento.
+  const existing = await repos.lmwaresPackageIntakes.getBySubmissionKey(submissionKey);
+  if (existing && existing.userId === session.user.id) {
+    return c.json({ intake: publicIntake(existing) }, 200);
+  }
+
+  // El código de descuento se guarda en el intake pero NO se consume aquí.
+  // El consumo ocurre de forma atómica al ACEPTAR la oferta, de modo que solo
+  // cuentan las solicitudes que llegan a oferta aceptada (no las que solo se
+  // envían). El importe estimado se guarda sin descuento; el descuento se
+  // aplica sobre el importe de la oferta al aceptarla.
+  const discountCode = input.discountCode ?? null;
+
   const result = await repos.lmwaresPackageIntakes.create({
     submissionKey,
     userId: session.user.id,
@@ -47,8 +63,13 @@ commercialIntakes.post('/', async (c) => {
       modules,
       marketing,
       estimate,
+      discountCode,
+      discountPercent: null,
       maintenanceStartPolicy: 'on_go_live',
     },
+    discountCode,
+    discountPercent: null,
+    discountRedemptionId: null,
   });
   if (result.created) {
     await repos.audit.record({
@@ -77,6 +98,18 @@ commercialIntakes.get('/', async (c) => {
   );
   c.header('Cache-Control', 'no-store');
   return c.json({ intakes: intakes.map(publicIntake) });
+});
+
+commercialIntakes.post('/discount-preview', async (c) => {
+  assertTrustedPublicOrigin(c);
+  await requirePublicSession(c);
+  const input = parseInput(previewDiscountCodeSchema, await readJson(c));
+  const application = await createRepositories(c.env.DB).lmwaresDiscountCodes.preview({
+    code: input.code,
+    plan: input.plan,
+    originalCents: input.originalCents,
+  });
+  return c.json({ application });
 });
 
 commercialIntakes.get('/:id', async (c) => {
@@ -108,8 +141,54 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
     userId: session.user.id,
     termsVersion: input.termsVersion,
   });
+
+  // El canje se puede recuperar si una petición anterior se interrumpió entre
+  // el registro del descuento y la actualización de la oferta. Esto evita
+  // duplicar usos y garantiza que las fases siempre se calculen sobre el total
+  // descontado.
+  let offer = result.offer;
+  let redemption = intake.discountRedemptionId
+    ? await repos.lmwaresDiscountCodes.getRedemptionById(intake.discountRedemptionId)
+    : null;
+  if (intake.discountRedemptionId && !redemption) {
+    throw new AppError('conflict', 'El canje del descuento no está disponible para reintentar la aceptación.');
+  }
+  if (
+    redemption &&
+    (redemption.userId !== session.user.id || redemption.intakeId !== intake.id)
+  ) {
+    throw new AppError('conflict', 'El canje del descuento no pertenece a esta solicitud.');
+  }
+  if (redemption && !intake.discountCode) {
+    throw new AppError('conflict', 'La solicitud tiene un canje de descuento sin código asociado.');
+  }
+  if (intake.discountCode && !redemption) {
+    redemption = (
+      await repos.lmwaresDiscountCodes.redeem({
+        code: intake.discountCode,
+        plan: intake.plan,
+        userId: session.user.id,
+        intakeId: intake.id,
+        originalCents: offer.implementationAmountCents,
+      })
+    ).redemption;
+  }
+  if (redemption) {
+    const discounted = await repos.lmwaresCommercialOffers.applyDiscountToOffer({
+      offerId: offer.id,
+      userId: session.user.id,
+      discountedCents: redemption.discountedCents,
+    });
+    await repos.lmwaresPackageIntakes.markDiscountRedeemed({
+      id: intake.id,
+      discountPercent: redemption.discountPercent,
+      discountRedemptionId: redemption.id,
+    });
+    offer = discounted.offer;
+  }
+
   const billingOrders = await repos.lmwaresBillingOrders.ensureImplementationPhases({
-    offerId: result.offer.id,
+    offerId: offer.id,
     intakeId: intake.id,
     userId: session.user.id,
   });
@@ -119,20 +198,22 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
       actorId: session.user.id,
       action: 'lmwares.commercial_offer.accept',
       entityType: 'lmwares_commercial_offer',
-      entityId: result.offer.id,
+      entityId: offer.id,
       metadata: {
         intakeId: intake.id,
-        version: result.offer.version,
-        termsVersion: result.offer.termsVersion,
-        implementationAmountCents: result.offer.implementationAmountCents,
-        monthlyAmountCents: result.offer.monthlyAmountCents,
+        version: offer.version,
+        termsVersion: offer.termsVersion,
+        implementationAmountCents: offer.implementationAmountCents,
+        monthlyAmountCents: offer.monthlyAmountCents,
+        discountCode: intake.discountCode,
+        discountPercent: redemption?.discountPercent ?? intake.discountPercent,
       },
       ip: c.req.header('CF-Connecting-IP') ?? null,
       userAgent: c.req.header('User-Agent') ?? null,
     });
   }
   return c.json({
-    offer: publicCommercialOffer(result.offer),
+    offer: publicCommercialOffer(offer),
     billingOrders: billingOrders.map(publicBillingOrder),
   });
 });
@@ -150,6 +231,8 @@ function publicIntake(intake: PackageIntake) {
     currency: intake.currency,
     pricingVersion: intake.pricingVersion,
     maintenanceStartPolicy: intake.maintenanceStartPolicy,
+    discountCode: intake.discountCode,
+    discountPercent: intake.discountPercent,
     proposalId: intake.proposalId,
     currentOffer: null,
     submittedAt: intake.submittedAt,

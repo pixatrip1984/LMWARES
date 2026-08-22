@@ -160,10 +160,9 @@ starterDomains.delete('/:clientProjectId/domains/:domainId', async (c) => {
 });
 
 /**
- * Requiere plan de mantenimiento activo (`basic`/`advanced`) sobre la oferta
- * comercial aceptada del proyecto; misma regla de negocio del plan aprobado
- * (sección 8.1): sin esto, ni la búsqueda ni la compra de dominio propio
- * están disponibles.
+ * El dominio incluido sólo se registra cuando el cliente autorizó el plan
+ * Básico o Avanzado. Un dominio que ya compró el cliente usa la ruta de
+ * conexión manual y no pasa por esta compuerta.
  */
 async function requireActiveMaintenance(
   repos: ReturnType<typeof createRepositories>,
@@ -185,7 +184,14 @@ async function requireActiveMaintenance(
   if (!offer || !['basic', 'advanced'].includes(offer.maintenancePlanSelected ?? '')) {
     throw new AppError(
       'conflict',
-      'Comprar un dominio propio requiere tener un plan de mantenimiento activo.',
+      'El dominio incluido requiere Mantenimiento Básico o Avanzado.',
+    );
+  }
+  const subscription = await repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id);
+  if (subscription?.status !== 'active') {
+    throw new AppError(
+      'conflict',
+      'Autoriza la mensualidad de mantenimiento antes de registrar el dominio incluido.',
     );
   }
 }
@@ -193,7 +199,7 @@ async function requireActiveMaintenance(
 starterDomains.post('/:clientProjectId/domains/search', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
-  const clientProjectId = c.req.param('clientProjectId');
+  const clientProjectId = c.req.param('clientProjectId') ?? '';
   const input = parseInput(domainSearchSchema, await readJson(c));
   const repos = createRepositories(c.env.DB);
   await requireActiveMaintenance(repos, clientProjectId, session.user.id);
@@ -210,45 +216,44 @@ starterDomains.post('/:clientProjectId/domains/search', async (c) => {
 starterDomains.post('/:clientProjectId/domains/purchase', async (c) => {
   assertTrustedPublicOrigin(c);
   const session = await requirePublicSession(c);
-  const clientProjectId = c.req.param('clientProjectId');
+  const clientProjectId = c.req.param('clientProjectId') ?? '';
   const input = parseInput(domainPurchaseSchema, await readJson(c));
   const repos = createRepositories(c.env.DB);
   await requireActiveMaintenance(repos, clientProjectId, session.user.id);
-
   const existingDomains = await repos.lmwaresCustomDomains.listForClientProject({
     clientProjectId,
     userId: session.user.id,
   });
   const existingApex = existingDomains.find((domain) => domain.type === 'apex' && domain.status !== 'removed');
   if (existingApex) {
-    if (existingApex.hostname !== input.domain) {
+    if (existingApex.hostname !== input.domain!) {
       throw new AppError('conflict', 'El proyecto ya tiene un dominio propio pendiente o activo.');
     }
     return c.json({ domain: publicCustomDomain(existingApex), verification: null });
   }
-  const takenElsewhere = await repos.lmwaresCustomDomains.getByHostname(input.domain);
+  const takenElsewhere = await repos.lmwaresCustomDomains.getByHostname(input.domain!);
   if (takenElsewhere && takenElsewhere.status !== 'removed') {
     throw new AppError('conflict', 'Ese dominio ya está asociado a otro proyecto.');
   }
 
   const registrar = createDomainRegistrar(c.env);
-  const purchase = await registrar.purchase({ domain: input.domain, years: 1 });
+  const purchase = await registrar.purchase({ domain: input.domain!, years: 1 });
 
   const verificationToken = randomBase64Url(24);
   const provider = createStarterDomainProvider(c.env);
   const registration = await provider.register({
-    hostname: input.domain,
+    hostname: input.domain!,
     verificationToken,
   });
   await registrar.setDnsRecords({
-    domain: input.domain,
+    domain: input.domain!,
     records: toRegistrarDnsRecords(input.domain, registration.instructions),
   });
 
   const result = await repos.lmwaresCustomDomains.createPendingWithResult({
     clientProjectId,
     userId: session.user.id,
-    hostname: input.domain,
+    hostname: input.domain!,
     type: 'apex',
     verificationMethod: 'txt',
     verificationTokenHash: await sha256Hex(verificationToken),

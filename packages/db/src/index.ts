@@ -18,6 +18,7 @@ import { LmwaresNotificationsRepository } from './repositories/lmwares-notificat
 import { LmwaresPaymentsRepository } from './repositories/lmwares-payments';
 import { LmwaresPackageIntakesRepository } from './repositories/lmwares-package-intakes';
 import { LmwaresCommercialOffersRepository } from './repositories/lmwares-commercial-offers';
+import { LmwaresDiscountCodesRepository } from './repositories/lmwares-discount-codes';
 import { LmwaresBillingOrdersRepository } from './repositories/lmwares-billing-orders';
 import { LmwaresStarterWorkOrdersRepository } from './repositories/lmwares-starter-work-orders';
 import { LmwaresStarterClientProjectsRepository } from './repositories/lmwares-starter-client-projects';
@@ -44,6 +45,7 @@ export * from './repositories/lmwares-notifications';
 export * from './repositories/lmwares-payments';
 export * from './repositories/lmwares-package-intakes';
 export * from './repositories/lmwares-commercial-offers';
+export * from './repositories/lmwares-discount-codes';
 export * from './repositories/lmwares-billing-orders';
 export * from './repositories/lmwares-starter-work-orders';
 export * from './repositories/lmwares-starter-client-projects';
@@ -74,6 +76,7 @@ export interface Repositories {
   lmwaresPayments: LmwaresPaymentsRepository;
   lmwaresPackageIntakes: LmwaresPackageIntakesRepository;
   lmwaresCommercialOffers: LmwaresCommercialOffersRepository;
+  lmwaresDiscountCodes: LmwaresDiscountCodesRepository;
   lmwaresBillingOrders: LmwaresBillingOrdersRepository;
   lmwaresStarterWorkOrders: LmwaresStarterWorkOrdersRepository;
   lmwaresStarterClientProjects: LmwaresStarterClientProjectsRepository;
@@ -109,6 +112,7 @@ export function createRepositories(db: D1Database): Repositories {
     lmwaresPayments: new LmwaresPaymentsRepository(db),
     lmwaresPackageIntakes: new LmwaresPackageIntakesRepository(db),
     lmwaresCommercialOffers: new LmwaresCommercialOffersRepository(db),
+    lmwaresDiscountCodes: new LmwaresDiscountCodesRepository(db),
     lmwaresBillingOrders: new LmwaresBillingOrdersRepository(db),
     lmwaresStarterWorkOrders: new LmwaresStarterWorkOrdersRepository(db),
     lmwaresStarterClientProjects: new LmwaresStarterClientProjectsRepository(db),

@@ -53,7 +53,7 @@ export function CommercialIntakesPage() {
     marketing: false,
   });
   const [activeAction, setActiveAction] = useState<
-    'review' | 'assign' | 'status' | 'publish' | 'offer' | 'reopen' | null
+    'review' | 'assign' | 'status' | 'publish' | 'offer' | 'reopen' | 'test_paid' | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -286,6 +286,8 @@ export function CommercialIntakesPage() {
   }
 
   const phase1Order = billingOrders.find((order) => order.phase === 1) ?? null;
+  const localTestFixturesAvailable =
+    typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
   async function reopenImplementationPayment() {
     if (!selected || !phase1Order) return;
@@ -304,6 +306,26 @@ export function CommercialIntakesPage() {
       setBillingOrders(result.billingOrders);
     } catch (err) {
       setActionError(err instanceof AppError ? err.message : 'No se pudo reabrir la oferta.');
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function markImplementationPhasesTestPaid() {
+    if (!selected) return;
+    if (!window.confirm('Esto marca las cuatro fases como pagadas sólo en el entorno local. No llama a Mercado Pago.')) {
+      return;
+    }
+    setActiveAction('test_paid');
+    setActionError(null);
+    try {
+      const result = await api.markImplementationPhasesTestPaid(selected.id);
+      setBillingOrders(result.billingOrders);
+      setWorkOrder(result.workOrder);
+      setClientProject(result.clientProject);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof AppError ? err.message : 'No se pudo crear el fixture de pago.');
     } finally {
       setActiveAction(null);
     }
@@ -387,6 +409,12 @@ export function CommercialIntakesPage() {
                     <Info label="ID de solicitud" value={selected.id} />
                     <Info label="Fecha y Hora de envío" value={formatDate(selected.submittedAt)} />
                     <Info label="Implementación estimada" value={money(selected.estimatedImplementationCents)} />
+                    {selected.discountCode ? (
+                      <Info
+                        label="Descuento aplicado"
+                        value={`${selected.discountCode} (−${selected.discountPercent}%)`}
+                      />
+                    ) : null}
                     <Info label="Mantenimiento opcional estimado" value={`Desde ${money(selected.estimatedMonthlyCents)}/mes`} />
                     <Info label="Inicio de mensualidad" value="Al publicar el proyecto" />
                     <Info label="AstraMuses" value={selected.marketing ? 'Registro legado' : 'Próximamente'} />
@@ -548,6 +576,15 @@ export function CommercialIntakesPage() {
                           </article>
                         ))}
                       </div>
+                      {localTestFixturesAvailable && acceptedOffer && billingOrders.length === 4 && billingOrders.some((order) => order.status !== 'paid') ? (
+                        <div className="mt-4 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                          <p className="font-semibold">Fixture local de pago</p>
+                          <p className="mt-1">Marca las cuatro fases como pagadas para probar el perfil, el mantenimiento y los dominios sin abrir Mercado Pago.</p>
+                          <Button className="mt-3" variant="secondary" onClick={markImplementationPhasesTestPaid} disabled={activeAction !== null}>
+                            {activeAction === 'test_paid' ? 'Preparando fixture…' : 'Marcar 4 fases como pagadas (local)'}
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                     {workOrder ? (
                       <div className="rounded-xl border border-surface-border p-4">

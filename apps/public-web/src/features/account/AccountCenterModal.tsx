@@ -6,6 +6,7 @@ import type {
   CreatePublicCustomDomainResult,
   PublicCustomDomain,
   PublicDomainAvailability,
+  PublicMaintenanceSubscription,
   PublicPackageIntake,
   PublicStarterClientProject,
   PublicStarterWorkOrder,
@@ -389,6 +390,7 @@ function CustomDomainsPanel({
   domains,
   onCreate,
   onRemove,
+  workOrderStatus,
 }: {
   clientProjectId: string;
   domains: PublicCustomDomain[];
@@ -397,9 +399,9 @@ function CustomDomainsPanel({
     input: { hostname: string; type: 'www' | 'app' },
   ) => Promise<CreatePublicCustomDomainResult>;
   onRemove: (clientProjectId: string, domainId: string) => Promise<unknown>;
+  workOrderStatus: PublicStarterWorkOrder['status'] | null;
 }) {
   const [hostname, setHostname] = useState('');
-  const [type, setType] = useState<'www' | 'app'>('www');
   const [verification, setVerification] = useState<CreatePublicCustomDomainResult['verification']>(
     null,
   );
@@ -410,7 +412,9 @@ function CustomDomainsPanel({
     setBusy(true);
     setError(null);
     try {
-      const result = await onCreate(clientProjectId, { hostname, type });
+      const normalizedHostname = hostname.trim().toLowerCase();
+      const type = normalizedHostname.startsWith('www.') ? 'www' : 'app';
+      const result = await onCreate(clientProjectId, { hostname: normalizedHostname, type });
       setVerification(result.verification);
       if (result.verification) setHostname('');
     } catch (createError) {
@@ -419,6 +423,9 @@ function CustomDomainsPanel({
       setBusy(false);
     }
   };
+
+  const workOrderReady = workOrderStatus === 'ready_to_publish' || workOrderStatus === 'live';
+  if (!workOrderReady) return null;
 
   const remove = async (domain: PublicCustomDomain) => {
     if (!window.confirm(`¿Retirar ${domain.hostname} del proyecto?`)) return;
@@ -437,14 +444,12 @@ function CustomDomainsPanel({
   return (
     <section className="lmw-account-domains" aria-label="Dominios personalizados">
       <header>
-        <small>DOMINIO PROPIO · YA LO TIENES</small>
-        <strong>¿Ya tienes un dominio comprado en otro lado? Conéctalo aquí</strong>
+        <small>DOMINIO PROPIO · LO COMPRAS TÚ</small>
+        <strong>¿Ya tienes un dominio? Conéctalo aquí</strong>
         <p>
-          Este formulario es para dominios que ya compraste tú (en otro proveedor). El subdominio
-          LMWares seguirá disponible como respaldo. Te mostraremos los registros DNS necesarios y
-          confirmaremos la activación antes de cambiar el tráfico. Si prefieres que te ayudemos a
-          comprar uno nuevo, usa el buscador de "¿Aún no tienes un dominio?" más abajo (incluido en
-          tu mantenimiento).
+          Este formulario funciona con o sin mantenimiento: tú compras el dominio con el proveedor
+          que prefieras y nosotros montamos el sitio en él. El subdominio LMWares seguirá
+          disponible como respaldo mientras configuramos DNS y el certificado.
         </p>
       </header>
       {domains.filter(({ status }) => status !== 'removed').map((domain) => (
@@ -471,18 +476,14 @@ function CustomDomainsPanel({
       ))}
       {!domains.some(({ status }) => status !== 'removed') ? (
         <div className="lmw-account-domains__form">
-          <select aria-label="Tipo de dominio" onChange={(event) => setType(event.target.value as 'www' | 'app')} value={type}>
-            <option value="www">www.tuempresa.com</option>
-            <option value="app">app.tuempresa.com</option>
-          </select>
           <input
             aria-label="Hostname personalizado"
             onChange={(event) => setHostname(event.target.value)}
-            placeholder={type === 'www' ? 'www.tuempresa.com' : 'app.tuempresa.com'}
+            placeholder="www.tuempresa.com"
             value={hostname}
           />
           <button disabled={busy || !hostname.trim()} onClick={() => void create()} type="button">
-            Registrar dominio
+            Conectar mi dominio
           </button>
         </div>
       ) : null}
@@ -504,12 +505,14 @@ function CustomDomainsPanel({
 function DomainSearchGate({
   clientProject,
   maintenancePlanSelected,
+  maintenanceSubscription,
   onPurchase,
   onSearch,
   workOrderStatus,
 }: {
   clientProject: PublicStarterClientProject;
   maintenancePlanSelected: 'none' | 'basic' | 'advanced' | null;
+  maintenanceSubscription: PublicMaintenanceSubscription | null;
   onPurchase: (
     clientProjectId: string,
     input: { domain: string },
@@ -527,22 +530,36 @@ function DomainSearchGate({
 
   const workOrderReady =
     workOrderStatus === 'ready_to_publish' || workOrderStatus === 'live';
-  const maintenanceActive =
+  const maintenanceSelected =
     maintenancePlanSelected === 'basic' || maintenancePlanSelected === 'advanced';
 
   if (!workOrderReady) return null;
 
-  if (!maintenanceActive) {
+  if (!maintenanceSelected) {
     return (
       <section className="lmw-account-domains" aria-label="Dominio propio comprado">
         <header>
-          <small>DOMINIO PROPIO · REQUIERE MANTENIMIENTO</small>
-          <strong>Elige un plan de mantenimiento para comprar tu dominio</strong>
+          <small>DOMINIO PROPIO · INCLUIDO CON MANTENIMIENTO</small>
+          <strong>Con mantenimiento, LMWares compra y gestiona un dominio por ti</strong>
           <p>
-            Buscar y comprar un dominio propio (por ejemplo, tuempresa.com) está incluido en el
-            costo del mantenimiento (básico o avanzado), sin cargo adicional aparte. Si aún no
-            tienes mantenimiento activo, puedes seguir usando tu subdominio LMWares o conectar un
-            dominio que ya poseas arriba.
+            Básico y Avanzado incluyen un dominio. Sin mantenimiento no se incluye: cómpralo con
+            tu proveedor y usa el formulario de arriba para que montemos el sitio en él.
+          </p>
+        </header>
+      </section>
+    );
+  }
+
+  if (maintenanceSubscription?.status !== 'active') {
+    return (
+      <section className="lmw-account-domains" aria-label="Dominio incluido pendiente de autorización">
+        <header>
+          <small>DOMINIO PROPIO · INCLUIDO EN TU MANTENIMIENTO</small>
+          <strong>Autoriza tu mensualidad para elegir el dominio incluido</strong>
+          <p>
+            El dominio se registra sin un cobro adicional cuando Mercado Pago confirme tu
+            mantenimiento Básico o Avanzado. Mientras tanto, también puedes conectar un dominio
+            que ya compraste en el formulario de arriba.
           </p>
         </header>
       </section>
@@ -654,7 +671,7 @@ function DomainSearchPanel({
     return (
       <section className="lmw-account-domains" aria-label="Dominio propio comprado">
         <header>
-          <small>DOMINIO PROPIO · COMPRA CONFIRMADA</small>
+          <small>DOMINIO PROPIO · DOMINIO INCLUIDO</small>
           <strong>{purchased.domain.hostname}</strong>
           <p>
             Estamos configurando el DNS y esperando la verificación de Cloudflare
@@ -669,12 +686,12 @@ function DomainSearchPanel({
   return (
     <section className="lmw-account-domains" aria-label="Buscar y comprar dominio propio">
       <header>
-        <small>DOMINIO PROPIO · INCLUIDO EN TU MANTENIMIENTO</small>
+          <small>DOMINIO PROPIO · INCLUIDO EN TU MANTENIMIENTO</small>
         <strong>¿Aún no tienes un dominio? Búscalo aquí</strong>
         <p>
           Escribe sólo el nombre, sin "www." ni extensión (ej. "tuempresa", no "www.tuempresa.com")
           y buscaremos disponibilidad en .com, .mx, .com.mx y .net. Si pegas la versión completa te
-          la ajustamos automáticamente. Configuraremos todo al comprarlo: DNS, verificación y
+          la ajustamos automáticamente. Elige una opción disponible y configuraremos DNS, verificación y
           activación.
         </p>
       </header>
@@ -710,14 +727,14 @@ function DomainSearchPanel({
                 {result.available ? (
                   <>
                     <span>
-                      {result.priceCents !== null ? formatMoney(result.priceCents, 'USD') : ''}
+                      Incluido
                     </span>
                     <button
                       disabled={purchasingDomain !== null}
                       onClick={() => openConfirm(result)}
                       type="button"
                     >
-                      Comprar y conectar
+                      Elegir y conectar
                     </button>
                   </>
                 ) : (
@@ -732,12 +749,10 @@ function DomainSearchPanel({
       {confirmTarget ? (
         <div className="lmw-account-domains__confirm-overlay" role="dialog" aria-modal="true">
           <div className="lmw-account-domains__confirm">
-            <strong>Confirma la compra de {confirmTarget.domain}</strong>
+            <strong>Confirma el dominio incluido: {confirmTarget.domain}</strong>
             <p>
-              {confirmTarget.priceCents !== null
-                ? `Costo: ${formatMoney(confirmTarget.priceCents, 'USD')}. `
-                : ''}
-              Una vez registrado, <strong>este dominio no podrá cambiarse tú mismo</strong>. Si
+              No tiene un cobro adicional: está incluido en tu mantenimiento. Una vez registrado,
+              <strong> este dominio no podrá cambiarse tú mismo</strong>. Si
               después necesitas otro dominio, deberás contactar a soporte y solicitar el cambio,
               con un costo extra que se añadirá a tu mensualidad.
             </p>
@@ -764,8 +779,8 @@ function DomainSearchPanel({
                 type="button"
               >
                 {purchasingDomain === confirmTarget.domain
-                  ? 'Comprando…'
-                  : 'Confirmar y comprar'}
+                  ? 'Configurando…'
+                  : 'Confirmar dominio'}
               </button>
             </div>
           </div>
@@ -1077,10 +1092,12 @@ function SitesPanel({
                               domains={intake.clientProject.customDomains}
                               onCreate={onCreateStarterDomain}
                               onRemove={onRemoveStarterDomain}
+                              workOrderStatus={intake.workOrder?.status ?? null}
                             />
                             <DomainSearchGate
                               clientProject={intake.clientProject}
                               maintenancePlanSelected={intake.currentOffer?.maintenancePlanSelected ?? null}
+                              maintenanceSubscription={intake.maintenanceSubscription}
                               onPurchase={onPurchaseStarterDomain}
                               onSearch={onSearchStarterDomains}
                               workOrderStatus={intake.workOrder?.status ?? null}

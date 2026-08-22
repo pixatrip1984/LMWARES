@@ -17,8 +17,12 @@ export interface Bindings {
   ACCESS_AUD: string;
   /** "1" para auto-crear admins (rol viewer) en el primer login. */
   AUTO_PROVISION_ADMINS: string;
+  /** Lista explícita de correos Access autorizados a sincronizar, separados por coma. */
+  ADMIN_EMAIL_ALLOWLIST?: string;
   /** "1" para saltar Access en local. */
   ACCESS_DISABLED: string;
+  /** Solo desarrollo local: habilita fixtures de pago sin tocar Mercado Pago. */
+  TEST_FIXTURES_ENABLED?: string;
   /** Token secreto para la API de Custom Hostnames de Cloudflare for SaaS. */
   CLOUDFLARE_SAAS_API_TOKEN?: string;
   /** Zone ID de lmwares.com para Custom Hostnames. */

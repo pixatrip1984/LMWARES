@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import {
+import ts from 'typescript';
+
+const source = readFileSync(new URL('./maintenance-ui.ts', import.meta.url), 'utf8');
+const compiled = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const {
   maintenanceActionLabel,
   maintenancePresentation,
+  maintenanceTierLabel,
   reconciliationMessage,
-} from './maintenance-ui.ts';
+} = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 
 test('active maintenance never claims that publication already happened', () => {
   const presentation = maintenancePresentation('active');
@@ -36,4 +44,10 @@ test('none maintenance is presented as a one-time delivery', () => {
   assert.equal(presentation.heading, 'Sin mantenimiento mensual');
   assert.match(presentation.description, /pago único/);
   assert.match(presentation.projectMessage, /publicación/);
+});
+
+test('maintenance tiers explain the domain entitlement precisely', () => {
+  assert.match(maintenanceTierLabel('none').description, /Tú compras tu propio dominio/);
+  assert.match(maintenanceTierLabel('basic').description, /Incluye dominio.*mensuales/);
+  assert.match(maintenanceTierLabel('advanced').description, /Incluye dominio.*semanales/);
 });

@@ -44,6 +44,7 @@ import {
   formatFileSize,
   formatMxPrice,
   getMaintenancePlanOptions,
+  getModuleSelectionError,
   getPackageLabel,
   getPlanSeed,
   isPackageBriefComplete,
@@ -238,6 +239,13 @@ export function PackageBuilderPage() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [discountCode, setDiscountCode] = useState('');
+  const [discountState, setDiscountState] = useState<
+    | { status: 'idle' }
+    | { status: 'checking' }
+    | { status: 'applied'; percent: number; discountedCents: number }
+    | { status: 'error'; message: string }
+  >({ status: 'idle' });
   const [freeFiles, setFreeFiles] = useState<FreeImageFile[]>([]);
   const [freeSubmit, setFreeSubmit] = useState<FreeSubmitState>({ status: 'idle' });
   const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
@@ -481,6 +489,36 @@ export function PackageBuilderPage() {
     setNotice(message);
     if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = window.setTimeout(() => setNotice(''), 3200);
+  };
+
+  const applyDiscountCode = async () => {
+    const code = discountCode.trim();
+    if (!code) {
+      setDiscountState({ status: 'idle' });
+      return;
+    }
+    if (draft.plan === 'free') {
+      setDiscountState({ status: 'error', message: 'Los descuentos aplican solo a Starter y Pro.' });
+      return;
+    }
+    setDiscountState({ status: 'checking' });
+    try {
+      const { application } = await api.previewDiscountCode({
+        code,
+        plan: draft.plan as 'starter' | 'pro',
+        originalCents: Math.round(priceEstimate.implementation * 100),
+      });
+      setDiscountState({
+        status: 'applied',
+        percent: application.discountPercent,
+        discountedCents: application.discountedCents,
+      });
+    } catch (error) {
+      setDiscountState({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Código inválido.',
+      });
+    }
   };
 
   const updateDraft = (changes: Partial<PackageDraft>) => {
@@ -749,8 +787,31 @@ export function PackageBuilderPage() {
     return nextKey;
   };
 
+  const openPreview = () => {
+    const selectionError = getModuleSelectionError(draft.plan, draft.modules);
+    if (selectionError?.kind === 'starter-needs-complement') {
+      setFileError('Selecciona al menos un complemento para ver el ejemplo.');
+      return;
+    }
+    if (selectionError?.kind === 'pro-needs-three') {
+      setFileError('Pro requiere al menos tres complementos. Para dos módulos, elige la opción Starter.');
+      return;
+    }
+    setFileError('');
+    setPreviewOpen(true);
+  };
+
   const submitDraft = async () => {
     if (draft.plan !== 'free') {
+      const selectionError = getModuleSelectionError(draft.plan, draft.modules);
+      if (selectionError?.kind === 'starter-needs-complement') {
+        setFileError('Selecciona al menos un complemento antes de enviar.');
+        return;
+      }
+      if (selectionError?.kind === 'pro-needs-three') {
+        setFileError('Pro requiere al menos tres complementos. Para dos módulos, elige la opción Starter.');
+        return;
+      }
       if (!isPackageBriefComplete(draft.brief)) {
         setFileError('Completa contacto, teléfono, negocio, resumen y objetivo del sitio antes de enviar.');
         return;
@@ -760,12 +821,15 @@ export function PackageBuilderPage() {
       try {
         let submissionKey = commercialSubmissionKey;
         let result;
+        const discountCodeToSend =
+          discountState.status === 'applied' ? discountCode.trim() : null;
         try {
           result = await api.createCommercialPackageIntake({
             plan: draft.plan,
             modules: draft.modules,
             marketing: false,
             brief: normalizeBriefForSubmit(draft.brief),
+            discountCode: discountCodeToSend,
           }, submissionKey);
         } catch (error) {
           // Closed/idempotent keys must not fake a successful new review request.
@@ -780,6 +844,7 @@ export function PackageBuilderPage() {
               modules: draft.modules,
               marketing: false,
               brief: normalizeBriefForSubmit(draft.brief),
+              discountCode: discountCodeToSend,
             }, submissionKey);
           } else {
             throw error;
@@ -800,11 +865,7 @@ export function PackageBuilderPage() {
 
         setSubmitted(true);
         void loadAccount();
-        flashNotice(
-          result.intake.status === 'submitted'
-            ? `Solicitud ${result.intake.id.slice(0, 8)} enviada. Aparece en Paquetes del panel Oracle.`
-            : `Solicitud ${result.intake.id.slice(0, 8)} ya estaba en revisión (${result.intake.status}).`,
-        );
+        openAccount('notifications');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud.';
         setFileError(message);
@@ -954,7 +1015,8 @@ export function PackageBuilderPage() {
         publicUrl: submittedFree.publicUrl,
         message: `Solicitud enviada. Quedó en cola para ${submittedFree.slug}.lmwares.com.`,
       });
-      flashNotice(`Solicitud Free enviada: ${submittedFree.slug}.lmwares.com`);
+      void loadAccount();
+      openAccount('notifications');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud Free.';
       setTurnstileToken(null);
@@ -1533,14 +1595,54 @@ export function PackageBuilderPage() {
 
             <div className="lmw-price-card" aria-label="Estimación de precio">
               <span>Implementación inicial</span>
-              <strong>{formatMxPrice(priceEstimate.implementation)}</strong>
+              <strong>
+                {discountState.status === 'applied'
+                  ? formatMxPrice(discountState.discountedCents / 100)
+                  : formatMxPrice(priceEstimate.implementation)}
+              </strong>
               <small>{priceEstimate.implementationLabel}</small>
               {draft.plan !== 'free' ? (
-                <ul>
-                  <li>Mantenimiento opcional desde {formatMxPrice(priceEstimate.maintenanceFrom)}/mes</li>
-                  <li>Operación con agente desde {formatMxPrice(priceEstimate.operationalMaintenanceFrom)}/mes</li>
-                  <li>Seguridad avanzada desde {formatMxPrice(priceEstimate.securityAddOnFrom)}/mes</li>
-                </ul>
+                <>
+                  <ul>
+                    <li>Mantenimiento opcional desde {formatMxPrice(priceEstimate.maintenanceFrom)}/mes</li>
+                    <li>Operación con agente desde {formatMxPrice(priceEstimate.operationalMaintenanceFrom)}/mes</li>
+                    <li>Seguridad avanzada desde {formatMxPrice(priceEstimate.securityAddOnFrom)}/mes</li>
+                  </ul>
+                  <div className="lmw-discount-box">
+                    <label htmlFor="lmw-discount-code">¿Tienes un código de descuento?</label>
+                    <div className="lmw-discount-row">
+                      <input
+                        id="lmw-discount-code"
+                        onChange={(event) => setDiscountCode(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void applyDiscountCode();
+                          }
+                        }}
+                        placeholder="PROMO15"
+                        type="text"
+                        value={discountCode}
+                      />
+                      <button
+                        disabled={discountState.status === 'checking'}
+                        onClick={() => void applyDiscountCode()}
+                        type="button"
+                      >
+                        {discountState.status === 'checking' ? '…' : 'Aplicar'}
+                      </button>
+                    </div>
+                    {discountState.status === 'applied' ? (
+                      <p className="lmw-discount-ok">
+                        −{discountState.percent}% aplicado. Ahorras{' '}
+                        {formatMxPrice((priceEstimate.implementation * 100 - discountState.discountedCents) / 100)}.
+                      </p>
+                    ) : null}
+                    {discountState.status === 'error' ? (
+                      <p className="lmw-discount-error">{discountState.message}</p>
+                    ) : null}
+                  </div>
+                </>
               ) : (
                 <p>Sin pago inicial mientras el flujo permanezca automatizado y en cola.</p>
               )}
@@ -1557,6 +1659,10 @@ export function PackageBuilderPage() {
               </div>
             ) : null}
 
+            {draft.plan !== 'free' && fileError ? (
+              <p className="lmw-summary-error" role="alert">{fileError}</p>
+            ) : null}
+
             {draft.plan === 'free' && freeSubmit.publicUrl ? (
               <button
                 className="lmw-builder-primary"
@@ -1566,7 +1672,7 @@ export function PackageBuilderPage() {
                 Ver sitio publicado <span>↗</span>
               </button>
             ) : (
-              <button className="lmw-builder-primary" onClick={() => setPreviewOpen(true)} type="button">
+              <button className="lmw-builder-primary" onClick={openPreview} type="button">
                 Ver ejemplo <span>↗</span>
               </button>
             )}
@@ -1668,8 +1774,8 @@ export function PackageBuilderPage() {
                     <span>
                       Dominio personalizado deseado (opcional)
                       <InfoTip title="¿Cómo funciona el dominio propio?">
-                        <p>El dominio es propiedad tuya: se compra y configura a través de un proveedor de reventa de dominios, no de LMWares. Quedará registrado a tu nombre.</p>
-                        <p>LMWares solo configura el DNS/hosting sobre el dominio que ya adquiriste, para publicar ahí tu sitio en la etapa final (indexación en Google Search Console).</p>
+                        <p>Con Mantenimiento Básico o Avanzado, LMWares incluye un dominio y configura DNS, hosting y publicación.</p>
+                        <p>Sin mantenimiento, tú compras el dominio con el proveedor que prefieras y LMWares monta el sitio en él durante la entrega final.</p>
                       </InfoTip>
                     </span>
                     <input

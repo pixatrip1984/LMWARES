@@ -19,6 +19,7 @@ export * from './models/payment-policy';
 export * from './models/package-intake';
 export * from './models/package-pricing';
 export * from './models/commercial-offer';
+export * from './models/discount-code';
 export * from './models/billing-order';
 export * from './models/starter-work-order';
 export * from './models/starter-client-project';

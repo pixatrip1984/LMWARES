@@ -10,11 +10,9 @@ const source = readFileSync(
   /import \{[\s\S]*?\} from '@starter\/domain';/,
   `const COMMERCIAL_PACKAGE_PRICING_CENTS = {
     implementation: {
-      starterOneComplement: 790000,
-      starterTwoComplements: 1090000,
-      proBase: 1490000,
-      proWithCartOrOptimization: 1990000,
-      proFull: 2490000,
+      baseOneComplement: 600000,
+      perAdditionalComplement: 50000,
+      perPremiumModule: 100000,
     },
     monthly: {
       maintenanceFrom: 90000,
@@ -24,7 +22,7 @@ const source = readFileSync(
     },
   };
   const estimateCommercialPackage = () => ({
-    implementationAmountCents: 1490000,
+    implementationAmountCents: 600000,
     implementationLabel: 'Pro base',
     maintenanceAmountCents: 90000,
     operationalMaintenanceAmountCents: 290000,
@@ -42,7 +40,7 @@ const { getPackageLabel, getPlanSeed, togglePackageModule } = await import(
 );
 
 test('Pro starts as a sellable base without upcoming integrations', () => {
-  assert.deepEqual(getPlanSeed('pro'), ['landing', 'panel', 'catalog']);
+  assert.deepEqual(getPlanSeed('pro'), ['landing', 'panel', 'catalog', 'quote', 'blog']);
   assert.equal(getPackageLabel('pro', getPlanSeed('pro')), 'Pro base · módulos disponibles');
 });
 

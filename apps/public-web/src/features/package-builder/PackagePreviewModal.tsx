@@ -341,7 +341,7 @@ function FreeExamplePreview() {
       <img
         alt="Demostración de una página informativa Free para un médico"
         className="lmw-free-example__poster"
-        src="/assets/free-poster-tests/dr-mateo-rios-poster-test.png"
+        src="/assets/free-poster-tests/dr-mateo-rios-poster-test.webp"
       />
     </div>
   );

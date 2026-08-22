@@ -105,11 +105,11 @@ export function splitImplementationIntoPhases(totalCents: number): Implementatio
 
 export const COMMERCIAL_PACKAGE_PRICING_CENTS = {
   implementation: {
-    starterOneComplement: 790_000,
-    starterTwoComplements: 1_090_000,
-    proBase: 1_490_000,
-    proWithCartOrOptimization: 1_990_000,
-    proFull: 2_490_000,
+    // Base con un complemento. Cada complemento adicional suma un monto fijo;
+    // los módulos premium (cart/data) suman el doble cuando se desbloqueen.
+    baseOneComplement: 600_000,
+    perAdditionalComplement: 50_000,
+    perPremiumModule: 100_000,
   },
   monthly: {
     // Mantenimiento base: cambios ligeros y actualizaciones mensuales.
@@ -176,8 +176,21 @@ export function normalizePaidPackageModules(
     if (modules.includes('cart') || modules.includes('data')) {
       throw new AppError('validation_error', 'Carrito y Optimization requieren el plan Pro.');
     }
-    if (paidComplements(modules).length > 2) {
+    const complementCount = paidComplements(modules).length;
+    if (complementCount < 1) {
+      throw new AppError('validation_error', 'Selecciona al menos un complemento para Starter.');
+    }
+    if (complementCount > 2) {
       throw new AppError('validation_error', 'Starter permite hasta dos complementos.');
+    }
+  }
+  if (plan === 'pro') {
+    const complementCount = paidComplements(modules).length;
+    if (complementCount < 3) {
+      throw new AppError(
+        'validation_error',
+        'Pro requiere al menos tres complementos. Para dos módulos, elige la opción Starter.',
+      );
     }
   }
   return modules;
@@ -191,31 +204,28 @@ export function estimateCommercialPackage(input: {
   const modules = normalizePaidPackageModules(input.plan, input.modules);
   normalizeCommercialMarketing(input.marketing);
   const complements = paidComplements(modules);
-  const hasCart = modules.includes('cart');
-  const hasOptimization = modules.includes('data');
+  const premiumCount = complements.filter((module) => module === 'cart' || module === 'data').length;
+  const standardCount = complements.length - premiumCount;
+  // Base con un complemento; cada complemento adicional suma un monto fijo y
+  // cada módulo premium suma el doble. Starter y Pro comparten la misma base:
+  // la diferencia entre planes es el límite de complementos, no el precio.
   const implementationAmountCents =
-    input.plan === 'starter'
-      ? complements.length >= 2
-        ? COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.starterTwoComplements
-        : COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.starterOneComplement
-      : hasCart && hasOptimization
-        ? COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proFull
-        : hasCart || hasOptimization
-          ? COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proWithCartOrOptimization
-          : COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.proBase;
+    COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.baseOneComplement
+    + Math.max(0, standardCount - 1) * COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.perAdditionalComplement
+    + premiumCount * COMMERCIAL_PACKAGE_PRICING_CENTS.implementation.perPremiumModule;
   const implementationLabel =
     input.plan === 'starter'
       ? complements.length >= 2
-        ? 'Starter · 2 complementos'
+        ? `Starter · ${complements.length} complementos`
         : complements.length === 1
           ? 'Starter · 1 complemento'
           : 'Starter · base mínima'
-      : hasCart && hasOptimization
-        ? 'Pro · comercio + optimización'
-        : hasCart
-          ? 'Pro · comercio'
-          : hasOptimization
-            ? 'Pro · optimización'
+      : complements.length >= 3
+        ? `Pro · ${complements.length} complementos`
+        : complements.length === 2
+          ? 'Pro · 2 complementos'
+          : complements.length === 1
+            ? 'Pro · 1 complemento'
             : 'Pro base';
   const astramusesAmountCents = 0;
   const maintenanceAmountCents = COMMERCIAL_PACKAGE_PRICING_CENTS.monthly.maintenanceFrom;

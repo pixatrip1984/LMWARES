@@ -287,6 +287,53 @@ commercialIntakesAdmin.post('/:id/implementation-payment/reopen', requireWrite, 
   return c.json({ intake, offers, billingOrder: result.order, billingOrders });
 });
 
+/**
+ * Fixture local para recorrer el flujo posterior al pago sin abrir Checkout ni
+ * generar una transacción con Mercado Pago. El binding lo mantiene apagado en
+ * producción y cada fase conserva una referencia explícita de prueba.
+ */
+commercialIntakesAdmin.post('/:id/implementation-payments/mark-test-paid', requireWrite, async (c) => {
+  if (c.env.TEST_FIXTURES_ENABLED !== '1') {
+    throw new AppError('forbidden', 'Los fixtures de pago están deshabilitados en este entorno.');
+  }
+  const repos = createRepositories(c.env.DB);
+  const intakeId = c.req.param('id')!;
+  const offers = await repos.lmwaresCommercialOffers.listForIntake(intakeId);
+  const acceptedOffer = offers.find((offer) => offer.status === 'accepted');
+  if (!acceptedOffer) {
+    throw new AppError('conflict', 'Primero crea y acepta una oferta para preparar sus cuatro fases.');
+  }
+  const phases = await repos.lmwaresBillingOrders.getPhasesForOffer(acceptedOffer.id);
+  if (phases.length !== 4 || phases.some((order, index) => order.phase !== index + 1)) {
+    throw new AppError('conflict', 'La oferta no tiene las cuatro fases de implementación preparadas.');
+  }
+  for (const order of phases) {
+    if (order.status === 'paid') continue;
+    await repos.lmwaresBillingOrders.reconcilePayment({
+      id: order.id,
+      paymentId: `test-fixture-${order.id}`,
+      providerStatus: 'approved',
+      amountCents: order.amountCents,
+      currency: order.currency,
+      providerCreatedAt: new Date().toISOString(),
+    });
+  }
+  const billingOrders = await repos.lmwaresBillingOrders.getPhasesForOffer(acceptedOffer.id);
+  const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(intakeId);
+  const clientProject = workOrder
+    ? await repos.lmwaresStarterClientProjects.getByWorkOrderId(workOrder.id)
+    : null;
+  await repos.audit.record({
+    actorType: 'admin',
+    actorId: c.get('admin').email,
+    action: 'lmwares.billing_order.test_fixture_all_phases_paid',
+    entityType: 'lmwares_commercial_offer',
+    entityId: acceptedOffer.id,
+    metadata: { intakeId, phaseOrderIds: billingOrders.map((order) => order.id), environment: 'local' },
+  });
+  return c.json({ billingOrders, workOrder, clientProject });
+});
+
 async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<unknown> {
   try {
     return await c.req.json();

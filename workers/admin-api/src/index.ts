@@ -15,6 +15,7 @@ import { siteDocsAdmin } from './routes/site-docs';
 import { siteForms } from './routes/site-forms';
 import { siteEvents } from './routes/site-events';
 import { commercialIntakesAdmin } from './routes/commercial-intakes';
+import { discountCodesAdmin } from './routes/discount-codes';
 import { stuckPayments } from './routes/stuck-payments';
 import { starterDomainsAdmin } from './routes/starter-domains';
 
@@ -56,6 +57,7 @@ app.route('/admin/publications', publications);
 app.route('/admin/requests', requests);
 app.route('/admin/audit', audit);
 app.route('/admin/commercial-intakes', commercialIntakesAdmin);
+app.route('/admin/discount-codes', discountCodesAdmin);
 app.route('/admin/stuck-payments', stuckPayments);
 app.route('/admin/starter-domains', starterDomainsAdmin);
 app.route('/admin/projects/:projectId/modules/blog', siteBlogAdmin);

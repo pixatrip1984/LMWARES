@@ -31,7 +31,7 @@ viven en `.dev.vars` (local) y en `wrangler secret put` (remoto).
 | `MERCADO_PAGO_WEBHOOK_TEST_SECRET`               | **secreto de prueba**  | `.dev.vars` / `wrangler secret`         | Firma HMAC de prueba de Checkout Pro.                                                                       |
 | `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_SECRET`      | **secreto**            | `.dev.vars` / `wrangler secret`         | Firma HMAC productiva de la aplicación Suscripciones.                                                       |
 | `MERCADO_PAGO_SUBSCRIPTIONS_WEBHOOK_TEST_SECRET` | **secreto de prueba**  | `.dev.vars` / `wrangler secret`         | Firma HMAC de prueba de la aplicación Suscripciones.                                                        |
-| `MERCADO_PAGO_TEST_MODE`                         | var temporal           | `.dev.vars` / ambiente remoto de prueba | `1` habilita el checkout y la suscripción técnica de Mercado Pago. Debe ser `0` para cobros reales.         |
+| `MERCADO_PAGO_TEST_MODE`                         | var temporal           | `.dev.vars` / ambiente remoto de prueba | `1` habilita el checkout y la suscripción técnica de Mercado Pago. En producción permanece `0`.             |
 | `MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED`        | var temporal           | `.dev.vars` / ambiente remoto de prueba | `1` permite crear nuevos checkouts técnicos. En producción debe permanecer `0` salvo una prueba controlada. |
 | `PUBLIC_WEB_URL`                                 | var                    | wrangler.toml                           | Origen canónico del frontend.                                                                               |
 | `PUBLIC_API_URL`                                 | var                    | wrangler.toml                           | Origen canónico del Public API y callback OAuth.                                                            |
@@ -80,8 +80,9 @@ requieren HMAC válida. Ambas aplicaciones conservan como callback
 | `PROJECT_SLUG`                 | var      | wrangler.toml | Slug del proyecto.                                                 |
 | `ACCESS_TEAM_DOMAIN`           | var      | wrangler.toml | `https://<tuorg>.cloudflareaccess.com`.                            |
 | `ACCESS_AUD`                   | var      | wrangler.toml | AUD tag de la aplicación de Access.                                |
-| `AUTO_PROVISION_ADMINS`        | var      | wrangler.toml | `1` = crear AdminUser (viewer) al primer login.                    |
-| `ACCESS_DISABLED`              | var      | wrangler.toml | `1` en local para saltar Access (usa `X-Dev-Email`).               |
+| `AUTO_PROVISION_ADMINS`        | var      | `.dev.vars`   | Sólo local: `1` crea AdminUser (viewer) al primer login.           |
+| `ACCESS_DISABLED`              | var      | `.dev.vars`   | Sólo local: `1` salta Access (usa `X-Dev-Email`).                  |
+| `ADMIN_EMAIL_ALLOWLIST`        | secreto/var | producción | Correos Access explícitamente autorizados; debe coincidir con la política Access. |
 | `CLOUDFLARE_ZONE_ID`           | var      | wrangler.toml | Zona de `lmwares.com` para Custom Hostnames, sólo al activar SaaS. |
 | `CLOUDFLARE_SAAS_CNAME_TARGET` | var      | wrangler.toml | CNAME SaaS proxied al fallback origin.                             |
 | `OPS_RECOVERY_TOKEN`           | **secreto** | `wrangler secret` | Idéntico al del Public API; habilita "Reconciliar ahora" en el dashboard. |

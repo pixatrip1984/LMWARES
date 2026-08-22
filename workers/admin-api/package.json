@@ -8,6 +8,7 @@
     "deploy": "wrangler deploy",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "test": "node --test src/routes/*.test.mjs",
     "cf-typegen": "wrangler types",
     "lint": "echo \"(admin-api) no lint configured\""
   },

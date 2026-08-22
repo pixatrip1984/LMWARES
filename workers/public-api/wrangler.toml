@@ -1,6 +1,7 @@
 name = "starter-public-api"
 main = "src/index.ts"
 compatibility_date = "2026-06-28"
+workers_dev = false
 
 # Config NO sensible. Los secretos van en .dev.vars (local) o `wrangler secret put`.
 [vars]
@@ -47,7 +48,7 @@ routes = [
 ]
 
 [env.production.vars]
-ALLOWED_ORIGINS = "https://lmwares.com,https://www.lmwares.com,https://contratar.lmwares.com,https://lmwares-public.pages.dev"
+ALLOWED_ORIGINS = "https://lmwares.com,https://www.lmwares.com,https://contratar.lmwares.com"
 DOMAIN_PROVIDER = "cloudflare-saas"
 DOMAIN_REGISTRAR_PROVIDER = "porkbun"
 CLOUDFLARE_ZONE_ID = "fa8b7b1e5c20243be0e49ec794167eca"
@@ -64,7 +65,7 @@ EMAIL_REPLY_TO = "soporte@lmwares.com"
 TURNSTILE_DISABLED = "0"
 # Puerta temporal para validar credenciales y pagos TEST. Debe eliminarse o
 # cambiarse a "0" antes de aceptar cobros reales.
-MERCADO_PAGO_TEST_MODE = "1"
+MERCADO_PAGO_TEST_MODE = "0"
 # Conserva la verificación/reconciliación del ensayo existente, pero impide
 # crear nuevos cobros técnicos desde el API público.
 MERCADO_PAGO_TECHNICAL_CHECKOUT_ENABLED = "0"

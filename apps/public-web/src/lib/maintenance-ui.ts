@@ -57,15 +57,15 @@ export function maintenanceTierLabel(plan: 'none' | 'basic' | 'advanced'): {
     none: {
       name: 'Sin mantenimiento',
       description:
-        'Conservas la versión entregada como definitiva; el siguiente paso es indexarla en tu dominio.',
+        'Tú compras tu propio dominio; nosotros montamos tu sitio en él como parte de la entrega.',
     },
     basic: {
       name: 'Mantenimiento básico',
-      description: 'Cambios ligeros y actualizaciones mensuales.',
+      description: 'Incluye dominio y cambios ligeros mensuales.',
     },
     advanced: {
       name: 'Mantenimiento avanzado',
-      description: 'Cambios semanales y mayor flexibilidad.',
+      description: 'Incluye dominio y cambios ligeros semanales.',
     },
   };
   return labels[plan];

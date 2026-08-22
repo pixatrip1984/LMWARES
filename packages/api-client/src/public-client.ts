@@ -1,5 +1,6 @@
 import type {
   DomainProviderDnsInstruction,
+  DiscountApplication,
   Paginated,
   PublicAuthSession,
   Publication,
@@ -9,6 +10,7 @@ import type {
   CreateFreeIntakeInput,
   CreatePackageIntakeInput,
   CreateRequestInput,
+  PreviewDiscountCodeInput,
   SubmitFreeIntakeInput,
 } from '@starter/validation';
 import type { CreateTestPackageProposalInput } from '@starter/validation';
@@ -478,6 +480,13 @@ export function createPublicClient(baseUrl: string) {
       return http.post<{ intake: PublicPackageIntake }>('/commercial-intakes', input, {
         headers: { 'Idempotency-Key': submissionKey },
       });
+    },
+
+    previewDiscountCode(input: PreviewDiscountCodeInput) {
+      return http.post<{ application: DiscountApplication }>(
+        '/commercial-intakes/discount-preview',
+        input,
+      );
     },
 
     listCommercialPackageIntakes() {

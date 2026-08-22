@@ -3,6 +3,7 @@ import type {
   ClientCustomDomain,
   CommercialOffer,
   BillingOrder,
+  DiscountCode,
   MaintenanceSubscription,
   Paginated,
   Publication,
@@ -30,6 +31,8 @@ import type {
   CreateLmwaresApprovalInput,
   CreateLmwaresValidationInput,
   SyncLmwaresProjectsInput,
+  CreateDiscountCodeInput,
+  UpdateDiscountCodeStatusInput,
 } from '@starter/validation';
 import { createHttpClient } from './http';
 
@@ -197,6 +200,16 @@ export function createAdminClient(baseUrl: string) {
         {},
       );
     },
+    markImplementationPhasesTestPaid(id: string) {
+      return http.post<{
+        billingOrders: BillingOrder[];
+        workOrder: StarterWorkOrder | null;
+        clientProject: StarterClientProject | null;
+      }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/implementation-payments/mark-test-paid`,
+        {},
+      );
+    },
     reviewCommercialPackageIntake(
       id: string,
       input: { status: 'scope_review' | 'declined'; notes?: string | null },
@@ -302,6 +315,23 @@ export function createAdminClient(baseUrl: string) {
       return http.del<{ domain: ClientCustomDomain }>(
         `/admin/starter-domains/${encodeURIComponent(domainId)}`,
       );
+    },
+
+    // ── Códigos de descuento ─────────────────────────────────
+    listDiscountCodes() {
+      return http.get<{ codes: DiscountCode[] }>('/admin/discount-codes');
+    },
+    createDiscountCode(input: CreateDiscountCodeInput) {
+      return http.post<{ code: DiscountCode }>('/admin/discount-codes', input);
+    },
+    updateDiscountCodeStatus(id: string, input: UpdateDiscountCodeStatusInput) {
+      return http.patch<{ code: DiscountCode }>(
+        `/admin/discount-codes/${encodeURIComponent(id)}/status`,
+        input,
+      );
+    },
+    deleteDiscountCode(id: string) {
+      return http.del<void>(`/admin/discount-codes/${encodeURIComponent(id)}`);
     },
   };
 }

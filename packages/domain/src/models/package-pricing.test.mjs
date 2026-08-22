@@ -33,9 +33,9 @@ test('prices Starter estimates on the server contract', () => {
     marketing: false,
   });
 
-  assert.equal(one.implementationAmountCents, 790_000);
+  assert.equal(one.implementationAmountCents, 600_000);
   assert.equal(one.estimatedMonthlyAmountCents, 29_900);
-  assert.equal(two.implementationAmountCents, 1_090_000);
+  assert.equal(two.implementationAmountCents, 650_000);
   assert.equal(two.estimatedMonthlyAmountCents, 29_900);
   assert.throws(() => estimateCommercialPackage({
     plan: 'starter',
@@ -48,11 +48,28 @@ test('prices Pro base without trusting a browser amount', () => {
   assert.equal(
     estimateCommercialPackage({
       plan: 'pro',
-      modules: ['landing', 'panel', 'catalog'],
+      modules: ['landing', 'panel', 'catalog', 'quote', 'blog'],
       marketing: false,
     }).implementationAmountCents,
-    1_490_000,
+    700_000,
   );
+});
+
+test('prices Pro and Starter share the same base and per-complement increment', () => {
+  const starterTwo = estimateCommercialPackage({
+    plan: 'starter',
+    modules: ['landing', 'panel', 'catalog', 'quote'],
+    marketing: false,
+  });
+  const proThree = estimateCommercialPackage({
+    plan: 'pro',
+    modules: ['landing', 'panel', 'catalog', 'quote', 'blog'],
+    marketing: false,
+  });
+  // Starter con 2 complementos = 6000 + 500 = 6500.
+  // Pro con 3 complementos = 6000 + 500 + 500 = 7000.
+  assert.equal(starterTwo.implementationAmountCents, 650_000);
+  assert.equal(proThree.implementationAmountCents, 700_000);
 });
 
 test('keeps Cart and Optimization visible in the catalog but closed for launch', () => {
@@ -76,6 +93,20 @@ test('rejects package combinations outside the paid contract', () => {
   );
   assert.throws(() => normalizePaidPackageModules('starter', ['landing', 'panel', 'cart']));
   assert.throws(() => normalizePaidPackageModules('pro', ['landing', 'panel', 'data']));
+});
+
+test('requires at least one complement for Starter and three for Pro', () => {
+  assert.throws(
+    () => normalizePaidPackageModules('starter', ['landing', 'panel']),
+    /al menos un complemento/,
+  );
+  assert.throws(
+    () => normalizePaidPackageModules('pro', ['landing', 'panel', 'catalog', 'quote']),
+    /al menos tres complementos/,
+  );
+  assert.doesNotThrow(() =>
+    normalizePaidPackageModules('pro', ['landing', 'panel', 'catalog', 'quote', 'blog']),
+  );
 });
 
 test('splits the implementation total into 4 equal 25% phases', () => {

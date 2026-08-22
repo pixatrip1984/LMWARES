@@ -4,10 +4,12 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('./starter-domains.ts', import.meta.url), 'utf8');
 
-test('domain search and purchase require an active maintenance plan before touching the registrar', () => {
+test('the included domain requires an authorized maintenance plan before touching the registrar', () => {
   assert.match(source, /async function requireActiveMaintenance/);
   assert.match(source, /maintenancePlanSelected \?\? ''/);
   assert.match(source, /\['basic', 'advanced'\]\.includes/);
+  assert.match(source, /lmwaresMaintenanceSubscriptions\.getByWorkOrderId/);
+  assert.match(source, /subscription\?\.status !== 'active'/);
   assert.match(source, /await requireActiveMaintenance\(repos, clientProjectId, session\.user\.id\)/g);
 });
 
@@ -29,11 +31,19 @@ test('purchase is idempotent by client project and by hostname before calling Na
   assert.ok(purchaseCallIndex > 0);
   const beforePurchase = purchaseHandler.slice(0, purchaseCallIndex);
   assert.match(beforePurchase, /existingApex/);
-  assert.match(beforePurchase, /getByHostname\(input\.domain\)/);
+  assert.match(beforePurchase, /getByHostname\(input\.domain!\)/);
+});
+
+test('connecting a domain purchased by the client does not require maintenance', () => {
+  const customDomainStart = source.indexOf("starterDomains.post('/:clientProjectId/domains', async");
+  const removeStart = source.indexOf("starterDomains.delete('/:clientProjectId/domains/:domainId'");
+  assert.ok(customDomainStart >= 0 && removeStart > customDomainStart);
+  const customDomainHandler = source.slice(customDomainStart, removeStart);
+  assert.doesNotMatch(customDomainHandler, /requireActiveMaintenance/);
 });
 
 test('a successful purchase reuses the existing Cloudflare register() flow and records the registrar order id', () => {
-  assert.match(source, /provider\.register\(\{\s*hostname: input\.domain,/);
+  assert.match(source, /provider\.register\(\{\s*hostname: input\.domain!,/);
   assert.match(source, /toRegistrarDnsRecords\(input\.domain, registration\.instructions\)/);
   assert.match(source, /type: 'apex'/);
   assert.match(source, /registrar: registrar\.name,\s*registrarOrderId: purchase\.orderId,/);
