@@ -9,7 +9,7 @@ test('the public sitemap lists only canonical, indexable marketing URLs', async 
 
   assert.match(sitemap, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
   assert.match(sitemap, /<loc>https:\/\/lmwares\.com\/<\/loc>/);
-  assert.match(sitemap, /<loc>https:\/\/lmwares\.com\/contacto<\/loc>/);
+  assert.doesNotMatch(sitemap, /\/contacto/);
   assert.doesNotMatch(sitemap, /contratar\.lmwares\.com/);
   assert.doesNotMatch(sitemap, /\/pago\//);
   assert.doesNotMatch(sitemap, /\/suscripcion\//);
