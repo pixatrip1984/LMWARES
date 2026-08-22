@@ -22,3 +22,9 @@ test('robots advertises the canonical sitemap to crawlers', async () => {
   assert.match(robots, /^Allow: \/$/m);
   assert.match(robots, /^Sitemap: https:\/\/lmwares\.com\/sitemap\.xml$/m);
 });
+
+test('the retired contact route permanently redirects to the canonical home page', async () => {
+  const redirects = await readFile(publicAsset('_redirects'), 'utf8');
+
+  assert.match(redirects, /^\/contacto\s+\/\s+301$/m);
+});
