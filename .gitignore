@@ -26,6 +26,11 @@ deploy/profiles/*.local.json
 npm-debug.log*
 .inspect/
 
+# Retired Namesilo proxy: never reintroduce credentials, tail captures or Lambda bundles.
+infra/namesilo-proxy/.shared-secret.txt
+infra/namesilo-proxy/.tail-output.txt
+infra/namesilo-proxy/*.zip
+
 # Local LMwares scan cache
 .lmwares/cache/
 .lmwares/runs/

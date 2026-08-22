@@ -214,6 +214,31 @@ export class LmwaresBillingOrdersRepository {
     return row ? mapBillingOrder(row) : null;
   }
 
+  /** Creates one immutable MXN $600 domain order per project/hostname. */
+  async ensureDomainOrder(input: { clientProjectId: string; userId: string; hostname: string }): Promise<BillingOrder> {
+    const previousDomain = await this.db
+      .prepare(`SELECT id FROM lmw_custom_domains WHERE client_project_id = ? AND type = 'apex' LIMIT 1`)
+      .bind(input.clientProjectId)
+      .first<{ id: string }>();
+    if (previousDomain) throw new AppError('conflict', 'Este proyecto ya consumió su compra de dominio; retirarlo no restablece la cuota.');
+    const existing = await this.db
+      .prepare(`SELECT * FROM lmw_billing_orders WHERE purpose = 'domain' AND user_id = ? AND json_extract(order_snapshot, '$.clientProjectId') = ? LIMIT 1`)
+      .bind(input.userId, input.clientProjectId)
+      .first<BillingOrderRow>();
+    if (existing) {
+      const snapshot = parseJson<Metadata>(existing.order_snapshot, {});
+      if (snapshot.hostname !== input.hostname) throw new AppError('conflict', 'El checkout de dominio ya congeló otro hostname para este proyecto.');
+      return mapBillingOrder(existing);
+    }
+    const id = newId();
+    const now = nowIso();
+    await this.db.prepare(
+      `INSERT INTO lmw_billing_orders (id, purpose, commercial_offer_id, intake_id, user_id, status, phase, amount_cents, currency, order_snapshot, external_reference, provider, created_at, updated_at)
+       VALUES (?, 'domain', NULL, NULL, ?, 'ready', 1, 60000, 'MXN', ?, ?, 'mercado_pago', ?, ?)`
+    ).bind(id, input.userId, JSON.stringify({ schema: 'lmwares.billing-order.domain.v1', clientProjectId: input.clientProjectId, hostname: input.hostname, years: 1, amountCents: 60000 }), `lmw-domain:${id}`, now, now).run();
+    return (await this.getById(id))!;
+  }
+
   async listForUser(userId: string): Promise<BillingOrder[]> {
     const result = await this.db
       .prepare(`SELECT * FROM lmw_billing_orders WHERE user_id = ? ORDER BY created_at DESC`)

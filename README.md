@@ -13,6 +13,11 @@ negocio local) agregando configuración, campos extra, copy, diseño y reglas.
 > [`docs/LMWARES-FINAL-TRANSITION-HANDOFF-2026-08-05.md`](./docs/LMWARES-FINAL-TRANSITION-HANDOFF-2026-08-05.md).
 > Resume el estado Git real, producción, módulos, pagos, pendientes y el orden
 > seguro de reanudación para un agente nuevo.
+>
+> La visión de la siguiente actualización —red de desarrolladores y
+> negociadores, MCP de Oracle, fases, reputación, custodia operativa y
+> mantenimiento distribuido— está en
+> [`docs/LMWARES-ORACLE-AGENT-ECONOMY-VISION-2026-08-19.md`](./docs/LMWARES-ORACLE-AGENT-ECONOMY-VISION-2026-08-19.md).
 
 ## Stack
 

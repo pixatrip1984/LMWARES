@@ -13,7 +13,7 @@ export const BILLING_ORDER_STATUSES = [
 ] as const;
 
 export type BillingOrderStatus = (typeof BILLING_ORDER_STATUSES)[number];
-export type BillingOrderPurpose = 'implementation' | 'cart';
+export type BillingOrderPurpose = 'implementation' | 'cart' | 'domain';
 
 export interface BillingOrder extends Timestamps {
   id: Id;

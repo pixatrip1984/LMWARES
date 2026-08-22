@@ -19,6 +19,7 @@ import {
   getMercadoPagoPayment,
   getMercadoPagoPreapproval,
   hasMercadoPagoWebhookSignatureFormat,
+  hasFreshMercadoPagoWebhookTimestamp,
   searchMercadoPagoPayments,
   type MercadoPagoAuthorizedPayment,
   type MercadoPagoPreapproval,
@@ -37,7 +38,8 @@ payments.post('/webhooks/mercado-pago', async (c) => {
   const maintenanceScope = c.req.query('scope') === 'maintenance';
   const webhookTopic = c.req.query('type') ?? '';
   const ipnTopic = c.req.query('topic') ?? '';
-  const topic = webhookTopic || ipnTopic;
+  if (ipnTopic) throw new AppError('unauthorized', 'IPN heredado no está permitido.');
+  const topic = webhookTopic;
   const webhookSecrets = mercadoPagoWebhookSecrets(
     c.env,
     commercialScope
@@ -48,11 +50,7 @@ payments.post('/webhooks/mercado-pago', async (c) => {
       ? 'subscriptions'
       : 'checkout',
   );
-  const webhookTestMode = commercialScope
-    ? c.env.MERCADO_PAGO_COMMERCIAL_TEST_MODE === '1'
-    : maintenanceScope
-    ? c.env.MERCADO_PAGO_MAINTENANCE_TEST_MODE === '1'
-    : c.env.MERCADO_PAGO_TEST_MODE === '1';
+  const webhookTestMode = false;
   if (topic === 'subscription_preapproval') {
     return handleSubscriptionPreapprovalWebhook(c, webhookSecrets, maintenanceScope, webhookTestMode);
   }
@@ -64,85 +62,32 @@ payments.post('/webhooks/mercado-pago', async (c) => {
   }
 
   const signedDataId = c.req.query('data.id') ?? '';
-  const legacyPaymentId = c.req.query('id') ?? '';
-  const paymentId = signedDataId || legacyPaymentId;
-  const isLegacyIpn = ipnTopic === 'payment' && Boolean(legacyPaymentId) && !signedDataId;
+  const paymentId = signedDataId;
   const requestId = c.req.header('x-request-id') ?? '';
   const signature = c.req.header('x-signature') ?? '';
   if (!/^\d{1,32}$/.test(paymentId)) {
     throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
   }
-  if (!isLegacyIpn && (!requestId || requestId.length > 200 || !signature)) {
+  if (!requestId || requestId.length > 200 || !signature) {
     throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
   }
 
-  let signatureValidated = false;
-  let providerVerifiedTestWebhook = false;
-  if (!isLegacyIpn) {
-    if (!hasMercadoPagoWebhookSignatureFormat(signature)) {
-      throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
-    }
-    const signatureChecks = await Promise.all(
-      webhookSecrets.map((secret) =>
-        verifyMercadoPagoWebhookSignature({
-          xSignature: signature,
-          xRequestId: requestId,
-          dataId: signedDataId,
-          secret,
-        }),
-      ),
-    );
-    signatureValidated = signatureChecks.some(Boolean);
-    if (!signatureValidated && !webhookTestMode) {
-      throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
-    }
-    if (!signatureValidated) {
-      providerVerifiedTestWebhook = true;
-      console.warn(
-        JSON.stringify({
-          message: 'mercado_pago_test_webhook_provider_verification_required',
-          paymentId,
-          requestId,
-        }),
-      );
-    }
+  if (!hasMercadoPagoWebhookSignatureFormat(signature) || !hasFreshMercadoPagoWebhookTimestamp(signature)) {
+    throw new AppError('unauthorized', 'Firma de Mercado Pago inválida o vencida.');
   }
-
-  // Mercado Pago IPN is a legacy transport. Its x-signature cannot be
-  // validated with the Webhooks secret, so the notification only supplies an
-  // identifier: the payment is always fetched from Mercado Pago and checked
-  // against our proposal before any state is changed.
-  const providerVerifiedPayment =
-    isLegacyIpn || providerVerifiedTestWebhook
-      ? await getMercadoPagoPayment({
-          accessToken: commercialScope
-            ? mercadoPagoCommercialAccessToken(c.env)
-            : maintenanceScope
-            ? mercadoPagoMaintenanceAccessToken(c.env)
-            : c.env.MERCADO_PAGO_ACCESS_TOKEN,
-          paymentId,
-        })
-      : null;
+  const signatureChecks = await Promise.all(
+    webhookSecrets.map((secret) => verifyMercadoPagoWebhookSignature({ xSignature: signature, xRequestId: requestId, dataId: signedDataId, secret })),
+  );
+  if (!signatureChecks.some(Boolean)) throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
+  const signatureValidated = true;
   const maintenanceEventPrefix = maintenanceScope ? 'maintenance:' : '';
-  const providerRequestId = isLegacyIpn
-    ? `${maintenanceEventPrefix}ipn:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
-    : providerVerifiedTestWebhook
-      ? `${maintenanceEventPrefix}test-webhook:payment:${paymentId}:${providerVerifiedPayment?.status ?? 'unknown'}`
-      : `${maintenanceEventPrefix}${requestId}`;
-  const transport = isLegacyIpn
-    ? 'ipn'
-    : providerVerifiedTestWebhook
-      ? 'webhook_test_provider_verified'
-      : 'webhook';
+  const providerRequestId = `${maintenanceEventPrefix}${requestId}`;
+  const transport = 'webhook';
 
   const repos = createRepositories(c.env.DB);
   const eventId = await repos.lmwaresPayments.claimWebhookEvent({
     providerRequestId,
-    topic: isLegacyIpn
-      ? 'payment_ipn'
-      : providerVerifiedTestWebhook
-        ? 'payment_test_provider_verified'
-        : topic,
+    topic,
     resourceId: paymentId,
   });
   if (!eventId) {
@@ -151,15 +96,14 @@ payments.post('/webhooks/mercado-pago', async (c) => {
 
   try {
     const payment =
-      providerVerifiedPayment ??
-      (await getMercadoPagoPayment({
+    await getMercadoPagoPayment({
         accessToken: commercialScope
           ? mercadoPagoCommercialAccessToken(c.env)
           : maintenanceScope
           ? mercadoPagoMaintenanceAccessToken(c.env)
           : c.env.MERCADO_PAGO_ACCESS_TOKEN,
         paymentId,
-      }));
+      });
     if (payment.externalReference.startsWith('lmw-implementation:')) {
       if (!commercialScope) {
         throw new AppError('unauthorized', 'El pago comercial llegó por un canal incorrecto.');
@@ -275,9 +219,7 @@ payments.post('/webhooks/mercado-pago', async (c) => {
       actorId: 'mercado_pago',
       action: reconciliation.duplicatePayment
         ? 'lmwares.package_proposal.duplicate_payment_detected'
-        : isLegacyIpn
-          ? 'lmwares.package_proposal.ipn_reconciled'
-          : 'lmwares.package_proposal.webhook_reconciled',
+        : 'lmwares.package_proposal.webhook_reconciled',
       entityType: 'lmwares_package_proposal',
       entityId: proposal.id,
       metadata: {
@@ -564,7 +506,7 @@ async function validateSignedWebhook(
 ): Promise<{ requestId: string; validated: boolean }> {
   const requestId = c.req.header('x-request-id') ?? '';
   const signature = c.req.header('x-signature') ?? '';
-  if (!requestId || requestId.length > 200 || !hasMercadoPagoWebhookSignatureFormat(signature)) {
+  if (!requestId || requestId.length > 200 || !hasMercadoPagoWebhookSignatureFormat(signature) || !hasFreshMercadoPagoWebhookTimestamp(signature)) {
     throw new AppError('unauthorized', 'Notificación de Mercado Pago inválida.');
   }
   const checks = await Promise.all(
@@ -578,17 +520,8 @@ async function validateSignedWebhook(
     ),
   );
   const validated = checks.some(Boolean);
-  if (!validated && !testMode) {
-    throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
-  }
   if (!validated) {
-    console.warn(
-      JSON.stringify({
-        message: 'mercado_pago_test_webhook_provider_verification_required',
-        dataId,
-        requestId,
-      }),
-    );
+    throw new AppError('unauthorized', 'Firma de Mercado Pago inválida.');
   }
   return { requestId, validated };
 }

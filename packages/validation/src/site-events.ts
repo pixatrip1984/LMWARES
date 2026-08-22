@@ -81,6 +81,7 @@ export const createSiteEventRegistrationSchema = z
     email: emailSchema.max(254),
     phone: phoneSchema.nullish(),
     notes: z.string().trim().max(600).nullish(),
+    turnstileToken: z.string().trim().min(1).max(2048).optional(),
     /** Honeypot: debe permanecer vacío en clientes legítimos. */
     website: z.string().max(0, 'Solicitud inválida.').optional(),
   })

@@ -13,6 +13,7 @@ import {
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
 import { mediaUrl } from '../lib/media';
+import { verifyTurnstile } from '../lib/turnstile';
 
 /**
  * Router relativo para:
@@ -41,6 +42,17 @@ siteEvents.get('/:eventId', async (c) => {
 siteEvents.post('/:eventId/registrations', async (c) => {
   const { projectId, eventId } = parseInput(siteEventParamsSchema, c.req.param());
   const input = parseInput(createSiteEventRegistrationSchema, await readJson(c));
+  if (c.env.TURNSTILE_DISABLED !== '1') {
+    if (!input.turnstileToken) {
+      throw new AppError('turnstile_failed', 'Falta la verificación anti-spam.');
+    }
+    const valid = await verifyTurnstile(
+      c.env.TURNSTILE_SECRET_KEY,
+      input.turnstileToken,
+      c.req.header('CF-Connecting-IP'),
+    );
+    if (!valid) throw new AppError('turnstile_failed', 'Verificación anti-spam fallida.');
+  }
   const repository = await projectRepository(c.env.DB, projectId);
   const result = await repository.register({
     projectId,

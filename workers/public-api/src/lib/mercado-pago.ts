@@ -534,6 +534,15 @@ export function hasMercadoPagoWebhookSignatureFormat(value: string): boolean {
   return parseWebhookSignature(value) !== null;
 }
 
+/** Reject replayed signed notifications; Mercado Pago sends seconds (or milliseconds). */
+export function hasFreshMercadoPagoWebhookTimestamp(value: string, nowMs = Date.now()): boolean {
+  const signature = parseWebhookSignature(value);
+  if (!signature) return false;
+  const raw = Number(signature.timestamp);
+  const timestampMs = signature.timestamp.length <= 10 ? raw * 1_000 : raw;
+  return Number.isSafeInteger(timestampMs) && Math.abs(nowMs - timestampMs) <= 5 * 60 * 1_000;
+}
+
 function parseWebhookSignature(value: string): {
   timestamp: string;
   signatureHex: string;
