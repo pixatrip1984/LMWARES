@@ -15,4 +15,6 @@ test('extension synchronizer verifies the worker without opening a persistent su
   assert.doesNotMatch(source, /const supervisorUrl/);
   assert.doesNotMatch(source, /\/json\/new\?/);
   assert.match(source, /executionMode/);
+  assert.match(source, /LMWARES_DEMO_EXTENSION_FORCE_RELOAD/);
+  assert.match(source, /const shouldReload = forceReload \|\| !activeJobMatchesRun/);
 });

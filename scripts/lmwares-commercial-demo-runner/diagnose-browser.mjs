@@ -9,12 +9,24 @@ if (!worker?.webSocketDebuggerUrl) {
     const stored = await chrome.storage.local.get('lmwares.demo-studio.state.v1');
     const state = stored['lmwares.demo-studio.state.v1'] || {};
     const tabs = await chrome.tabs.query({ url: 'https://chatgpt.com/*' });
+    const downloads = await chrome.downloads.search({ limit: 20, orderBy: ['-startTime'] });
     return JSON.stringify({
       runId: state.runId ?? null, executionGeneration: state.executionGeneration ?? null,
       status: state.status ?? null, message: state.message ?? null,
       conversationId: state.conversationId ?? null,
-      activeJob: state.activeJob ? { stage: state.activeJob.stage, contract: state.activeJob.contract ?? null, fragmentId: state.activeJob.fragmentId ?? null, retryCount: Number(state.activeJob.retryCount || 0), attemptId: state.activeJob.attemptId } : null,
-      assetCount: Object.keys(state.assets || {}).length, hasCreativePlan: Boolean(state.creativePlan), hasCodePackage: Boolean(state.codePackage),
+      activeJob: state.activeJob ? { stage: state.activeJob.stage, assetId: state.activeJob.assetId ?? null, contract: state.activeJob.contract ?? null, fragmentId: state.activeJob.fragmentId ?? null, retryCount: Number(state.activeJob.retryCount || 0), attemptId: state.activeJob.attemptId, userTurnId: state.activeJob.userTurnId ?? null, anchor: state.activeJob.anchor ? { userTurnCount: state.activeJob.anchor.userTurnCount ?? null, lastUserTurnId: state.activeJob.anchor.lastUserTurnId ?? null } : null } : null,
+      assetIds: Object.keys(state.assets || {}), assetCount: Object.keys(state.assets || {}).length, hasCreativePlan: Boolean(state.creativePlan), hasCodePackage: Boolean(state.codePackage),
+      downloads: downloads.map((item) => ({
+        id: item.id,
+        filename: String(item.filename || '').split(/[\\/]/).pop(),
+        state: item.state,
+        exists: item.exists,
+        error: item.error || null,
+        bytesReceived: item.bytesReceived,
+        totalBytes: item.totalBytes,
+        startTime: item.startTime,
+        endTime: item.endTime || null,
+      })),
       tabs: tabs.map((tab) => ({ id: tab.id, active: tab.active, status: tab.status, url: tab.url })),
     });
   })()`));
@@ -40,6 +52,12 @@ if (!worker?.webSocketDebuggerUrl) {
             : probe?.validation?.parsed && typeof probe.validation.parsed === 'object' ? Object.keys(probe.validation.parsed) : [],
           rawSchemaTokens: [...new Set(rawText.match(/lmwares\.[a-z0-9.-]+\.v[0-9]+/gi) || [])],
           rawLength: rawText.length,
+          userTurnId: probe?.userTurnId || null,
+          image: probe?.image ? {
+            srcKind: String(probe.image.src || '').startsWith('data:') ? 'data' : String(probe.image.src || '').startsWith('blob:') ? 'blob' : 'remote',
+            naturalWidth: probe.image.naturalWidth || null,
+            naturalHeight: probe.image.naturalHeight || null,
+          } : null,
         };
       }
       return JSON.stringify({ ok: true, tabId: tab.id, response, jobProbe });

@@ -16,13 +16,15 @@ const extensionTarget = await waitForExtensionTarget(12_000);
 const previousVersion = await extensionVersion(extensionTarget);
 const activeJob = await activeJobSummary(extensionTarget);
 const activeJobMatchesRun = Boolean(activeJob && activeRun && activeJob.runId === activeRun.runId && activeJob.executionGeneration === activeRun.executionGeneration);
+const forceReload = /^(?:1|true|on)$/i.test(process.env.LMWARES_DEMO_EXTENSION_FORCE_RELOAD ?? 'false');
+const shouldReload = forceReload || !activeJobMatchesRun;
 // Unpacked extensions can keep an old service-worker script even after their
 // manifest version changes on disk. Reload before a prompt exists. The action
 // popup is deliberately not a persistent tab: it can hide ChatGPT and leave
 // its DOM unsuitable for lifecycle decisions.
-if (!activeJobMatchesRun) await evaluate(extensionTarget.webSocketDebuggerUrl, 'chrome.runtime.reload(); "reload-requested"').catch(() => null);
-if (!activeJobMatchesRun) await delay(900);
-const loadedTarget = activeJobMatchesRun ? extensionTarget : await waitForExtensionTarget(12_000);
+if (shouldReload) await evaluate(extensionTarget.webSocketDebuggerUrl, 'chrome.runtime.reload(); "reload-requested"').catch(() => null);
+if (shouldReload) await delay(900);
+const loadedTarget = shouldReload ? await waitForExtensionTarget(12_000) : extensionTarget;
 const loadedVersion = await extensionVersion(loadedTarget);
 
 if (loadedVersion !== diskManifest.version) {
@@ -31,7 +33,7 @@ if (loadedVersion !== diskManifest.version) {
 
 await setExecutionMode(loadedTarget, executionMode);
 await closePersistentSupervisorTabs();
-console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, activeJob, activeJobMatchesRun, reloaded: !activeJobMatchesRun }));
+console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, activeJob, activeJobMatchesRun, reloaded: shouldReload }));
 
 async function listTargets() {
   const response = await fetch(`${endpoint}/json/list`);
