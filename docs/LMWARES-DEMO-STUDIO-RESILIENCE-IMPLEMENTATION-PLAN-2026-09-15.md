@@ -2,7 +2,8 @@
 
 Fecha del documento: 2026-09-15 (continuación del documento solicitado).
 Análisis realizado: 2026-09-14, fecha del entorno.
-Estado: primer corte local implementado; validación real del perfil dedicado pendiente.
+Estado: primer corte local implementado; el atasco entre runs está confirmado y
+requiere el fix prioritario y la aceptación empírica definidos en la sección 9.
 
 Actualización de implementación (2026-09-14): se implementó el primer corte local en el runner/bridge y en la fuente instalada de la extensión. La ruta `headless` se probó dos veces con un perfil desechable; Brave 153 reportó `HeadlessChrome` y ChatGPT entregó un desafío de Cloudflare, sin worker de la extensión. Por tanto queda como diagnóstico, no como modo de producción. Se agregó `isolated-desktop` como modo por defecto: crea un escritorio Win32 separado y ejecuta allí Brave gráfico, de forma que su pestaña puede mantenerse activa sin ocupar el escritorio del operador. El host C# compiló y ejecutó un proceso de prueba en ese escritorio. La validación con el perfil dedicado quedó diferida porque hay un run comercial activo en `awaiting_chat` / `attention`; no se debe arrancar ese perfil hasta aislar o resolver ese run.
 
@@ -198,3 +199,143 @@ Prioridad inmediata: normalización de errores image y pruebas de los relojes; d
 No se requiere rediseñar el flujo comercial ni migrar de ChatGPT Web a otro proveedor para este fix. Si las pruebas reales muestran que el proveedor no progresa con el navegador dedicado en las condiciones de fondo requeridas, registrar esa limitación por separado; una política de recuperación no puede garantizar disponibilidad del proveedor.
 
 El fix se considera terminado cuando la matriz determinista pasa y los ensayos reales interrumpidos recuperan texto e imagen sin asistencia hasta revisión privada, o desembocan en un bloqueo real con causa y acción concreta dentro de los límites definidos. Pruebas locales verdes por sí solas no certifican operación desatendida.
+
+## 9. Fix prioritario: un run nuevo no puede heredar una generación antigua
+
+Esta sección es la instrucción vigente para el siguiente agente implementador.
+Debe ejecutarla antes de continuar optimizaciones de Cloudflare o segundo plano.
+Ningún cambio se considera corregido hasta completar la prueba empírica y
+recibir la confirmación explícita del usuario.
+
+### 9.1 Evidencia confirmada el 15 de septiembre de 2026
+
+- El run activo de Mueblería "gutierrez" es
+  `e4a15806-f048-4230-a335-bac7af6aa977`, generación 1, y permanece en
+  `awaiting_chat` sin `studioStatus`.
+- La extensión 0.3.13 informa como activo
+  `creative-plan-cce59fdf-7169-4f82-90b2-fa193995efd5`, intento heredado del
+  run anterior de Ferretería "El Chaparral". El sincronizador evita la recarga
+  por la mera existencia de ese trabajo, sin demostrar que pertenezca al
+  `runId` y `executionGeneration` actuales.
+- El listener está vivo y renueva el lease cada 15 segundos. Que Admin muestre
+  `claimed` solo prueba propiedad del job; no prueba que la extensión haya
+  aceptado o esté observando la generación.
+- `127.0.0.1:9223` no responde aunque el launcher haya registrado
+  `launchedAt`. La vida del proceso, DevTools y el worker deben formar parte del
+  criterio de lanzamiento exitoso.
+- `control/browser-access-state.json` contiene 604 bytes nulos. El monitor
+  devuelve `browserAccess:null`, sin recuperar ni explicar el estado corrupto.
+
+La hipótesis principal es un error de identidad y reconciliación entre runs,
+agravado por un falso positivo de navegador lanzado. Cloudflare puede ser una
+causa adicional, pero no explica que el worker conserve el trabajo del cliente
+anterior.
+
+### 9.2 Cambios obligatorios
+
+1. Toda generación persistida debe incluir y validar como una sola cerca:
+   `runId`, `jobId`, `executionGeneration`, `attemptId`, `stage` y
+   `lastObserverSeenAt`. Un `activeJob` sin identidad completa es legado/no
+   confiable y nunca bloquea un run nuevo.
+2. Al sincronizar, comparar el trabajo persistido con el run público del
+   bridge. Solo preservarlo si coinciden `runId` y `executionGeneration`. Si no,
+   registrar `stale-active-job`, conservar un resumen diagnóstico sin contenido
+   privado, cancelar sus alarmas y reinicializar antes de aceptar el run nuevo.
+3. Para la misma identidad, reconciliar antes de reintentar: inspeccionar
+   conversación, respuesta y artefactos capturados. No duplicar prompts ni
+   perder plan, imágenes o código válidos. Un retry crea nuevo `attemptId`,
+   conserva el vínculo anterior y consume un presupuesto persistente.
+4. Escribir `launchedAt` solo después de verificar durante una ventana estable
+   DevTools, el worker esperado y una pestaña ChatGPT controlable. Si proceso o
+   puerto desaparecen, marcar `browser-unavailable` aunque `studioStatus` sea
+   nulo y aplicar backoff/reinicio acotado.
+5. Tratar JSON auxiliar vacío, truncado o inválido como estado recuperable:
+   moverlo a evidencia con timestamp, reconstruirlo cercado al run actual y
+   emitir `access-state-recovered`. No degradarlo silenciosamente a `null`.
+6. Publicar progreso desde el primer contacto: `run-detected`,
+   `initializing-chat`, `creative-plan-generating`, `creative-plan-ready`,
+   `asset-generating` con índice/total, `asset-captured`, `code-generating`,
+   `output-ready`, `assembled` y `submitted-for-review`. Cada evento lleva
+   identidad, timestamp y mensaje público, nunca lease, prompt o credenciales.
+7. Añadir watchdog por etapa que diferencie observador vivo, generación visible,
+   resultado tardío, pestaña/extensión/navegador ausentes, challenge/login y
+   resultado inválido. Reconciliar primero y reintentar según presupuesto; nada
+   puede permanecer indefinidamente en `claimed`/`awaiting_chat`.
+8. Añadir `npm run lmwares:demos:watch -- --run-id <id>` (o equivalente) para
+   emitir un snapshot JSON sanitizado correlacionando run activo, listener,
+   acceso, DevTools/worker, activeJob, artefactos, ensamblaje y estado remoto.
+   Debe devolver categorías parciales aunque una fuente esté caída.
+9. Escribir eventos JSONL con timestamp para claim, cambio de run, lanzamiento,
+   reconciliación, progreso, retry, artefacto y entrega. La rotación no puede
+   borrar evidencia durante una prueba activa.
+10. El arranque de Windows debe ejecutar el mismo commit/configuración probados
+    y dejar esa identidad en el snapshot. La terminal visible no acredita salud;
+    sí lo hacen lock único, heartbeat reciente y diagnóstico sano.
+
+### 9.3 Pruebas automatizadas previas obligatorias
+
+El agente implementador debe añadir y ejecutar como mínimo:
+
+- Identidad: trabajo anterior, misma generación, generación reemplazada, estado
+  legado y `activeJob` incompleto.
+- Reconciliación: respuesta tardía capturada una vez; intento perdido reintentado
+  una vez; reiniciar worker/daemon no duplica prompt, imagen, ZIP ni release.
+- Liveness: proceso ausente, puerto caído, worker ausente/incompatible, pestaña
+  ausente y recuperación posterior.
+- Corrupción: estado con bytes nulos, JSON truncado y escritura interrumpida;
+  archivar/reconstruir sin perder `active-run.json`.
+- Watchdog con reloj inyectable para cada etapa y presupuesto agotado.
+- Integración local con runs consecutivos A y B: dejar A detenido en
+  `creative-plan-generating`, activar B y demostrar que B no hereda intento,
+  conversación, assets ni alarmas de A.
+- Reinicio completo del listener como inicio de Windows, seguido de claim,
+  generación ficticia, staging, ensamblaje y entrega privada simulada.
+- Suite existente de runner, bridge, extensión, ensamblaje y envío.
+
+Los tests usan fixtures y almacenamiento temporal: no reclaman jobs reales, no
+limpian el perfil comercial y no publican releases. El agente registra comandos,
+resultados y commit. Tests verdes autorizan la prueba real, no declarar el fix.
+
+### 9.4 Protocolo inmediato de aceptación real con el usuario
+
+Después de implementar, verificar y reiniciar el listener con el commit nuevo,
+el agente no termina: inicia inmediatamente este protocolo.
+
+1. Clasificar cualquier run comercial activo. Capturar evidencia y resolverlo o
+   archivarlo por la política de lease; nunca borrarlo o reemplazarlo a mano.
+2. Comprobar singleton, commit/configuración, API, DevTools, worker, perfil,
+   estado auxiliar válido y ausencia de `activeJob` ajeno. Guardar línea base.
+3. Solo con línea base sana, enviar exactamente: **«Ya puedes enviar una
+   solicitud para iniciar la prueba.»**
+4. Esperar **«Solicitud N enviada»**. Tomarlo como `T0`; no asumir el número ni
+   reclamar otra solicitud paralela.
+5. Desde T0, consultar cada 15 segundos hasta correlacionar `jobId`, `runId` y
+   `executionGeneration`, verificando claim, aceptación por la extensión y
+   progreso real. Al comenzar una generación observable enviar exactamente:
+   **«La demo se está generando.»**, junto con run y etapa comprobada.
+6. Desde ese aviso, revisar al menos cada 3 minutos. Comunicar cambios o
+   heartbeat con evidencia: `plan creativo`, `imagen 2/4`, `código`,
+   `artefactos recibidos`, `ensamblando` o `enviado a revisión`. Nunca inferir
+   progreso solo de `claimed`.
+7. Mantener un cronómetro desde T0. A los 12 minutos advertir si no está
+   entregada. A los 15 minutos, si no existe en Admin una release privada del
+   mismo run, declarar incidente aunque los procesos sigan vivos.
+8. Ante error o vencimiento: congelar evidencia sanitizada, clasificar causa,
+   corregir, repetir suites y reiniciar ordenadamente. Volver a validar línea
+   base y pedir solicitud `N+1`; no reutilizar el número anterior.
+9. Repetir cuanto sea necesario. El agente permanece observando y no da por
+   concluida una solicitud activa.
+10. Cerrar únicamente cuando el usuario escriba **«La demo N ha llegado a
+    admin»** y el agente confirme que lifecycle/job/run/release coinciden, los
+    artefactos están completos, no hubo duplicados y el run fue archivado como
+    `submitted_for_review`.
+
+### 9.5 Criterio final
+
+Se exige un recorrido posterior al fix desde solicitud hasta Admin en no más de
+15 minutos, con identidades coincidentes y sin intervención manual salvo un
+challenge/login real. No prueban corrección: terminal abierta, `claimed`,
+heartbeats, launcher con código cero, tests aislados ni un release de otro run.
+
+Si la confirmación visual y la correlación técnica no coinciden, registrar
+`EVIDENCE_GAP` y continuar. Solo ambas evidencias juntas cierran el flujo.
