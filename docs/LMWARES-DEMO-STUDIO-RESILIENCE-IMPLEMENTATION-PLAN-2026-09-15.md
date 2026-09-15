@@ -339,3 +339,35 @@ heartbeats, launcher con código cero, tests aislados ni un release de otro run.
 
 Si la confirmación visual y la correlación técnica no coinciden, registrar
 `EVIDENCE_GAP` y continuar. Solo ambas evidencias juntas cierran el flujo.
+
+### 9.6 Cierre empÃ­rico del fix — 15 de septiembre de 2026
+
+La implementaciÃ³n efectiva quedÃ³ instalada en la extensiÃ³n desempaquetada
+`C:\dev\lmwares\lmwares-chatgpt-demo-runner`, versiÃ³n `0.3.21`. El fuente de
+esa extensiÃ³n no es un repositorio Git independiente; el repositorio Oracle
+conserva el sincronizador, los tests y esta evidencia, y ahora rechaza cargar
+una extensiÃ³n inferior a `0.3.21`.
+
+El fallo reproducido era una carrera entre el resultado en vivo y la
+reconciliaciÃ³n: dos capturas del mismo asset abrÃ­an descargas simultÃ¡neas y
+el waiter tardÃ­o restauraba un `activeJob` viejo. El fix coalesce resultados
+por `attemptId`, reconoce assets ya persistidos, aplica fencing antes de
+guardar Ã©xitos o errores, recupera el chat antes de preparar el siguiente
+asset y ancla cada COMMIT al `userTurnId` estable. TambiÃ©n limpia un borrador
+no enviado que Brave restaura en un chat nuevo.
+
+Evidencia real posterior al fix:
+
+- Solicitud 2: run `06660f1b-e637-4b92-a60b-fbe94ee7ff2b`, job
+  `69138f7c-5420-48f6-8ae4-9ce9a3bab3f9`, generaciÃ³n `1`.
+- Las cuatro imÃ¡genes y `code-package.json` se recibieron localmente sin
+  duplicados; el navegador se cerrÃ³ automÃ¡ticamente.
+- Release `25a519ab-cd32-45aa-9ad8-980eac86b4e9` fue subida y enviada a
+  revisiÃ³n a las `2026-09-15T16:33:43.865Z`; el run quedÃ³ archivado como
+  `submitted_for_review`, sin error.
+- El usuario confirmÃ³: **Â«La demo 2 ha llegado a adminÂ»**.
+- El usuario ejecutÃ³ ademÃ¡s una tercera prueba independiente y confirmÃ³ que
+  tambiÃ©n funcionÃ³.
+
+Con estas dos comprobaciones reales posteriores al fix, el criterio de
+aceptaciÃ³n de este plan queda satisfecho.

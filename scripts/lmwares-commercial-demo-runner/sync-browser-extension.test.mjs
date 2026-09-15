@@ -17,4 +17,6 @@ test('extension synchronizer verifies the worker without opening a persistent su
   assert.match(source, /executionMode/);
   assert.match(source, /LMWARES_DEMO_EXTENSION_FORCE_RELOAD/);
   assert.match(source, /const shouldReload = forceReload \|\| !activeJobMatchesRun/);
+  assert.match(source, /minimumFixedExtensionVersion = '0\.3\.21'/);
+  assert.match(source, /versionAtLeast\(loadedVersion, minimumFixedExtensionVersion\)/);
 });

@@ -7,10 +7,12 @@ const extensionPath = args.get('--extension-path');
 const extensionId = args.get('--extension-id');
 const endpoint = args.get('--debug-url') ?? 'http://127.0.0.1:9223';
 const executionMode = args.get('--execution-mode') ?? 'isolated-desktop';
+const minimumFixedExtensionVersion = '0.3.21';
 if (!['headless', 'interactive', 'isolated-desktop'].includes(executionMode)) throw new Error('Invalid Demo Studio execution mode.');
 if (!extensionPath || !/^[a-p]{32}$/.test(extensionId || '')) throw new Error('Faltan la ruta o el id válido de Demo Studio.');
 
 const diskManifest = JSON.parse(await readFile(path.join(extensionPath, 'manifest.json'), 'utf8'));
+if (!versionAtLeast(diskManifest.version, minimumFixedExtensionVersion)) throw new Error(`La extensión en disco (${diskManifest.version || 'desconocida'}) no contiene el fix mínimo ${minimumFixedExtensionVersion}.`);
 const activeRun = await activeRunSummary(process.env.LMWARES_DEMO_ACTIVE_RUN_PATH ?? 'C:\\dev\\lmwares-demos\\control\\active-run.json');
 const extensionTarget = await waitForExtensionTarget(12_000);
 const previousVersion = await extensionVersion(extensionTarget);
@@ -30,10 +32,22 @@ const loadedVersion = await extensionVersion(loadedTarget);
 if (loadedVersion !== diskManifest.version) {
   throw new Error(`Brave conserva Demo Studio ${loadedVersion || 'desconocida'}; se esperaba ${diskManifest.version}.`);
 }
+if (!versionAtLeast(loadedVersion, minimumFixedExtensionVersion)) throw new Error(`Brave conserva Demo Studio ${loadedVersion || 'desconocida'} sin el fix mínimo ${minimumFixedExtensionVersion}.`);
 
 await setExecutionMode(loadedTarget, executionMode);
 await closePersistentSupervisorTabs();
 console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, activeJob, activeJobMatchesRun, reloaded: shouldReload }));
+
+function versionAtLeast(actual, minimum) {
+  const parse = (value) => String(value || '').split('.').map((part) => Number.parseInt(part, 10));
+  const left = parse(actual); const right = parse(minimum);
+  if (left.some((part) => !Number.isFinite(part)) || right.some((part) => !Number.isFinite(part))) return false;
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = left[index] || 0; const b = right[index] || 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
 
 async function listTargets() {
   const response = await fetch(`${endpoint}/json/list`);
