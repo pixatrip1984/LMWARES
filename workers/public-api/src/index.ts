@@ -26,6 +26,9 @@ import { reconcileSubscriptionsOnSchedule } from './lib/subscription-reconciliat
 import { commercialIntakes } from './routes/commercial-intakes';
 import { serveStarterSite, serveStarterSiteByHostname, starterSites } from './routes/starter-sites';
 import { starterDomains } from './routes/starter-domains';
+import { serveCommercialDemoSite } from './routes/commercial-demo-sites';
+import { commercialAgentInternal } from './routes/commercial-agent-internal';
+import { processQueuedScopeJob } from './lib/commercial-scope-agent';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -85,6 +88,7 @@ app.route('/map', mapLocations);
 app.route('/internal', freeJobsInternal);
 app.route('/internal', stuckPaymentsInternal);
 app.route('/internal', googleIndexingInternal);
+app.route('/internal', commercialAgentInternal);
 app.route('/sites/:projectId/blog', siteBlogPublic);
 app.route('/sites/:projectId/galleries', publicSiteGalleries);
 app.route('/sites/:projectId/docs', siteDocsPublic);
@@ -101,6 +105,11 @@ app.route('/starter-projects', starterDomains);
 // Cloudflare for SaaS en producción.
 app.get('/', async (c) => {
   const hostname = hostnameFromHostHeader(c.req.header('Host'));
+  const commercialSlug = commercialSlugFromHost(hostname);
+  if (commercialSlug) {
+    const demoResponse = await serveCommercialDemoSite(c, commercialSlug);
+    if (demoResponse) return demoResponse;
+  }
   const slug = freeSlugFromHost(hostname, c.env.FREE_SITE_BASE_DOMAIN);
 
   if (slug) {
@@ -114,6 +123,20 @@ app.get('/', async (c) => {
     if (customDomainResponse) return customDomainResponse;
   }
 
+  throw AppError.notFound('Sitio');
+});
+
+// A commercial demo is already a routed site even while Phase 0 only exposes
+// its root artifact. Future immutable releases resolve additional paths here;
+// unknown paths must remain 404 instead of receiving index.html as an SEO
+// duplicate or an accidental SPA fallback.
+app.get('*', async (c) => {
+  const hostname = hostnameFromHostHeader(c.req.header('Host'));
+  const commercialSlug = commercialSlugFromHost(hostname);
+  if (commercialSlug) {
+    const response = await serveCommercialDemoSite(c, commercialSlug, new URL(c.req.url).pathname);
+    if (response) return response;
+  }
   throw AppError.notFound('Sitio');
 });
 
@@ -145,7 +168,10 @@ export default {
     return app.fetch(request, env, ctx);
   },
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(reconcileSubscriptionsOnSchedule(env, controller.scheduledTime));
+    if (controller.cron === '17 * * * *') {
+      ctx.waitUntil(reconcileSubscriptionsOnSchedule(env, controller.scheduledTime));
+    }
+    ctx.waitUntil(processQueuedScopeJob(env));
   },
 } satisfies ExportedHandler<Bindings>;
 
@@ -169,4 +195,13 @@ function freeSlugFromHost(hostname: string | null, baseDomain: string): string |
   if (!host.endsWith(suffix)) return null;
   const slug = host.slice(0, -suffix.length);
   return /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(slug) ? slug : null;
+}
+
+function commercialSlugFromHost(hostname: string | null): string | null {
+  const host = hostname ?? '';
+  const suffix = '.lmwares.com';
+  if (!host.endsWith(suffix)) return null;
+  const slug = host.slice(0, -suffix.length);
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(slug)) return null;
+  return new Set(['admin', 'api', 'app', 'assets', 'cdn', 'contratar', 'media', 'sitios', 'www']).has(slug) ? null : slug;
 }

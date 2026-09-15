@@ -1,13 +1,101 @@
 # Runbook: evaluacion asistida y arranque de intakes comerciales (Starter/Pro)
 
-Este runbook describe como usar Copilot (en esta sesion, no de forma
-autonoma/programada) para acelerar dos pasos del flujo comercial sin saltarse
-tu aprobacion humana en ningun punto:
+## Arquitectura local vigente (2026-09-14)
 
-1. Evaluar y redactar el borrador de una oferta para un intake `submitted`
-   (Fase 0, sin costo para el cliente).
-2. Preparar el arranque de un proyecto ya aceptado y pagado (fase 1) con
-   `lmwares-agent-runner`.
+El operador ya no debe mantener una terminal con `npm run lmwares:demos:watch`.
+`npm run lmwares:demos:install-listener` instala un supervisor oculto en la
+carpeta **Inicio** de la sesión interactiva de Windows y lo arranca de inmediato.
+El supervisor mantiene un único daemon liviano; si éste cae, lo reinicia. Un
+lock atómico en `C:\dev\lmwares-demos\control\daemon.lock` impide que una
+terminal, otro acceso de Inicio o un segundo supervisor consuman la misma cola.
+
+El ciclo correcto es:
+
+1. Enviar el intake encola y ejecuta el trabajo remoto de alcance con DeepSeek.
+2. Aceptar esa oferta crea Phase 0 y encola el trabajo local `demo`.
+3. El listener dormido detecta el trabajo (máximo 15 segundos), reclama un lease
+   cercado y abre el perfil dedicado de Brave.
+4. El launcher recarga la variante unpacked desde disco, conserva una sola
+   pestaña supervisora y abre ChatGPT sin botones manuales.
+5. Demo Studio genera, descarga, ensambla, valida y entrega el release privado a
+   Oracle Admin.
+6. Al quedar `submitted_for_review`, el runner archiva evidencia y cierra sólo
+   el Brave cuyo `--user-data-dir` es `C:\dev\lmwares-demo-brave-profile`.
+   El listener vuelve a dormir; el navegador personal no se toca.
+7. La aprobación administrativa publica el release al cliente y completa Phase
+   0. Esta compuerta no necesita mantener ChatGPT ni Brave abiertos.
+
+Cloudflare no puede iniciar un proceso dentro de una PC detrás de NAT. Por eso
+el listener permanece residente pero inactivo y barato; no abre navegador ni
+consume ChatGPT mientras la cola está vacía. El evento remoto no se pierde si
+la PC está apagada: el job permanece en D1 y será reclamado en el próximo inicio
+de sesión.
+
+### Concurrencia
+
+La cola remota selecciona el job elegible más antiguo y el daemon procesa un
+solo `active-run.json`. Si dos clientes aceptan casi al mismo tiempo, ambos jobs
+quedan persistidos y se ejecutan FIFO, uno por uno. Un lease vencido se archiva
+como intento abandonado y Oracle puede emitir una nueva
+`execution_generation`; el resultado de una generación vieja no puede subir ni
+pisar el release vigente.
+
+### Instalación y diagnóstico
+
+```powershell
+npm run lmwares:demos:install-listener
+```
+
+Los registros operativos están en:
+
+- `C:\dev\lmwares-demos\control\listener-supervisor.log`
+- `C:\dev\lmwares-demos\control\listener.out.log`
+- `C:\dev\lmwares-demos\control\listener.err.log`
+
+`node scripts/lmwares-commercial-demo-runner/diagnose-browser.mjs` inspecciona
+solamente la salud estructural del Brave dedicado; no lee el contenido de las
+respuestas ni secretos. Si se intenta abrir un segundo daemon, debe terminar
+con `Ya existe un listener de demos LMWares activo`.
+
+> Actualización 2026-09-13: ver [corrección del envío comercial y prueba pendiente](LMWARES-COMMERCIAL-SUBMISSION-RECOVERY-2026-09-13.md). El job de alcance se persiste antes de responder, intenta arrancar inmediatamente y tiene recuperación programada cada minuto; no depende de que el navegador siga abierto. Las instrucciones manuales históricas de abajo no sustituyen este modo automático.
+
+Este runbook describe dos modos de operación. El modo automático usa
+`deepseek-v4-flash` para redactar alcances dentro del catálogo vigente y el
+runner local para construir una demo; el modo manual sigue disponible para
+casos que necesitan intervención humana.
+
+1. Evaluar y redactar una oferta automática para un intake `submitted`.
+2. Construir una demo privada tras aceptar la oferta.
+3. Continuar el mismo proyecto local al pasar a fase 1.
+
+## Modo automático DeepSeek Flash
+
+Al recibir una solicitud, el Public API crea un trabajo `scope`. Si
+`DEEPSEEK_API_KEY` (o el alias `deepseek_api_key`) está configurado, Flash
+redacta el alcance pero no decide módulos, precio, condiciones ni exclusiones:
+esas reglas provienen del catálogo y la tabla de precios del servidor.
+
+Al aceptar la oferta se crea la fase 0 y un trabajo `demo`. El runner local
+`npm run lmwares:demos:watch` consulta los trabajos, crea o reutiliza
+`C:\dev\lmwares-demos\<slug>`, guarda `demo/index.html` y el expediente
+`.lmwares/phase-0-agent.json`, y entrega una revisión privada a Oracle.
+
+Oracle muestra la ruta local y permite abrir la revisión. Sólo **Aprobar demo
+y mostrar al cliente** activa el subdominio. Después puedes cerrar fase 0 y
+habilitar el primer pago. La misma carpeta se conserva para la implementación.
+
+Configuración local del runner:
+
+```powershell
+Copy-Item scripts/lmwares-commercial-demo-runner/.env.example scripts/lmwares-commercial-demo-runner/.env
+npm run lmwares:demos:watch
+```
+
+Para arrancarlo al iniciar sesión, tras completar ese `.env`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/lmwares-commercial-demo-runner/install-at-logon.ps1
+```
 
 No reemplaza `docs/LMWARES-COMMERCIAL-FLOW-ON-GO-LIVE.md` (la fuente de
 verdad del flujo/estados); lo complementa con el "como" operativo del dia a

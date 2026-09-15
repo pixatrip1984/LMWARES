@@ -16,6 +16,10 @@ import type {
   PackageIntakeStatus,
   StarterClientProject,
   StarterWorkOrder,
+  CommercialDemoLifecycle,
+  CommercialDemoPhase,
+  CommercialAgentJob,
+  SalesActor,
   Request,
   RequestNote,
   RequestStatus,
@@ -97,6 +101,12 @@ export function createAdminClient(baseUrl: string) {
     me() {
       return http.get<AdminMe>('/admin/me');
     },
+    listSalesActors() {
+      return http.get<{ actors: SalesActor[] }>('/admin/sales-actors');
+    },
+    provisionSalesActor(input: { email: string; displayName: string }) {
+      return http.post<{ actor: SalesActor }>('/admin/sales-actors', input);
+    },
 
     // ── LMWARES / Oracle ────────────────────────────────────
     listLmwaresProjects() {
@@ -158,6 +168,9 @@ export function createAdminClient(baseUrl: string) {
         workOrder: StarterWorkOrder | null;
         clientProject: StarterClientProject | null;
         maintenanceSubscription: MaintenanceSubscription | null;
+        lifecycle: CommercialDemoLifecycle | null;
+        demoPhases: CommercialDemoPhase[];
+        agentJobs: CommercialAgentJob[];
       }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}`,
       );
@@ -181,6 +194,36 @@ export function createAdminClient(baseUrl: string) {
       return http.post<{ workOrder: StarterWorkOrder }>(
         `/admin/commercial-intakes/${encodeURIComponent(id)}/work-order/go-live`,
         { publicUrl },
+      );
+    },
+    publishCommercialDemo(id: string, html: string) {
+      return http.post<{ lifecycle: CommercialDemoLifecycle }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/demo/publish`, { html },
+      );
+    },
+    approveGeneratedCommercialDemo(id: string) {
+      return http.post<{ lifecycle: CommercialDemoLifecycle }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/demo/approve`, {},
+      );
+    },
+    approveCommercialDemoRelease(id: string, releaseId: string) {
+      return http.post<{ lifecycle: CommercialDemoLifecycle }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/demo/releases/${encodeURIComponent(releaseId)}/approve`, {},
+      );
+    },
+    completeCommercialPhaseZero(id: string, evidence: string) {
+      return http.post<{ lifecycle: CommercialDemoLifecycle; billingOrders: BillingOrder[] }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/phases/0/complete`, { evidence },
+      );
+    },
+    startCommercialPhase(id: string, phase: 1 | 2 | 3 | 4) {
+      return http.post<{ phase: CommercialDemoPhase }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/phases/${phase}/start`, {},
+      );
+    },
+    completeCommercialPhase(id: string, phase: 1 | 2 | 3 | 4, evidence: string) {
+      return http.post<{ phase: CommercialDemoPhase }>(
+        `/admin/commercial-intakes/${encodeURIComponent(id)}/phases/${phase}/complete`, { evidence },
       );
     },
     issueCommercialOffer(id: string, input: IssueCommercialOfferInput) {

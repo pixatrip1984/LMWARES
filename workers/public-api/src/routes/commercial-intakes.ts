@@ -17,6 +17,8 @@ import type { Bindings, Variables } from '../env';
 import { assertTrustedPublicOrigin, requirePublicSession } from '../middleware/public-auth';
 import { publicCommercialOffer } from '../lib/commercial-offer-public';
 import { publicBillingOrder } from '../lib/billing-order-public';
+import { notifyOperator } from '../lib/operational-alerts';
+import { processScopeJob } from '../lib/commercial-scope-agent';
 
 export const commercialIntakes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -32,13 +34,6 @@ commercialIntakes.post('/', async (c) => {
   const marketing = normalizeCommercialMarketing(input.marketing);
   const estimate = estimateCommercialPackage({ ...input, modules, marketing });
   const repos = createRepositories(c.env.DB);
-
-  // Reintento idempotente: si ya existe un intake para esta clave, devuélvelo
-  // tal cual sin volver a consumir el código de descuento.
-  const existing = await repos.lmwaresPackageIntakes.getBySubmissionKey(submissionKey);
-  if (existing && existing.userId === session.user.id) {
-    return c.json({ intake: publicIntake(existing) }, 200);
-  }
 
   // El código de descuento se guarda en el intake pero NO se consume aquí.
   // El consumo ocurre de forma atómica al ACEPTAR la oferta, de modo que solo
@@ -66,12 +61,28 @@ commercialIntakes.post('/', async (c) => {
       discountCode,
       discountPercent: null,
       maintenanceStartPolicy: 'on_go_live',
+      // The interview is immutable intake evidence. It is not an offer nor an
+      // instruction to the generator; later server-owned stages selectively
+      // derive public context from it.
+      businessInterview: input.interview ?? null,
     },
     discountCode,
     discountPercent: null,
     discountRedemptionId: null,
   });
+  // Persist before acknowledging. Exact retries also repair an interrupted enqueue,
+  // but must never issue a second offer for a historical accepted request.
+  if (['submitted', 'scope_review'].includes(result.intake.status)) {
+    const scopeJob = await repos.lmwaresCommercialAgentJobs.enqueue({ intakeId: result.intake.id, jobType: 'scope' });
+    // Start immediately for the usual fast path. The durable row and minute
+    // scheduler remain authoritative recovery if waitUntil is interrupted.
+    c.executionCtx.waitUntil(processScopeJob(c.env, scopeJob.id));
+  }
   if (result.created) {
+    c.executionCtx.waitUntil(notifyOperator(c.env, {
+      title: 'LMWares · solicitud comercial recibida',
+      lines: [`Solicitud: ${result.intake.id}`, `${result.intake.brief.businessName} · ${result.intake.plan.toUpperCase()}`, `Cliente: ${result.intake.brief.contactName}`, `Correo: ${session.user.email}`],
+    }));
     await repos.audit.record({
       actorType: 'public',
       actorId: session.user.id,
@@ -187,10 +198,17 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
     offer = discounted.offer;
   }
 
-  const billingOrders = await repos.lmwaresBillingOrders.ensureImplementationPhases({
-    offerId: offer.id,
+  // La aceptación de una oferta nueva abre la fase 0 gratuita. No crea
+  // checkout ni trabajo pagado: eso ocurre cuando el operador termina la demo.
+  const demo = await repos.lmwaresCommercialDemoLifecycles.ensureAcceptedOffer({
     intakeId: intake.id,
+    offerId: offer.id,
     userId: session.user.id,
+  });
+  const demoJob = await repos.lmwaresCommercialAgentJobs.enqueue({
+    intakeId: intake.id,
+    lifecycleId: demo.lifecycle.id,
+    jobType: 'demo',
   });
   if (result.changed) {
     await repos.audit.record({
@@ -212,10 +230,49 @@ commercialIntakes.post('/:id/offers/:offerId/accept', async (c) => {
       userAgent: c.req.header('User-Agent') ?? null,
     });
   }
+  if (demo.created) {
+    await notifyOperator(c.env, {
+      title: 'LMWares · nueva demo por comenzar',
+      lines: [
+        `${demo.lifecycle.siteName} · ${offer.plan.toUpperCase()} · propuesta v${offer.version} aceptada`,
+        `Cliente: ${session.user.email}`,
+        `Demo: https://${demo.lifecycle.slug}.lmwares.com`,
+      ],
+    });
+  }
   return c.json({
     offer: publicCommercialOffer(offer),
-    billingOrders: billingOrders.map(publicBillingOrder),
+    billingOrders: [],
+    demo: demo.lifecycle,
+    demoJob,
   });
+});
+
+commercialIntakes.post('/:id/demo/continue-implementation', async (c) => {
+  assertTrustedPublicOrigin(c);
+  const session = await requirePublicSession(c);
+  const repos = createRepositories(c.env.DB);
+  const intake = await repos.lmwaresPackageIntakes.getById(c.req.param('id'));
+  if (!intake || intake.userId !== session.user.id) throw AppError.notFound('Solicitud comercial');
+  // Las órdenes se materializan sólo después de que el cliente decide
+  // continuar; no al aprobar la demo.  Crear primero es seguro e idempotente:
+  // si una transición concurrente pierde la carrera, nunca se expone checkout
+  // sin órdenes reales detrás.
+  const current = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(intake.id);
+  if (!current) throw AppError.notFound('Demo comercial');
+  await repos.lmwaresBillingOrders.ensureImplementationPhases({
+    offerId: current.commercialOfferId,
+    intakeId: current.intakeId,
+    userId: current.userId,
+  });
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.continueImplementation({ intakeId: intake.id });
+  await repos.audit.record({
+    actorType: 'public', actorId: session.user.id, action: 'lmwares.demo.client_continued_implementation',
+    entityType: 'lmwares_commercial_demo_lifecycle', entityId: lifecycle.id,
+    metadata: { intakeId: lifecycle.intakeId, commercialOfferId: lifecycle.commercialOfferId },
+    ip: c.req.header('CF-Connecting-IP') ?? null, userAgent: c.req.header('User-Agent') ?? null,
+  });
+  return c.json({ lifecycle, billingOrders: await repos.lmwaresBillingOrders.getPhasesForOffer(lifecycle.commercialOfferId) });
 });
 
 function publicIntake(intake: PackageIntake) {

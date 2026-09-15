@@ -90,6 +90,19 @@ export interface Bindings {
   EMAIL_REPLY_TO: string;
   /** Destino de alertas operativas (pagos atascados, etc). Vacío = alertas deshabilitadas. */
   ADMIN_ALERT_EMAIL?: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_ADMIN_CHAT_ID?: string;
+  /** Alias operativo ya usado por los avisos existentes. */
+  TELEGRAM_CHAT_ID?: string;
+  TELEGRAM_NOTIFICATIONS_ENABLED?: string;
+  /** Secreto del modelo que redacta alcances y construye contenido de demo. */
+  DEEPSEEK_API_KEY?: string;
+  /** Alias compatible con una variable creada originalmente en minúsculas. */
+  deepseek_api_key?: string;
+  /** Token separado para el constructor local de demos. */
+  COMMERCIAL_DEMO_RUNNER_TOKEN?: string;
+  /** Alias del token que usa el runner local. */
+  LMWARES_COMMERCIAL_DEMO_RUNNER_TOKEN?: string;
   /** "1" para saltar la verificación de Turnstile (solo local). */
   TURNSTILE_DISABLED: string;
   /** Secreto de Turnstile (server-side). Inyectado como secret. */
@@ -121,4 +134,6 @@ export type Variables = {
   publicUser: PublicUser;
   publicSessionId: string;
   publicSessionExpiresAt: string;
+  /** Transporte interno sustituible sólo al componer un Worker de prueba. */
+  mercadoPagoFetch?: typeof fetch;
 };

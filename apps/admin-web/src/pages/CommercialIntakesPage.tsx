@@ -12,6 +12,9 @@ import {
   type PackageIntakeStatus,
   type StarterClientProject,
   type StarterWorkOrder,
+  type CommercialDemoLifecycle,
+  type CommercialDemoPhase,
+  type CommercialAgentJob,
 } from '@starter/domain';
 import { Button, Card, CardBody, EmptyState, ErrorBanner, PageHeader, Spinner, Textarea } from '@starter/ui';
 import { api } from '../lib/api';
@@ -40,6 +43,11 @@ export function CommercialIntakesPage() {
   const [clientProject, setClientProject] = useState<StarterClientProject | null>(null);
   const [workOrder, setWorkOrder] = useState<StarterWorkOrder | null>(null);
   const [maintenanceSubscription, setMaintenanceSubscription] = useState<MaintenanceSubscription | null>(null);
+  const [lifecycle, setLifecycle] = useState<CommercialDemoLifecycle | null>(null);
+  const [demoPhases, setDemoPhases] = useState<CommercialDemoPhase[]>([]);
+  const [agentJobs, setAgentJobs] = useState<CommercialAgentJob[]>([]);
+  const [demoHtml, setDemoHtml] = useState('');
+  const [phaseEvidence, setPhaseEvidence] = useState('');
   const [projects, setProjects] = useState<LmwaresProject[]>([]);
   const [projectId, setProjectId] = useState('');
   const [publicUrl, setPublicUrl] = useState('');
@@ -53,7 +61,7 @@ export function CommercialIntakesPage() {
     marketing: false,
   });
   const [activeAction, setActiveAction] = useState<
-    'review' | 'assign' | 'status' | 'publish' | 'offer' | 'reopen' | 'test_paid' | null
+    'review' | 'assign' | 'status' | 'publish' | 'offer' | 'reopen' | 'test_paid' | 'demo' | 'phase' | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -132,6 +140,9 @@ export function CommercialIntakesPage() {
       setClientProject(null);
       setWorkOrder(null);
       setMaintenanceSubscription(null);
+      setLifecycle(null);
+      setDemoPhases([]);
+      setAgentJobs([]);
       return;
     }
     setOfferForm({
@@ -153,6 +164,9 @@ export function CommercialIntakesPage() {
         setClientProject(result.clientProject);
         setWorkOrder(result.workOrder);
         setMaintenanceSubscription(result.maintenanceSubscription);
+        setLifecycle(result.lifecycle);
+        setDemoPhases(result.demoPhases);
+        setAgentJobs(result.agentJobs);
         setProjects(registry?.projects ?? []);
         setProjectId(result.workOrder?.projectId ?? '');
         setPublicUrl(result.workOrder?.publishedUrl ?? '');
@@ -175,8 +189,76 @@ export function CommercialIntakesPage() {
         setClientProject(null);
         setWorkOrder(null);
         setMaintenanceSubscription(null);
+        setLifecycle(null);
+        setDemoPhases([]);
+        setAgentJobs([]);
       });
   }, [selected?.id, selected?.reviewNotes, selected?.status]);
+
+  useEffect(() => {
+    if (!selected?.id) return;
+
+    let disposed = false;
+    const refreshOperationalState = async () => {
+      try {
+        const result = await api.getCommercialPackageIntake(selected.id);
+        if (disposed) return;
+        setLifecycle(result.lifecycle);
+        setDemoPhases(result.demoPhases);
+        setAgentJobs(result.agentJobs);
+        setWorkOrder(result.workOrder);
+      } catch {
+        // Keep the last known state. The regular page load still exposes hard failures.
+      }
+    };
+
+    const timer = window.setInterval(() => {
+      void refreshOperationalState();
+    }, 10_000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [selected?.id]);
+
+  async function publishDemo() {
+    if (!selected || !demoHtml.trim()) return;
+    setActiveAction('demo'); setActionError(null);
+    try { const result = await api.publishCommercialDemo(selected.id, demoHtml); setLifecycle(result.lifecycle); }
+    catch (err) { setActionError(err instanceof AppError ? err.message : 'No se pudo publicar la demo.'); }
+    finally { setActiveAction(null); }
+  }
+  async function completePhaseZero() {
+    if (!selected || !phaseEvidence.trim()) return;
+    setActiveAction('phase'); setActionError(null);
+    try { const result = await api.completeCommercialPhaseZero(selected.id, phaseEvidence); setLifecycle(result.lifecycle); setBillingOrders(result.billingOrders); await load(); }
+    catch (err) { setActionError(err instanceof AppError ? err.message : 'No se pudo terminar la fase 0.'); }
+    finally { setActiveAction(null); }
+  }
+  async function approveGeneratedDemo() {
+    if (!selected) return;
+    setActiveAction('demo'); setActionError(null);
+    try { const result = await api.approveGeneratedCommercialDemo(selected.id); setLifecycle(result.lifecycle); await load(); }
+    catch (err) { setActionError(err instanceof AppError ? err.message : 'No se pudo aprobar la demo generada.'); }
+    finally { setActiveAction(null); }
+  }
+  async function approveGeneratedRelease(releaseId: string) {
+    if (!selected) return;
+    setActiveAction('demo'); setActionError(null);
+    try { const result = await api.approveCommercialDemoRelease(selected.id, releaseId); setLifecycle(result.lifecycle); await load(); }
+    catch (err) { setActionError(err instanceof AppError ? err.message : 'No se pudo aprobar el release de la demo.'); }
+    finally { setActiveAction(null); }
+  }
+  async function advanceDemoPhase(phase: 1 | 2 | 3 | 4, complete: boolean) {
+    if (!selected || (complete && !phaseEvidence.trim())) return;
+    setActiveAction('phase'); setActionError(null);
+    try {
+      const result = complete ? await api.completeCommercialPhase(selected.id, phase, phaseEvidence) : await api.startCommercialPhase(selected.id, phase);
+      setDemoPhases((current) => current.map((item) => item.phase === phase ? result.phase : item));
+    } catch (err) { setActionError(err instanceof AppError ? err.message : 'No se pudo actualizar la fase.'); }
+    finally { setActiveAction(null); }
+  }
 
   async function review(nextStatus: 'scope_review' | 'declined') {
     if (!selected) return;
@@ -473,6 +555,59 @@ export function CommercialIntakesPage() {
                       </p>
                     </div>
                     <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                      {lifecycle ? (
+                        <div className="sm:col-span-2 rounded-xl border border-brand-200 bg-brand-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-brand-700">Fases 0–4 y demo</p>
+                          <p className="mt-1 text-sm text-gray-700">
+                            <b>{lifecycle.siteName}</b> · <a className="text-brand-700 underline" href={`https://${lifecycle.slug}.lmwares.com`} target="_blank" rel="noreferrer">{lifecycle.slug}.lmwares.com</a>
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                            {demoPhases.map((phase) => <span className="rounded-full bg-white px-3 py-1 font-semibold text-gray-700" key={phase.id}>Fase {phase.phase}: {phase.status}</span>)}
+                          </div>
+                          {agentJobs.length > 0 ? (
+                            <div className="mt-3 rounded-lg bg-white/80 p-3 text-sm text-gray-700">
+                              {agentJobs.map((job) => <p key={job.id}>Agente {job.jobType}: <b>{job.status}</b>{job.projectPath ? ` · ${job.projectPath}` : ''}{job.errorMessage ? ` · ${job.errorMessage}` : ''}</p>)}
+                            </div>
+                          ) : null}
+                          {(() => {
+                            const generated = agentJobs.find((job) => job.jobType === 'demo' && job.status === 'completed');
+                            const releaseId = generated && generated.result && typeof generated.result.releaseId === 'string'
+                              ? generated.result.releaseId
+                              : null;
+                            if (generated && releaseId && !lifecycle.demoPublishedAt) {
+                              return (
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                  <a className="rounded-md border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700" href={`/admin/commercial-intakes/${selected.id}/demo/releases/${releaseId}/review`} target="_blank" rel="noreferrer">Abrir revision privada</a>
+                                  <Button onClick={() => void approveGeneratedRelease(releaseId)} disabled={activeAction !== null}>{activeAction === 'demo' ? 'Aprobando...' : 'Aprobar demo y mostrar al cliente'}</Button>
+                                  {actionError ? <p className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{actionError}</p> : null}
+                                </div>
+                              );
+                            }
+                            return generated && !lifecycle.demoPublishedAt ? (
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                <a className="rounded-md border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700" href={`/admin/commercial-intakes/${selected.id}/demo/review`} target="_blank" rel="noreferrer">Abrir revisión privada</a>
+                                <Button onClick={() => void approveGeneratedDemo()} disabled={activeAction !== null}>{activeAction === 'demo' ? 'Aprobando…' : 'Aprobar demo y mostrar al cliente'}</Button>
+                              </div>
+                            ) : null;
+                          })()}
+                          {!lifecycle.demoPublishedAt ? (
+                            <div className="mt-4 space-y-2">
+                              <Textarea rows={6} value={demoHtml} onChange={(event) => setDemoHtml(event.target.value)} placeholder="Pega el HTML completo de la demo pública. Se publicará en el subdominio del cliente." />
+                              <Button onClick={() => void publishDemo()} disabled={activeAction !== null || !demoHtml.trim()}>{activeAction === 'demo' ? 'Publicando…' : 'Publicar demo en subdominio'}</Button>
+                            </div>
+                          ) : null}
+                          <div className="mt-4 space-y-2">
+                            <Textarea rows={3} value={phaseEvidence} onChange={(event) => setPhaseEvidence(event.target.value)} placeholder="Evidencia o nota del cierre de fase" />
+                            {demoPhases.find((phase) => phase.phase === 0)?.status === 'in_progress' ? <Button onClick={() => void completePhaseZero()} disabled={activeAction !== null || !phaseEvidence.trim()}>Terminar fase 0 y habilitar pago 1</Button> : null}
+                            {demoPhases.filter((phase) => phase.phase > 0).map((phase) => (
+                              <span className="mr-2 inline-flex gap-2" key={`action-${phase.id}`}>
+                                {phase.status === 'payment_due' || phase.status === 'payment_confirmed' ? <Button variant="secondary" onClick={() => void advanceDemoPhase(phase.phase as 1 | 2 | 3 | 4, false)} disabled={activeAction !== null}>Iniciar fase {phase.phase}</Button> : null}
+                                {phase.status === 'in_progress' ? <Button onClick={() => void advanceDemoPhase(phase.phase as 1 | 2 | 3 | 4, true)} disabled={activeAction !== null || !phaseEvidence.trim()}>Terminar fase {phase.phase}</Button> : null}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <Info
                         label="Oferta aceptada"
                         value={

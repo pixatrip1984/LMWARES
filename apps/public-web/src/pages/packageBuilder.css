@@ -2168,6 +2168,17 @@ button.lmw-free-assets__status.is-published {
   width: 100%;
 }
 
+/* During the adaptive interview, the active decision is the whole workspace. */
+.lmw-package-summary--guided {
+  grid-template-columns: minmax(0, 1120px);
+  justify-content: center;
+  max-width: 1240px;
+}
+
+.lmw-package-summary--guided .lmw-summary-main {
+  padding: 0;
+}
+
 .lmw-summary-main,
 .lmw-summary-next {
   backdrop-filter: blur(20px);

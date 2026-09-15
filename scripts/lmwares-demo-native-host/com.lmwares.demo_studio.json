@@ -1,0 +1,9 @@
+{
+    "name":  "com.lmwares.demo_studio",
+    "description":  "LMWares Demo Studio private local bridge",
+    "path":  "C:\\dev\\oracle\\scripts\\lmwares-demo-native-host\\studio-host.cmd",
+    "type":  "stdio",
+    "allowed_origins":  [
+                            "chrome-extension://onnphmgblmlnecgmnknbhgflibbpckln/"
+                        ]
+}

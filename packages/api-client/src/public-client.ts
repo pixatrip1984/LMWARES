@@ -161,6 +161,7 @@ export interface PublicPackageIntakeBrief {
 }
 
 export interface PublicPackageIntake {
+  scopeAutomation?: 'preparing' | 'review_required' | null;
   id: string;
   plan: 'starter' | 'pro';
   modules: string[];
@@ -178,7 +179,30 @@ export interface PublicPackageIntake {
   workOrder: PublicStarterWorkOrder | null;
   clientProject: PublicStarterClientProject | null;
   maintenanceSubscription: PublicMaintenanceSubscription | null;
+  demo: PublicCommercialDemoLifecycle | null;
+  demoPhases: PublicCommercialDemoPhase[];
   submittedAt: string;
+  updatedAt: string;
+}
+
+export interface PublicCommercialDemoLifecycle {
+  id: string;
+  slug: string;
+  siteName: string;
+  status: 'demo_preparing' | 'demo_ready' | 'phase_1_decision_pending' | 'phase_1_payment_due' | 'in_implementation' | 'client_review' | 'ready_to_publish' | 'live' | 'canceled';
+  demoPublishedAt: string | null;
+  phaseZeroCompletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicCommercialDemoPhase {
+  id: string;
+  phase: 0 | 1 | 2 | 3 | 4;
+  status: 'locked' | 'in_progress' | 'payment_due' | 'payment_confirmed' | 'completed';
+  evidence: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
   updatedAt: string;
 }
 
@@ -494,9 +518,16 @@ export function createPublicClient(baseUrl: string) {
     },
 
     acceptCommercialOffer(intakeId: string, offerId: string, termsVersion: string) {
-      return http.post<{ offer: PublicCommercialOffer; billingOrders: PublicBillingOrder[] }>(
+      return http.post<{ offer: PublicCommercialOffer; billingOrders: PublicBillingOrder[]; demo: import('@starter/domain').CommercialDemoLifecycle }>(
         `/commercial-intakes/${encodeURIComponent(intakeId)}/offers/${encodeURIComponent(offerId)}/accept`,
         { accepted: true, termsVersion },
+      );
+    },
+
+    continueCommercialImplementation(intakeId: string) {
+      return http.post<{ lifecycle: PublicCommercialDemoLifecycle; billingOrders: PublicBillingOrder[] }>(
+        `/commercial-intakes/${encodeURIComponent(intakeId)}/demo/continue-implementation`,
+        {},
       );
     },
 

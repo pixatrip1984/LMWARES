@@ -137,6 +137,32 @@ export class LmwaresStarterClientProjectsRepository {
       .first<{ business_name: string }>();
     if (!intake) throw AppError.notFound('Solicitud comercial');
 
+    // Un ciclo demo_v1 ya posee la identidad pública desde fase 0. Al llegar
+    // el pago de fase 1 se vincula a la orden pagada, sin emitir otro slug.
+    const demo = await this.db
+      .prepare(`SELECT slug, site_name FROM lmw_commercial_demo_lifecycles WHERE intake_id = ? LIMIT 1`)
+      .bind(input.intakeId)
+      .first<{ slug: string; site_name: string }>();
+    if (demo) {
+      const id = newId();
+      const now = nowIso();
+      try {
+        await this.db
+          .prepare(
+            `INSERT INTO lmw_starter_client_projects
+              (id, work_order_id, intake_id, user_id, slug, site_name, status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'provisioning', ?, ?)`,
+          )
+          .bind(id, input.workOrderId, input.intakeId, input.userId, demo.slug, demo.site_name, now, now)
+          .run();
+        return (await this.getById(id))!;
+      } catch (error) {
+        const concurrent = await this.getByWorkOrderId(input.workOrderId);
+        if (concurrent) return concurrent;
+        throw error;
+      }
+    }
+
     const baseSlug = normalizeSlugBase(intake.business_name) || 'sitio-starter';
     const siteName = intake.business_name?.trim() || 'Tu sitio Starter';
     const id = newId();

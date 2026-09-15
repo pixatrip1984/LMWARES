@@ -9,9 +9,17 @@ import {
   reviewPackageIntakeSchema,
   updateStarterWorkOrderStatusSchema,
   publishStarterWorkOrderSchema,
+  publishCommercialDemoSchema,
+  completeCommercialPhaseSchema,
+  commercialPhaseParamSchema,
 } from '@starter/validation';
 import type { Bindings, Variables } from '../env';
-import { requireWrite } from '../middleware/auth';
+import { requireApproval, requireWrite } from '../middleware/auth';
+import {
+  releaseArtifactPath,
+  rewriteReleaseCssForReview,
+  rewriteReleaseHtmlForReview,
+} from '../lib/commercial-demo-review-routing';
 
 export const commercialIntakesAdmin = new Hono<{
   Bindings: Bindings;
@@ -37,13 +45,131 @@ commercialIntakesAdmin.get('/:id', async (c) => {
     ? await repos.lmwaresBillingOrders.getPhasesForOffer(acceptedOffer.id)
     : [];
   const workOrder = await repos.lmwaresStarterWorkOrders.getByIntakeId(intake.id);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(intake.id);
+  const demoPhases = lifecycle ? await repos.lmwaresCommercialDemoLifecycles.listPhases(lifecycle.id) : [];
+  const agentJobs = await repos.lmwaresCommercialAgentJobs.listForIntake(intake.id);
   const [maintenanceSubscription, clientProject] = workOrder
     ? await Promise.all([
         repos.lmwaresMaintenanceSubscriptions.getByWorkOrderId(workOrder.id),
         repos.lmwaresStarterClientProjects.getByWorkOrderId(workOrder.id),
       ])
     : [null, null];
-  return c.json({ intake, offers, billingOrders, workOrder, clientProject, maintenanceSubscription });
+  return c.json({ intake, offers, billingOrders, workOrder, clientProject, maintenanceSubscription, lifecycle, demoPhases, agentJobs });
+});
+
+commercialIntakesAdmin.get('/:id/demo/review', async (c) => {
+  const repos = createRepositories(c.env.DB);
+  const job = await repos.lmwaresCommercialAgentJobs.getForIntake(c.req.param('id')!, 'demo');
+  const assetKey = job?.result?.reviewAssetKey;
+  if (typeof assetKey !== 'string' || !assetKey.startsWith('commercial-demos/')) throw AppError.notFound('Demo en revisión');
+  const object = await c.env.MEDIA.get(assetKey);
+  if (!object) throw AppError.notFound('Archivo de demo');
+  const headers = new Headers(); object.writeHttpMetadata(headers);
+  headers.set('content-type', 'text/html; charset=UTF-8'); headers.set('cache-control', 'no-store'); headers.set('x-robots-tag', 'noindex, nofollow');
+  return new Response(object.body, { headers });
+});
+
+// Creative Studio releases are routed static sites. Keep their review surface
+// behind Admin Access until a human explicitly attaches the release to the
+// customer lifecycle.
+commercialIntakesAdmin.get('/:id/demo/releases/:releaseId/review', async (c) => serveSubmittedReleaseReview(c, '/'));
+commercialIntakesAdmin.get('/:id/demo/releases/:releaseId/review/*', async (c) => {
+  const prefix = `/admin/commercial-intakes/${encodeURIComponent(c.req.param('id')!)}/demo/releases/${encodeURIComponent(c.req.param('releaseId')!)}/review`;
+  const pathname = new URL(c.req.url).pathname;
+  return serveSubmittedReleaseReview(c, pathname.startsWith(prefix) ? pathname.slice(prefix.length) || '/' : '/');
+});
+
+commercialIntakesAdmin.post('/:id/demo/approve', requireWrite, async (c) => {
+  const repos = createRepositories(c.env.DB);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(c.req.param('id')!);
+  const job = await repos.lmwaresCommercialAgentJobs.getForIntake(c.req.param('id')!, 'demo');
+  const assetKey = job?.result?.reviewAssetKey;
+  if (!lifecycle || !job || job.status !== 'completed' || typeof assetKey !== 'string' || !assetKey.startsWith(`commercial-demos/${lifecycle.id}/`)) throw new AppError('conflict', 'No hay una demo terminada para aprobar.');
+  const updated = await repos.lmwaresCommercialDemoLifecycles.publishDemo({ intakeId: lifecycle.intakeId, assetKey, actor: c.get('admin').email });
+  await repos.audit.record({ actorType: 'admin', actorId: c.get('admin').email, action: 'lmwares.demo.agent_approved', entityType: 'lmwares_commercial_demo_lifecycle', entityId: updated.id, metadata: { jobId: job.id, assetKey } });
+  return c.json({ lifecycle: updated });
+});
+
+commercialIntakesAdmin.post('/:id/demo/publish', requireWrite, async (c) => {
+  const input = parseInput(publishCommercialDemoSchema, await readJson(c));
+  const repos = createRepositories(c.env.DB);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(c.req.param('id')!);
+  if (!lifecycle) throw AppError.notFound('Demo comercial');
+  const assetKey = `commercial-demos/${lifecycle.id}/index.html`;
+  await c.env.MEDIA.put(assetKey, input.html, {
+    httpMetadata: { contentType: 'text/html; charset=UTF-8', cacheControl: 'no-store' },
+  });
+  const updated = await repos.lmwaresCommercialDemoLifecycles.publishDemo({
+    intakeId: lifecycle.intakeId,
+    assetKey,
+    actor: c.get('admin').email,
+  });
+  await repos.audit.record({
+    actorType: 'admin', actorId: c.get('admin').email, action: 'lmwares.demo.published',
+    entityType: 'lmwares_commercial_demo_lifecycle', entityId: updated.id,
+    metadata: { intakeId: updated.intakeId, slug: updated.slug, assetKey },
+  });
+  return c.json({ lifecycle: updated });
+});
+
+commercialIntakesAdmin.post('/:id/phases/0/complete', requireWrite, async (c) => {
+  const input = parseInput(completeCommercialPhaseSchema, await readJson(c));
+  const repos = createRepositories(c.env.DB);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(c.req.param('id')!);
+  if (!lifecycle) throw AppError.notFound('Demo comercial');
+  if (!lifecycle.demoAssetKey) {
+    throw new AppError('conflict', 'Publica la demo en el subdominio antes de cerrar la fase 0.');
+  }
+  const updated = await repos.lmwaresCommercialDemoLifecycles.completePhaseZero({
+    intakeId: lifecycle.intakeId, actor: c.get('admin').email, evidence: input.evidence,
+  });
+  await repos.audit.record({
+    actorType: 'admin', actorId: c.get('admin').email, action: 'lmwares.demo.phase_0.completed',
+    entityType: 'lmwares_commercial_demo_lifecycle', entityId: updated.id,
+    metadata: { intakeId: updated.intakeId, evidence: input.evidence },
+  });
+  return c.json({ lifecycle: updated });
+});
+
+commercialIntakesAdmin.post('/:id/demo/releases/:releaseId/approve', requireApproval, async (c) => {
+  const repos = createRepositories(c.env.DB);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(c.req.param('id')!);
+  if (!lifecycle) throw AppError.notFound('Demo comercial');
+  const updated = await repos.lmwaresCommercialDemoLifecycles.attachApprovedRelease({
+    lifecycleId: lifecycle.id,
+    releaseId: c.req.param('releaseId')!,
+    actor: c.get('admin').email,
+    evidence: `release:${c.req.param('releaseId')!}`,
+  });
+  await repos.audit.record({
+    actorType: 'admin', actorId: c.get('admin').email, action: 'lmwares.demo.release.approved',
+    entityType: 'lmwares_commercial_demo_lifecycle', entityId: updated.id,
+    metadata: { intakeId: updated.intakeId, releaseId: c.req.param('releaseId')!, slug: updated.slug },
+  });
+  return c.json({ lifecycle: updated });
+});
+
+commercialIntakesAdmin.post('/:id/phases/:phase/start', requireWrite, async (c) => {
+  const phase = parseInput(commercialPhaseParamSchema, c.req.param('phase'));
+  const repos = createRepositories(c.env.DB);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(c.req.param('id')!);
+  if (!lifecycle) throw AppError.notFound('Demo comercial');
+  const order = (await repos.lmwaresBillingOrders.getPhasesForOffer(lifecycle.commercialOfferId)).find((item) => item.phase === phase);
+  if (!order || order.status !== 'paid') throw new AppError('conflict', `La fase ${phase} requiere un pago confirmado antes de iniciar.`);
+  const updated = await repos.lmwaresCommercialDemoLifecycles.startPhase({ intakeId: lifecycle.intakeId, phase, actor: c.get('admin').email });
+  await repos.audit.record({ actorType: 'admin', actorId: c.get('admin').email, action: 'lmwares.demo.phase.started', entityType: 'lmwares_commercial_demo_lifecycle', entityId: lifecycle.id, metadata: { phase } });
+  return c.json({ phase: updated });
+});
+
+commercialIntakesAdmin.post('/:id/phases/:phase/complete', requireWrite, async (c) => {
+  const phase = parseInput(commercialPhaseParamSchema, c.req.param('phase'));
+  const input = parseInput(completeCommercialPhaseSchema, await readJson(c));
+  const repos = createRepositories(c.env.DB);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(c.req.param('id')!);
+  if (!lifecycle) throw AppError.notFound('Demo comercial');
+  const updated = await repos.lmwaresCommercialDemoLifecycles.completePaidPhase({ intakeId: lifecycle.intakeId, phase, actor: c.get('admin').email, evidence: input.evidence });
+  await repos.audit.record({ actorType: 'admin', actorId: c.get('admin').email, action: 'lmwares.demo.phase.completed', entityType: 'lmwares_commercial_demo_lifecycle', entityId: lifecycle.id, metadata: { phase, evidence: input.evidence } });
+  return c.json({ phase: updated });
 });
 
 commercialIntakesAdmin.post('/:id/work-order/assign', requireWrite, async (c) => {
@@ -333,6 +459,36 @@ commercialIntakesAdmin.post('/:id/implementation-payments/mark-test-paid', requi
   });
   return c.json({ billingOrders, workOrder, clientProject });
 });
+
+async function serveSubmittedReleaseReview(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  pathname: string,
+): Promise<Response> {
+  const repos = createRepositories(c.env.DB);
+  const lifecycle = await repos.lmwaresCommercialDemoLifecycles.getByIntakeId(c.req.param('id')!);
+  if (!lifecycle) throw AppError.notFound('Demo comercial');
+  const release = await repos.lmwaresCommercialDemoCreativeStudio.getReleaseById(c.req.param('releaseId')!);
+  if (!release || release.lifecycleId !== lifecycle.id) throw AppError.notFound('Release de demo');
+  const artifactPath = releaseArtifactPath(release.artifactPrefix, release.routeManifest, pathname);
+  if (!artifactPath) throw AppError.notFound('Ruta de demo');
+  const object = await c.env.MEDIA.get(`${release.artifactPrefix}${artifactPath}`);
+  if (!object) throw AppError.notFound('Archivo de demo');
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('cache-control', 'no-store');
+  headers.set('x-content-type-options', 'nosniff');
+  headers.set('x-robots-tag', 'noindex, nofollow, noarchive');
+  const basePath = `/admin/commercial-intakes/${encodeURIComponent(c.req.param('id')!)}/demo/releases/${encodeURIComponent(release.id)}/review/`;
+  if (artifactPath.endsWith('.html')) {
+    headers.set('content-type', 'text/html; charset=UTF-8');
+    return new Response(rewriteReleaseHtmlForReview(await object.text(), basePath), { headers });
+  }
+  if (artifactPath.endsWith('.css')) {
+    headers.set('content-type', 'text/css; charset=UTF-8');
+    return new Response(rewriteReleaseCssForReview(await object.text(), basePath), { headers });
+  }
+  return new Response(object.body, { headers });
+}
 
 async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<unknown> {
   try {

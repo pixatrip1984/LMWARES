@@ -7,6 +7,7 @@ import {
 } from '@starter/domain';
 import { newId, nowIso, parseJson } from '../helpers';
 import { LmwaresStarterClientProjectsRepository } from './lmwares-starter-client-projects';
+import { LmwaresCommercialDemoLifecyclesRepository } from './lmwares-commercial-demo-lifecycles';
 
 interface StarterWorkOrderRow {
   id: string;
@@ -73,6 +74,10 @@ export class LmwaresStarterWorkOrdersRepository {
       workOrderId: workOrder.id,
       intakeId: workOrder.intakeId,
       userId: workOrder.userId,
+    });
+    await new LmwaresCommercialDemoLifecyclesRepository(this.db).attachPaidWorkOrder({
+      intakeId: workOrder.intakeId,
+      workOrderId: workOrder.id,
     });
     return workOrder;
   }

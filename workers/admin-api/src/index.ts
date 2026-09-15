@@ -4,7 +4,7 @@ import { AppError } from '@starter/domain';
 import { parseList } from '@starter/config';
 import type { Bindings, Variables } from './env';
 import { onError } from './middleware/error';
-import { accessMiddleware } from './middleware/auth';
+import { accessMiddleware, salesAccessMiddleware } from './middleware/auth';
 import { publications } from './routes/publications';
 import { requests } from './routes/requests';
 import { audit } from './routes/audit';
@@ -18,6 +18,8 @@ import { commercialIntakesAdmin } from './routes/commercial-intakes';
 import { discountCodesAdmin } from './routes/discount-codes';
 import { stuckPayments } from './routes/stuck-payments';
 import { starterDomainsAdmin } from './routes/starter-domains';
+import { salesActorsAdmin } from './routes/sales-actors';
+import { sales } from './routes/sales';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -32,7 +34,7 @@ app.use('*', (c, next) => {
   return cors({
     origin: (origin) => (allowed.includes(origin) ? origin : null),
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'X-Dev-Email'],
+    allowHeaders: ['Content-Type', 'Idempotency-Key', 'X-Dev-Email'],
     credentials: true,
   })(c, next);
 });
@@ -60,6 +62,7 @@ app.route('/admin/commercial-intakes', commercialIntakesAdmin);
 app.route('/admin/discount-codes', discountCodesAdmin);
 app.route('/admin/stuck-payments', stuckPayments);
 app.route('/admin/starter-domains', starterDomainsAdmin);
+app.route('/admin/sales-actors', salesActorsAdmin);
 app.route('/admin/projects/:projectId/modules/blog', siteBlogAdmin);
 app.route('/admin/projects/:projectId/modules/galleries', adminSiteGalleries);
 app.route('/admin/projects/:projectId/modules/docs', siteDocsAdmin);
@@ -67,5 +70,14 @@ app.route('/admin/projects/:projectId/modules/documents', siteDocsAdmin);
 app.route('/admin/projects/:projectId/modules/forms', siteForms);
 app.route('/admin/projects/:projectId/modules/events', siteEvents);
 app.route('/admin/projects', lmwaresProjects);
+
+// Sales comparte el Worker y la identidad de Access, pero no el middleware ni
+// permisos de Admin. Sus rutas se irán incorporando por etapas.
+app.use('/sales/*', salesAccessMiddleware());
+app.get('/sales/me', (c) => {
+  const seller = c.get('salesActor');
+  return c.json({ seller: { id: seller.id, name: seller.displayName, email: seller.emailNormalized } });
+});
+app.route('/sales', sales);
 
 export default app;

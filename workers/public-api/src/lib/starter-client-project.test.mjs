@@ -104,10 +104,8 @@ test('the public account response and admin commercial intake detail expose the 
   assert.match(accountSource, /clientProject:\s*\n\s*workOrdersByIntake\.has\(intake\.id\)/);
 
   assert.match(adminCommercialSource, /repos\.lmwaresStarterClientProjects\.getByWorkOrderId\(workOrder\.id\)/);
-  assert.match(
-    adminCommercialSource,
-    /c\.json\(\{ intake, offers, billingOrders, workOrder, clientProject, maintenanceSubscription \}\)/,
-  );
+  assert.match(adminCommercialSource, /lifecycle = await repos\.lmwaresCommercialDemoLifecycles/);
+  assert.match(adminCommercialSource, /demoPhases/);
 });
 
 test('client project lifecycle follows work-order assignment and cancellation', () => {

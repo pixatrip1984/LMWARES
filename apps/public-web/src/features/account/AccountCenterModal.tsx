@@ -22,6 +22,7 @@ type AccountCenterModalProps = {
   loading: boolean;
   onClose: () => void;
   onAcceptOffer: (intakeId: string, offerId: string, termsVersion: string) => Promise<void>;
+  onContinueImplementation: (intakeId: string) => Promise<void>;
   onCreateStarterDomain: (
     clientProjectId: string,
     input: { hostname: string; type: 'www' | 'app' },
@@ -74,6 +75,7 @@ export function AccountCenterModal({
   loading,
   onClose,
   onAcceptOffer,
+  onContinueImplementation,
   onCreateStarterDomain,
   onMarkAllRead,
   onMarkRead,
@@ -224,6 +226,7 @@ export function AccountCenterModal({
               copyState={copyState}
               intakes={overview?.commercialIntakes ?? []}
               onAcceptOffer={onAcceptOffer}
+              onContinueImplementation={onContinueImplementation}
               onCreateStarterDomain={onCreateStarterDomain}
               onCopy={copyUrl}
               onPurchaseStarterDomain={onPurchaseStarterDomain}
@@ -794,6 +797,7 @@ function SitesPanel({
   copyState,
   intakes,
   onAcceptOffer,
+  onContinueImplementation,
   onCreateStarterDomain,
   onCopy,
   onPurchaseStarterDomain,
@@ -804,6 +808,7 @@ function SitesPanel({
   copyState: string | null;
   intakes: PublicPackageIntake[];
   onAcceptOffer: (intakeId: string, offerId: string, termsVersion: string) => Promise<void>;
+  onContinueImplementation: (intakeId: string) => Promise<void>;
   onCreateStarterDomain: (
     clientProjectId: string,
     input: { hostname: string; type: 'www' | 'app' },
@@ -822,6 +827,7 @@ function SitesPanel({
 }) {
   const [acceptedTerms, setAcceptedTerms] = useState<Record<string, boolean>>({});
   const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
+  const [continuingIntakeId, setContinuingIntakeId] = useState<string | null>(null);
   const [offerError, setOfferError] = useState<string | null>(null);
 
   const acceptOffer = async (intake: PublicPackageIntake) => {
@@ -835,6 +841,18 @@ function SitesPanel({
       setOfferError(error instanceof Error ? error.message : 'No pudimos aceptar la oferta.');
     } finally {
       setAcceptingOfferId(null);
+    }
+  };
+
+  const continueImplementation = async (intake: PublicPackageIntake) => {
+    setContinuingIntakeId(intake.id);
+    setOfferError(null);
+    try {
+      await onContinueImplementation(intake.id);
+    } catch (error) {
+      setOfferError(error instanceof Error ? error.message : 'No pudimos preparar la fase 1.');
+    } finally {
+      setContinuingIntakeId(null);
     }
   };
 
@@ -859,7 +877,7 @@ function SitesPanel({
       {intakes.length ? (
         <section className="lmw-account-intakes" aria-label="Solicitudes comerciales">
           <header>
-            <small>STARTER / PRO · REVISIÓN HUMANA</small>
+            <small>STARTER / PRO · SOLICITUD Y PROPUESTA</small>
             <h4>Solicitudes comerciales</h4>
           </header>
           <div>
@@ -900,6 +918,12 @@ function SitesPanel({
                   ))}
                 </div>
                 <h4>{intake.modules.length} capacidades seleccionadas</h4>
+                <p>Solicitud {intake.id.slice(0, 8)}{intake.brief?.businessName ? ` · ${intake.brief.businessName}` : ''}</p>
+                {['submitted', 'scope_review'].includes(intake.status) ? (
+                  <p role="status">{intake.scopeAutomation === 'review_required'
+                    ? 'Tu solicitud está guardada, pero la propuesta necesita revisión del equipo. No necesitas enviarla de nuevo.'
+                    : 'Recibimos tu solicitud y estamos preparando el alcance. Esta sección se actualiza automáticamente; no necesitas enviarla de nuevo.'}</p>
+                ) : null}
                 <p>
                   {intake.modules
                     .map((module) => MODULE_PRESENTATION[module]?.label ?? module)
@@ -981,11 +1005,65 @@ function SitesPanel({
                         >
                           {acceptingOfferId === intake.currentOffer.id
                             ? 'Aceptando…'
-                            : 'Aceptar oferta'}
+                            : 'Aceptar y comenzar mi demo gratis'}
                         </button>
                       </div>
                     ) : (
                       <div className="lmw-account-offer__accept">
+                        {intake.demo ? (
+                          <section className="lmw-account-project-callout">
+                            <strong>
+                              {intake.demo.phaseZeroCompletedAt
+                                ? 'Tu demo está aprobada y lista para ti'
+                                : 'Tu demo gratuita está en preparación'}
+                            </strong>
+                            <span>{intake.demo.siteName}</span>
+                            <small>Fase 0 · {intake.demo.slug}.lmwares.com</small>
+                            <a
+                              href={`https://${encodeURIComponent(intake.demo.slug)}.lmwares.com`}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              Abrir mi demo →
+                            </a>
+                            <div className="lmw-account-offer__phase-cards">
+                              {intake.demoPhases.map((phase) => (
+                                <div className="lmw-account-phase-card" key={phase.id}>
+                                  <div className="lmw-account-phase-card__header">
+                                    <span className="lmw-account-phase-card__number">
+                                      {phase.phase === 0 ? 'FASE 0 · DEMO' : `FASE ${phase.phase}`}
+                                    </span>
+                                    <span className="lmw-account-phase-card__badge">
+                                      {phase.status === 'completed'
+                                        ? '✓ Terminada'
+                                        : phase.status === 'payment_due'
+                                          ? 'Pago pendiente'
+                                          : phase.status === 'in_progress'
+                                            ? 'En curso'
+                                            : 'Pendiente'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {!intake.demo.phaseZeroCompletedAt ? (
+                              <p className="lmw-account-offer__phase1-callout">
+                                Tu demo se desarrolla sin costo. Te avisaremos cuando esté lista para revisar.
+                              </p>
+                            ) : intake.demo.status === 'demo_ready' || intake.demo.status === 'phase_1_decision_pending' ? (
+                              <div className="lmw-account-offer__phase1-callout">
+                                <p>La demo fue aprobada. Si quieres continuar, prepara ahora la Fase 1; no se genera ningún cobro hasta esta decisión.</p>
+                                <button
+                                  disabled={continuingIntakeId === intake.id}
+                                  onClick={() => void continueImplementation(intake)}
+                                  type="button"
+                                >
+                                  {continuingIntakeId === intake.id ? 'Preparando Fase 1…' : 'Continuar con la implementación →'}
+                                </button>
+                              </div>
+                            ) : null}
+                          </section>
+                        ) : null}
                         {(() => {
                           const phases = intake.implementationPhases
                             .slice()
@@ -1005,7 +1083,7 @@ function SitesPanel({
                                     ? '✓ Pago de implementación completado (4/4 fases).'
                                     : `Oferta aceptada · Fases pagadas: ${paidCount}/4`}
                                 </strong>
-                                {!isPhase1Paid && (
+                                {!isPhase1Paid && intake.demo?.status === 'phase_1_payment_due' && (
                                   <p className="lmw-account-offer__phase1-callout">
                                     <b>Atención:</b> Debes realizar el pago de la <b>Fase 1</b> para
                                     iniciar la construcción del proyecto.

@@ -14,6 +14,7 @@ import type {
   PublicDomainAvailability,
 } from '@starter/api-client';
 import { AppError, type PublicUser } from '@starter/domain';
+import { prepareCommercialSubmissionKey, replaceCommercialSubmissionKey } from '../lib/commercialSubmission';
 import {
   FREE_LAYOUT_PRESETS,
   FREE_PALETTE_PRESETS,
@@ -31,6 +32,14 @@ import {
 } from '../features/package-builder/FreePublicationModal';
 import { PackagePreviewModal } from '../features/package-builder/PackagePreviewModal';
 import { OpenStreetMapPicker } from '../features/package-builder/OpenStreetMapPicker';
+import { CommercialInterview } from '../features/package-builder/CommercialInterview';
+import {
+  buildInterviewSubmission,
+  deriveBrief,
+  loadInterviewState,
+  resetInterviewState,
+  type BusinessInterviewState,
+} from '../features/package-builder/businessInterviewModel';
 import { api } from '../lib/api';
 import { config } from '../lib/config';
 import {
@@ -47,7 +56,6 @@ import {
   getModuleSelectionError,
   getPackageLabel,
   getPlanSeed,
-  isPackageBriefComplete,
   isPackageModuleAvailable,
   loadPackageDraft,
   MAINTENANCE_SECURITY_ADD_ON,
@@ -223,7 +231,11 @@ export function PackageBuilderPage() {
   const [session, setSession] = useState<PublicUser | null | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
+  const summaryBriefRef = useRef<HTMLElement | null>(null);
+  const shouldScrollToSummaryBriefRef = useRef(false);
   const [draft, setDraft] = useState<PackageDraft>(() => loadPackageDraft());
+  const [interview, setInterview] = useState<BusinessInterviewState>(() => loadInterviewState());
+  const [interviewReady, setInterviewReady] = useState(false);
   const [view, setView] = useState<BuilderView>('package');
   const [notice, setNotice] = useState('');
   const [fileError, setFileError] = useState('');
@@ -294,6 +306,15 @@ export function PackageBuilderPage() {
     freeForm.locationLongitude,
   );
 
+  useEffect(() => {
+    if (view !== 'summary' || !shouldScrollToSummaryBriefRef.current) return;
+
+    shouldScrollToSummaryBriefRef.current = false;
+    requestAnimationFrame(() => {
+      summaryBriefRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [view]);
+
   const loadAccount = useCallback(async () => {
     setAccountLoading(true);
     setAccountError('');
@@ -305,6 +326,18 @@ export function PackageBuilderPage() {
       setAccountLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!accountOpen || !session) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = async () => {
+      if (!stopped && document.visibilityState === 'visible') await loadAccount();
+      if (!stopped) timer = setTimeout(refresh, 15_000);
+    };
+    timer = setTimeout(refresh, 15_000);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [accountOpen, session, loadAccount]);
 
   const markAccountNotificationRead = useCallback(async (notificationId: string) => {
     const result = await api.markAccountNotificationRead(notificationId);
@@ -346,6 +379,11 @@ export function PackageBuilderPage() {
     termsVersion: string,
   ) => {
     await api.acceptCommercialOffer(intakeId, offerId, termsVersion);
+    await loadAccount();
+  }, [loadAccount]);
+
+  const continueCommercialImplementation = useCallback(async (intakeId: string) => {
+    await api.continueCommercialImplementation(intakeId);
     await loadAccount();
   }, [loadAccount]);
 
@@ -732,8 +770,11 @@ export function PackageBuilderPage() {
   };
 
   const resetDraft = () => {
+    resetInterviewState();
     updateDraft({ ...DEFAULT_DRAFT, updatedAt: new Date().toISOString() });
     setFreeFiles([]);
+    setInterview(loadInterviewState());
+    setInterviewReady(false);
     setFreeForm({
       slug: '',
       siteName: '',
@@ -803,6 +844,7 @@ export function PackageBuilderPage() {
 
   const submitDraft = async () => {
     if (draft.plan !== 'free') {
+      if (!session) { setFileError('Inicia sesión para enviar tu solicitud.'); return; }
       const selectionError = getModuleSelectionError(draft.plan, draft.modules);
       if (selectionError?.kind === 'starter-needs-complement') {
         setFileError('Selecciona al menos un complemento antes de enviar.');
@@ -812,23 +854,32 @@ export function PackageBuilderPage() {
         setFileError('Pro requiere al menos tres complementos. Para dos módulos, elige la opción Starter.');
         return;
       }
-      if (!isPackageBriefComplete(draft.brief)) {
-        setFileError('Completa contacto, teléfono, negocio, resumen y objetivo del sitio antes de enviar.');
+      if (!interviewReady) {
+        setFileError('Completa el diagnóstico guiado antes de enviar la solicitud.');
         return;
       }
+      const briefForSubmit = deriveBrief(interview, draft.brief);
+      // Keep a single client-evidence snapshot across an idempotency-key retry.
+      const interviewSubmission = buildInterviewSubmission(interview);
       setFileError('');
       setSubmitting(true);
       try {
-        let submissionKey = commercialSubmissionKey;
         let result;
         const discountCodeToSend =
           discountState.status === 'applied' ? discountCode.trim() : null;
+        const payload = {
+          plan: draft.plan, modules: draft.modules, marketing: false,
+          brief: normalizeBriefForSubmit(briefForSubmit), interview: interviewSubmission,
+          discountCode: discountCodeToSend,
+        };
+        let submissionKey = await prepareCommercialSubmissionKey(payload, session.id, commercialSubmissionKey);
         try {
           result = await api.createCommercialPackageIntake({
             plan: draft.plan,
             modules: draft.modules,
             marketing: false,
-            brief: normalizeBriefForSubmit(draft.brief),
+            brief: normalizeBriefForSubmit(briefForSubmit),
+            interview: interviewSubmission,
             discountCode: discountCodeToSend,
           }, submissionKey);
         } catch (error) {
@@ -839,11 +890,13 @@ export function PackageBuilderPage() {
             && /ya fue cerrada|clave de envío/i.test(error.message)
           ) {
             submissionKey = rotateCommercialSubmissionKey();
+            replaceCommercialSubmissionKey(submissionKey);
             result = await api.createCommercialPackageIntake({
               plan: draft.plan,
               modules: draft.modules,
               marketing: false,
-              brief: normalizeBriefForSubmit(draft.brief),
+              brief: normalizeBriefForSubmit(briefForSubmit),
+              interview: interviewSubmission,
               discountCode: discountCodeToSend,
             }, submissionKey);
           } else {
@@ -865,7 +918,7 @@ export function PackageBuilderPage() {
 
         setSubmitted(true);
         void loadAccount();
-        openAccount('notifications');
+        openAccount('sites');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud.';
         setFileError(message);
@@ -1679,21 +1732,23 @@ export function PackageBuilderPage() {
           </aside>
         </main>
       ) : (
-        <main className="lmw-package-summary">
+        <main className={`lmw-package-summary ${draft.plan !== 'free' && !interviewReady && !submitted ? 'lmw-package-summary--guided' : ''}`}>
           <section className="lmw-summary-main">
-            <p className="lmw-builder-eyebrow">04 / Resumen</p>
-            <h1>
-              {submitted
-                ? 'Solicitud enviada para revisión humana.'
-                : 'Revisa tu paquete antes de enviarlo.'}
-            </h1>
-            <p>
-              {submitted
-                ? 'Ya congelamos este alcance en Oracle. Todavía no genera un cobro, contrato ni recurso de Cloudflare.'
-                : 'Éste es un borrador operativo. Sólo se envía a revisión cuando pulses el botón de abajo. Todavía no genera un cobro, contrato o recurso de Cloudflare.'}
-            </p>
+            {draft.plan === 'free' || interviewReady || submitted ? <>
+              <p className="lmw-builder-eyebrow">04 / Resumen</p>
+              <h1>
+                {submitted
+                  ? 'Solicitud recibida. Estamos preparando tu propuesta.'
+                  : 'Revisa tu paquete antes de enviarlo.'}
+              </h1>
+              <p>
+                {submitted
+                  ? 'Puedes seguir el avance en Mis sitios. Cuando esté lista, revisa y acepta la propuesta para comenzar la demo gratuita. No se realizará ningún cobro todavía.'
+                  : 'Éste es un borrador operativo. Sólo se envía a revisión cuando pulses el botón de abajo. Todavía no genera un cobro, contrato o recurso de Cloudflare.'}
+              </p>
+            </> : null}
 
-            {draft.plan !== 'free' ? (
+            {draft.plan !== 'free' && (interviewReady || submitted) ? (
               <section className="lmw-summary-visual" aria-label="Composición visual del paquete">
                 <header>
                   <span>ARQUITECTURA SELECCIONADA</span>
@@ -1711,102 +1766,12 @@ export function PackageBuilderPage() {
             ) : null}
 
             {draft.plan !== 'free' ? (
-              <section className="lmw-summary-brief" aria-labelledby="commercial-brief-title">
-                <header>
-                  <strong id="commercial-brief-title">Contacto y contexto del negocio</strong>
-                  <small>
-                    Con esto evaluamos tu solicitud y arrancamos el proyecto. El detalle fino de
-                    catálogo/galería se define después, ya con el proyecto aceptado.
-                  </small>
-                </header>
-                <div className="lmw-summary-brief-grid">
-                  <label>
-                    <span>Nombre de contacto *</span>
-                    <input
-                      onChange={(event) => updateBrief({ contactName: event.target.value })}
-                      placeholder="Ej. Juan Pérez (Fundador o encargado)"
-                      type="text"
-                      value={draft.brief.contactName}
-                    />
-                    <small>Persona directa con la que coordinaremos la propuesta y validación de alcance.</small>
-                  </label>
-                  <label>
-                    <span>Teléfono de contacto *</span>
-                    <input
-                      onChange={(event) => updateBrief({ contactPhone: event.target.value })}
-                      placeholder="Ej. 55 1234 5678 (WhatsApp preferido)"
-                      type="tel"
-                      value={draft.brief.contactPhone}
-                    />
-                    <small>Número directo para contacto rápido por WhatsApp o llamada.</small>
-                  </label>
-                  <label>
-                    <span>Nombre del negocio *</span>
-                    <input
-                      onChange={(event) => updateBrief({ businessName: event.target.value })}
-                      placeholder="Ej. AstraMed / Clínica Dental Astra"
-                      type="text"
-                      value={draft.brief.businessName}
-                    />
-                    <small>Nombre comercial o marca principal como aparecerá en el sitio.</small>
-                  </label>
-                  <label className="lmw-summary-brief-full">
-                    <span>¿A qué se dedica el negocio? *</span>
-                    <textarea
-                      onChange={(event) => updateBrief({ businessSummary: event.target.value })}
-                      placeholder="Ej. Somos una clínica dental especializada en ortodoncia e implantes en CDMX. Ofrecemos consulta de diagnóstico, tratamientos estéticos y atención directa con especialistas."
-                      rows={3}
-                      value={draft.brief.businessSummary}
-                    />
-                    <small>Describe los productos, servicios principales o la actividad de tu empresa.</small>
-                  </label>
-                  <label className="lmw-summary-brief-full">
-                    <span>¿Qué quieres lograr con el sitio? *</span>
-                    <textarea
-                      onChange={(event) => updateBrief({ siteGoal: event.target.value })}
-                      placeholder="Ej. Queremos proyectar seriedad, captar clientes locales por WhatsApp, mostrar nuestro catálogo de tratamientos y permitir agendar citas de valoración."
-                      rows={3}
-                      value={draft.brief.siteGoal}
-                    />
-                    <small>Indica los objetivos comerciales principales (ej. prospectos, cotizaciones, presencia profesional, catálogo).</small>
-                  </label>
-                  <label className="lmw-summary-brief-full">
-                    <span>
-                      Dominio personalizado deseado (opcional)
-                      <InfoTip title="¿Cómo funciona el dominio propio?">
-                        <p>Con Mantenimiento Básico o Avanzado, LMWares incluye un dominio y configura DNS, hosting y publicación.</p>
-                        <p>Sin mantenimiento, tú compras el dominio con el proveedor que prefieras y LMWares monta el sitio en él durante la entrega final.</p>
-                      </InfoTip>
-                    </span>
-                    <input
-                      onChange={(event) => updateBrief({ customDomainPreference: event.target.value })}
-                      placeholder="Ej. miclinicadental.mx"
-                      type="text"
-                      value={draft.brief.customDomainPreference}
-                    />
-                    <small>Si aún no tienes uno o no estás seguro, déjalo en blanco; lo definimos antes de publicar.</small>
-                  </label>
-                  <label className="lmw-summary-brief-full">
-                    <span>Estilo o referencia visual (opcional)</span>
-                    <input
-                      onChange={(event) => updateBrief({ stylePreference: event.target.value })}
-                      placeholder="Ej. Estilo médico moderno, azul marino y blanco, limpio (ej. inspirarse en clinica-ejemplo.com)"
-                      type="text"
-                      value={draft.brief.stylePreference}
-                    />
-                    <small>Colores de preferencia, tono de marca o enlaces a sitios que te gusten como referencia.</small>
-                  </label>
-                  <label className="lmw-summary-brief-full">
-                    <span>Notas adicionales (opcional)</span>
-                    <textarea
-                      onChange={(event) => updateBrief({ referenceNotes: event.target.value })}
-                      placeholder="Ej. Ya contamos con logotipo en vectores, necesitamos tener el sitio listo antes del 20 de este mes y requerimos facturación."
-                      rows={2}
-                      value={draft.brief.referenceNotes}
-                    />
-                    <small>Fechas de entrega deseadas, material existente (logo, fotos) o requisitos especiales.</small>
-                  </label>
-                </div>
+              <section ref={summaryBriefRef}>
+                <CommercialInterview
+                  onChange={(next) => { setInterview(next); setSubmitted(false); }}
+                  onReadyChange={setInterviewReady}
+                  state={interview}
+                />
               </section>
             ) : null}
 
@@ -1852,17 +1817,17 @@ export function PackageBuilderPage() {
               <p className="lmw-summary-error" role="alert">{fileError}</p>
             ) : null}
 
-            <div className="lmw-summary-actions">
+            {draft.plan === 'free' || interviewReady || submitted ? <div className="lmw-summary-actions">
               <button onClick={() => setView('package')} type="button">← Volver a configurar</button>
               <button className="lmw-builder-primary" disabled={submitting || submitted} onClick={submitDraft} type="button">
                 {submitted
                   ? 'Solicitud enviada'
                   : submitting ? 'Enviando...' : draft.plan === 'free' ? 'Enviar solicitud Free' : 'Enviar para revisión'} <span>{submitted ? '✓' : '→'}</span>
               </button>
-            </div>
+            </div> : null}
           </section>
 
-          <aside className="lmw-summary-sidebar">
+          {draft.plan === 'free' || interviewReady || submitted ? <aside className="lmw-summary-sidebar">
             <section className={`lmw-summary-ticket lmw-summary-ticket--${draft.plan}`}>
               <div className="lmw-summary-ticket__header">
                 <div>
@@ -1925,7 +1890,7 @@ export function PackageBuilderPage() {
               </ol>
               <div><i />{draft.plan === 'free' ? 'Free envía una solicitud real a la cola automatizada.' : 'El alcance original queda congelado para revisión humana. No se habilita ningún cobro todavía.'}</div>
             </section>
-          </aside>
+          </aside> : null}
         </main>
       )}
 
@@ -1933,6 +1898,7 @@ export function PackageBuilderPage() {
         draft={draft}
         onClose={() => setPreviewOpen(false)}
         onContinue={() => {
+          shouldScrollToSummaryBriefRef.current = true;
           setPreviewOpen(false);
           setView('summary');
         }}
@@ -1952,6 +1918,7 @@ export function PackageBuilderPage() {
         loading={accountLoading}
         onClose={() => setAccountOpen(false)}
         onAcceptOffer={acceptCommercialOffer}
+        onContinueImplementation={continueCommercialImplementation}
         onCreateStarterDomain={createStarterDomain}
         onMarkAllRead={markAllAccountNotificationsRead}
         onMarkRead={markAccountNotificationRead}

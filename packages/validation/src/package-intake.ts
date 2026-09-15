@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PACKAGE_INTAKE_STATUSES, PACKAGE_MODULE_IDS, PAID_PACKAGE_PLANS } from '@starter/domain';
+import { businessInterviewSubmissionSchema } from './business-interview';
 
 const briefTextField = (max: number) => z.string().trim().min(1).max(max);
 const briefOptionalTextField = (max: number) =>
@@ -32,6 +33,7 @@ export const createPackageIntakeSchema = z.object({
   modules: z.array(z.enum(PACKAGE_MODULE_IDS)).min(2).max(PACKAGE_MODULE_IDS.length),
   marketing: z.boolean(),
   brief: packageIntakeBriefSchema,
+  interview: businessInterviewSubmissionSchema.optional(),
   discountCode: z
     .string()
     .trim()

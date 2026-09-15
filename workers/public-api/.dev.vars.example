@@ -3,6 +3,11 @@
 TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"
 TURNSTILE_DISABLED="1"
 FREE_RUNNER_TOKEN="reemplaza-con-un-token-local-largo"
+TELEGRAM_BOT_TOKEN=""
+TELEGRAM_ADMIN_CHAT_ID=""
+TELEGRAM_NOTIFICATIONS_ENABLED="0"
+DEEPSEEK_API_KEY=""
+COMMERCIAL_DEMO_RUNNER_TOKEN="reemplaza-con-un-token-local-largo-3"
 # Token compartido con Admin API para el botón "Reconciliar ahora" de pagos
 # atascados; ausente = acción deshabilitada. Genera el mismo valor y pégalo en
 # ambos Workers.

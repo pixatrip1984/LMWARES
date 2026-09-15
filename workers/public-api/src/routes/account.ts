@@ -35,6 +35,7 @@ account.get('/', async (c) => {
     clientProjects,
     customDomains,
     maintenanceSubscriptions,
+    demoLifecycles,
   ] = await Promise.all([
     repos.lmwaresNotifications.listForUser(user.id),
     repos.lmwaresFreeIntakes.listForUser(user.id),
@@ -45,7 +46,22 @@ account.get('/', async (c) => {
     repos.lmwaresStarterClientProjects.listForUser(user.id),
     repos.lmwaresCustomDomains.listForUser(user.id),
     repos.lmwaresMaintenanceSubscriptions.listForUser(user.id),
+    repos.lmwaresCommercialDemoLifecycles.listForUser(user.id),
   ]);
+  const demoPhasesByLifecycle = new Map(
+    await Promise.all(demoLifecycles.map(async (lifecycle) => [
+      lifecycle.id,
+      await repos.lmwaresCommercialDemoLifecycles.listPhases(lifecycle.id),
+    ] as const)),
+  );
+  const demosByIntake = new Map(demoLifecycles.map((lifecycle) => [lifecycle.intakeId, lifecycle]));
+  const scopeStates = new Map(await Promise.all(commercialIntakes
+    .filter(intake => ['submitted', 'scope_review'].includes(intake.status))
+    .map(async intake => {
+      const job = await repos.lmwaresCommercialAgentJobs.getForIntake(intake.id, 'scope');
+      const exhausted = job?.status === 'claimed' && job.attempt >= job.maxAttempts && job.leaseUntil && job.leaseUntil < new Date().toISOString();
+      return [intake.id, !job || job.status === 'failed' || exhausted ? 'review_required' : 'preparing'] as const;
+    })));
   const offersByIntake = new Map(currentOffers.map((offer) => [offer.intakeId, offer]));
   const ordersByOffer = new Map<string, typeof billingOrders>();
   for (const order of billingOrders) {
@@ -75,6 +91,10 @@ account.get('/', async (c) => {
     sites: intakes.map(toAccountSite),
     commercialIntakes: commercialIntakes.map((intake) => ({
       id: intake.id,
+      brief: intake.brief,
+      scopeAutomation: scopeStates.get(intake.id) ?? null,
+      discountCode: intake.discountCode,
+      discountPercent: intake.discountPercent,
       plan: intake.plan,
       modules: intake.modules,
       marketing: intake.marketing,
@@ -115,11 +135,31 @@ account.get('/', async (c) => {
               maintenanceByWorkOrder.get(workOrdersByIntake.get(intake.id)!.id)!,
             )
           : null,
+      demo: demosByIntake.has(intake.id)
+        ? publicDemoLifecycle(demosByIntake.get(intake.id)!)
+        : null,
+      demoPhases: demosByIntake.has(intake.id)
+        ? (demoPhasesByLifecycle.get(demosByIntake.get(intake.id)!.id) ?? []).map(publicDemoPhase)
+        : [],
       submittedAt: intake.submittedAt,
       updatedAt: intake.updatedAt,
     })),
   });
 });
+
+function publicDemoLifecycle(lifecycle: {
+  id: string; slug: string; siteName: string; status: string; demoPublishedAt: string | null;
+  phaseZeroCompletedAt: string | null; createdAt: string; updatedAt: string;
+}) {
+  return { id: lifecycle.id, slug: lifecycle.slug, siteName: lifecycle.siteName, status: lifecycle.status, demoPublishedAt: lifecycle.demoPublishedAt, phaseZeroCompletedAt: lifecycle.phaseZeroCompletedAt, createdAt: lifecycle.createdAt, updatedAt: lifecycle.updatedAt };
+}
+
+function publicDemoPhase(phase: {
+  id: string; phase: number; status: string; evidence: string | null; startedAt: string | null;
+  completedAt: string | null; updatedAt: string;
+}) {
+  return { id: phase.id, phase: phase.phase, status: phase.status, evidence: phase.evidence, startedAt: phase.startedAt, completedAt: phase.completedAt, updatedAt: phase.updatedAt };
+}
 
 account.patch('/notifications/read-all', async (c) => {
   assertTrustedPublicOrigin(c);

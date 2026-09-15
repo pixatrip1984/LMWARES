@@ -1,5 +1,5 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
-import type { AdminUser } from '@starter/domain';
+import type { AdminUser, SalesActor } from '@starter/domain';
 
 /** Bindings y variables del Admin API Worker. */
 export interface Bindings {
@@ -36,15 +36,19 @@ export interface Bindings {
    * del panel.
    */
   OPS_RECOVERY_TOKEN?: string;
+  DEEPSEEK_API_KEY?: string;
+  deepseek_api_key?: string;
 }
 
 export interface Identity {
   email: string;
   name: string | null;
+  accessSubject: string | null;
 }
 
 export type Variables = {
   requestId: string;
   identity: Identity;
   admin: AdminUser;
+  salesActor: SalesActor;
 };

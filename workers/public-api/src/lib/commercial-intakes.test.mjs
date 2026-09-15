@@ -121,7 +121,11 @@ test('account returns only the sanitized current offer and an in-app notice', ()
   assert.doesNotMatch(offersSource, /userId/);
 });
 
-test('accepted offers create four server-priced implementation phase orders', () => {
+test('accepted offers start a free demo and defer implementation phase orders', () => {
+  assert.match(intakeSource, /ensureAcceptedOffer/);
+  assert.match(intakeSource, /billingOrders: \[\]/);
+  // La decisión del cliente ocurre desde la ruta pública owner-scoped; Admin
+  // sólo supervisa fases después de que el pago exista.
   assert.match(intakeSource, /ensureImplementationPhases/);
   assert.match(billingRepositorySource, /INSERT OR IGNORE INTO lmw_billing_orders/);
   assert.match(

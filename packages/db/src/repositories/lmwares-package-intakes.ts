@@ -47,6 +47,29 @@ interface PackageIntakeRow {
   updated_at: string;
 }
 
+type SubmissionContent = Pick<PackageIntake, 'plan' | 'modules' | 'marketing' | 'brief' | 'packageSnapshot'> & { discountCode?: string | null };
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
+
+function submissionContent(input: SubmissionContent): unknown {
+  const raw = input.packageSnapshot.businessInterview;
+  // Completion time is telemetry, not a new customer intent on a retry.
+  const interview = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? Object.fromEntries(Object.entries(raw).filter(([key]) => key !== 'completedAt')) : null;
+  return { plan: input.plan, modules: [...input.modules].sort(), marketing: input.marketing,
+    brief: input.brief, discountCode: input.discountCode ?? null, interview };
+}
+
+function assertSameIntakeSubmission(existing: SubmissionContent, incoming: SubmissionContent): void {
+  if (canonical(submissionContent(existing)) !== canonical(submissionContent(incoming))) {
+    throw new AppError('conflict', 'La clave de envío corresponde a otra configuración. Usa una nueva clave de envío.');
+  }
+}
+
 export class LmwaresPackageIntakesRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -70,6 +93,7 @@ export class LmwaresPackageIntakesRepository {
       if (existing.userId !== input.userId) {
         throw new AppError('conflict', 'La clave de envío ya pertenece a otra solicitud.');
       }
+      assertSameIntakeSubmission(existing, input);
       // Idempotent retry only while the request is still open for review/offer.
       if (isOpenPackageIntakeStatus(existing.status)) {
         return { intake: existing, created: false };
@@ -129,6 +153,7 @@ export class LmwaresPackageIntakesRepository {
     if (!intake || intake.userId !== input.userId) {
       throw new AppError('conflict', 'La clave de envío ya pertenece a otra solicitud.');
     }
+    assertSameIntakeSubmission(intake, input);
     if ((result.meta.changes ?? 0) !== 1 && !isOpenPackageIntakeStatus(intake.status)) {
       throw new AppError(
         'conflict',

@@ -22,19 +22,16 @@ export function createHttpClient(opts: HttpClientOptions) {
     init?: RequestInit,
   ): Promise<T> {
     const isForm = body instanceof FormData;
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      ...opts.defaultHeaders,
-      ...(init?.headers as Record<string, string> | undefined),
-    };
-    if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
+    const headers = new Headers({ Accept: 'application/json', ...opts.defaultHeaders });
+    new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+    if (body !== undefined && !isForm) headers.set('Content-Type', 'application/json');
 
     const res = await fetch(`${base}${path}`, {
+      ...init,
       method,
       headers,
       credentials: opts.withCredentials ? 'include' : 'same-origin',
       body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
-      ...init,
     });
 
     if (res.status === 204) return undefined as T;
