@@ -11,16 +11,18 @@ if (!['headless', 'interactive', 'isolated-desktop'].includes(executionMode)) th
 if (!extensionPath || !/^[a-p]{32}$/.test(extensionId || '')) throw new Error('Faltan la ruta o el id válido de Demo Studio.');
 
 const diskManifest = JSON.parse(await readFile(path.join(extensionPath, 'manifest.json'), 'utf8'));
+const activeRun = await activeRunSummary(process.env.LMWARES_DEMO_ACTIVE_RUN_PATH ?? 'C:\\dev\\lmwares-demos\\control\\active-run.json');
 const extensionTarget = await waitForExtensionTarget(12_000);
 const previousVersion = await extensionVersion(extensionTarget);
 const activeJob = await activeJobSummary(extensionTarget);
+const activeJobMatchesRun = Boolean(activeJob && activeRun && activeJob.runId === activeRun.runId && activeJob.executionGeneration === activeRun.executionGeneration);
 // Unpacked extensions can keep an old service-worker script even after their
 // manifest version changes on disk. Reload before a prompt exists. The action
 // popup is deliberately not a persistent tab: it can hide ChatGPT and leave
 // its DOM unsuitable for lifecycle decisions.
-if (!activeJob) await evaluate(extensionTarget.webSocketDebuggerUrl, 'chrome.runtime.reload(); "reload-requested"').catch(() => null);
-if (!activeJob) await delay(900);
-const loadedTarget = activeJob ? extensionTarget : await waitForExtensionTarget(12_000);
+if (!activeJobMatchesRun) await evaluate(extensionTarget.webSocketDebuggerUrl, 'chrome.runtime.reload(); "reload-requested"').catch(() => null);
+if (!activeJobMatchesRun) await delay(900);
+const loadedTarget = activeJobMatchesRun ? extensionTarget : await waitForExtensionTarget(12_000);
 const loadedVersion = await extensionVersion(loadedTarget);
 
 if (loadedVersion !== diskManifest.version) {
@@ -29,7 +31,7 @@ if (loadedVersion !== diskManifest.version) {
 
 await setExecutionMode(loadedTarget, executionMode);
 await closePersistentSupervisorTabs();
-console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, activeJob, reloaded: !activeJob }));
+console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, activeJob, activeJobMatchesRun, reloaded: !activeJobMatchesRun }));
 
 async function listTargets() {
   const response = await fetch(`${endpoint}/json/list`);
@@ -59,8 +61,13 @@ async function extensionVersion(target) {
 }
 
 async function activeJobSummary(target) {
-  const expression = `(async () => { const value = await chrome.storage.local.get('lmwares.demo-studio.state.v1'); const active = value['lmwares.demo-studio.state.v1']?.activeJob; return active ? { attemptId: String(active.attemptId || ''), stage: String(active.stage || '') } : null; })()`;
+  const expression = `(async () => { const value = await chrome.storage.local.get('lmwares.demo-studio.state.v1'); const state = value['lmwares.demo-studio.state.v1'] || {}; const active = state.activeJob; return active ? { attemptId: String(active.attemptId || ''), stage: String(active.stage || ''), runId: String(active.runId || ''), executionGeneration: Number(active.executionGeneration) } : null; })()`;
   return evaluate(target.webSocketDebuggerUrl, expression).catch(() => null);
+}
+
+async function activeRunSummary(activeRunPath) {
+  try { const run = JSON.parse(await readFile(activeRunPath, 'utf8')); return { runId: String(run.runId || ''), executionGeneration: Number(run.executionGeneration) }; }
+  catch { return null; }
 }
 
 async function setExecutionMode(target, mode) {

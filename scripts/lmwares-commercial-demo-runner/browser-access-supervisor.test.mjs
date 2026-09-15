@@ -4,7 +4,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { classifyBrowserSurface } from './browser-access-probe.mjs';
-import { newBrowserAccessState, readBrowserAccessState, writeBrowserAccessState } from './browser-access-state.mjs';
+import { newBrowserAccessState, quarantineBrowserAccessState, readBrowserAccessState, writeBrowserAccessState } from './browser-access-state.mjs';
 import { completeBrowserTransition, decideBrowserAccess, superviseBrowserAccess } from './browser-access-supervisor.mjs';
 
 const run = { runId: 'run_demo_123', executionGeneration: 3, browserMode: 'isolated-desktop' };
@@ -60,4 +60,14 @@ test('browser access state is atomically persisted and fenced by run generation'
   const raw = JSON.parse(await readFile(target, 'utf8'));
   assert.equal(raw.runId, run.runId);
   assert.equal(raw.executionGeneration, 3);
+});
+
+test('corrupt access state is quarantined instead of becoming a permanent null monitor result', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'lmwares-browser-access-corrupt-'));
+  const target = path.join(root, 'browser-access-state.json');
+  await (await import('node:fs/promises')).writeFile(target, Buffer.alloc(64));
+  await assert.rejects(readBrowserAccessState(target));
+  const evidence = await quarantineBrowserAccessState(target, started);
+  assert.match(evidence, /corrupt-browser-access-states/);
+  await assert.rejects((await import('node:fs/promises')).access(target));
 });

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { probeBrowserAccess } from './browser-access-probe.mjs';
-import { readBrowserAccessState, stateForRun, writeBrowserAccessState } from './browser-access-state.mjs';
+import { quarantineBrowserAccessState, readBrowserAccessState, stateForRun, writeBrowserAccessState } from './browser-access-state.mjs';
 import { transitionBrowserSession } from './browser-session-manager.mjs';
 
 const AUTO_CHECK_MS = Math.max(5_000, Number(process.env.LMWARES_DEMO_ACCESS_AUTO_CHECK_MS ?? 45_000));
@@ -39,7 +39,14 @@ export function completeBrowserTransition(state, action, result, now = new Date(
 
 export async function superviseBrowserAccess({ activeRunPath, statePath, endpoint, extensionId, launcherPath, debuggingPort, automate = false, now = new Date(), transition = transitionBrowserSession }) {
   const run = JSON.parse(await readFile(activeRunPath, 'utf8'));
-  const existing = await readBrowserAccessState(statePath);
+  let existing;
+  let recoveredStatePath = null;
+  try {
+    existing = await readBrowserAccessState(statePath);
+  } catch (error) {
+    recoveredStatePath = await quarantineBrowserAccessState(statePath, now);
+    existing = null;
+  }
   const current = stateForRun(existing, run, now);
   const observation = await probeBrowserAccess({ endpoint, extensionId });
   const decided = decideBrowserAccess(current, observation, now);
@@ -50,7 +57,7 @@ export async function superviseBrowserAccess({ activeRunPath, statePath, endpoin
     state = completeBrowserTransition(state, decided.action, transitionResult, now);
   }
   await writeBrowserAccessState(statePath, state);
-  return { runId: run.runId, executionGeneration: current.executionGeneration, observation, action: decided.action, transition: transitionResult, state };
+  return { runId: run.runId, executionGeneration: current.executionGeneration, observation, action: decided.action, transition: transitionResult, recoveredStatePath, state };
 }
 
 const modulePath = fileURLToPath(import.meta.url);

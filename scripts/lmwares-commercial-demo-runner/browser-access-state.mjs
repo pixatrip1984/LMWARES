@@ -51,6 +51,21 @@ export async function readBrowserAccessState(statePath) {
   catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
 }
 
+export async function quarantineBrowserAccessState(statePath, now = new Date()) {
+  try {
+    await readFile(statePath, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+  const directory = path.join(path.dirname(statePath), 'corrupt-browser-access-states');
+  const stamp = new Date(now).toISOString().replace(/[:.]/g, '-');
+  const target = path.join(directory, `${path.basename(statePath)}.${stamp}.${process.pid}.corrupt`);
+  await mkdir(directory, { recursive: true });
+  await rename(statePath, target);
+  return target;
+}
+
 export async function writeBrowserAccessState(statePath, next) {
   const valid = validateBrowserAccessState(next);
   await mkdir(path.dirname(statePath), { recursive: true });

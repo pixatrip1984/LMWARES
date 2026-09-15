@@ -14,7 +14,7 @@ test('bridge reports progress without exposing or replacing lease authority', as
     generationManifest: { id: 'manifest_demo', digest: 'a'.repeat(64), schemaVersion: 'v1', manifest: { assetSlots: [] } },
   };
   await writeFile(target, JSON.stringify(original));
-  updateStudioProgress(target, { runId: original.runId, status: 'creative-plan-generating', message: 'Trabajando\ncon el plan.' });
+  updateStudioProgress(target, { runId: original.runId, executionGeneration: 4, status: 'creative-plan-generating', message: 'Trabajando\ncon el plan.' });
   const stored = JSON.parse(await readFile(target, 'utf8'));
   assert.equal(stored.status, 'awaiting_chat');
   assert.equal(stored.studioStatus, 'creative-plan-generating');
@@ -43,6 +43,7 @@ test('bridge rejects cross-run and arbitrary statuses', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'lmwares-studio-state-'));
   const target = path.join(root, 'active-run.json');
   await writeFile(target, JSON.stringify({ runId: 'run_demo_123', generationManifest: { id: 'manifest_demo', digest: 'a'.repeat(64), manifest: {} } }));
-  assert.throws(() => updateStudioProgress(target, { runId: 'other_run_123', status: 'output-ready' }), /otro run/);
-  assert.throws(() => updateStudioProgress(target, { runId: 'run_demo_123', status: 'submitted_for_review' }), /no es válido/);
+  assert.throws(() => updateStudioProgress(target, { runId: 'other_run_123', executionGeneration: 0, status: 'output-ready' }), /otro run/);
+  assert.throws(() => updateStudioProgress(target, { runId: 'run_demo_123', executionGeneration: 1, status: 'output-ready' }), /otra generación/);
+  assert.throws(() => updateStudioProgress(target, { runId: 'run_demo_123', executionGeneration: 0, status: 'submitted_for_review' }), /no es válido/);
 });

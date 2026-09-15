@@ -7,7 +7,8 @@ const STUDIO_STATUSES = new Set([
   'checking-chat', 'initializing-chat', 'refreshing-chat', 'initialization-verified', 'ready',
   'creative-plan-preparing', 'creative-plan-generating', 'creative-plan-ready',
   'asset-preparing', 'asset-generating', 'asset-captured', 'assets-ready',
-  'code-preparing', 'code-generating', 'code-fragment-ready', 'output-ready',
+  'code-preparing', 'code-generating', 'code-retrying', 'code-fragment-ready', 'output-ready',
+  'run-detected', 'browser-unavailable', 'waiting-chat-visibility', 'access-state-recovered',
 ]);
 
 export function readPublicActiveRun(activeRunPath) {
@@ -29,17 +30,19 @@ export function readPublicActiveRun(activeRunPath) {
 
 export function updateStudioProgress(activeRunPath, input) {
   const runId = String(input?.runId || '');
+  const executionGeneration = Number(input?.executionGeneration);
   const status = String(input?.status || '');
   const message = String(input?.message || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 300);
-  if (!SAFE_ID.test(runId) || !STUDIO_STATUSES.has(status)) throw new Error('El progreso de Demo Studio no es válido.');
+  if (!SAFE_ID.test(runId) || !Number.isSafeInteger(executionGeneration) || executionGeneration < 0 || !STUDIO_STATUSES.has(status)) throw new Error('El progreso de Demo Studio no es válido.');
   const parsed = readActiveRun(activeRunPath);
   if (parsed.runId !== runId) throw new Error('El progreso pertenece a otro run.');
+  if (Number(parsed.executionGeneration || 0) !== executionGeneration) throw new Error('El progreso pertenece a otra generación.');
   const next = { ...parsed, studioStatus: status, studioMessage: message, studioUpdatedAt: new Date().toISOString() };
   mkdirSync(path.dirname(activeRunPath), { recursive: true });
   const temporary = `${activeRunPath}.${process.pid}.${Date.now()}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
   renameSync(temporary, activeRunPath);
-  return { runId, status, updatedAt: next.studioUpdatedAt };
+  return { runId, executionGeneration, status, updatedAt: next.studioUpdatedAt };
 }
 
 function readActiveRun(activeRunPath) {
