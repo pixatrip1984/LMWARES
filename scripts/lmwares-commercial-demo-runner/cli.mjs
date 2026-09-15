@@ -8,6 +8,7 @@ import { submitRelease } from './submit-release.mjs';
 import {
   archiveAbandonedRun,
   archiveCompletedRun,
+  browserModeForRun,
   defaultRunnerId,
   findCompleteIncomingOutput,
   runnerIdForRun,
@@ -27,6 +28,7 @@ const browserLauncher = process.env.LMWARES_DEMO_BROWSER_LAUNCHER ?? path.join(p
 const browserCloser = process.env.LMWARES_DEMO_BROWSER_CLOSER ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'stop-brave-demo-studio.ps1');
 const browserAutoLaunch = !/^(?:0|false|off)$/i.test(process.env.LMWARES_DEMO_BROWSER_AUTO_LAUNCH ?? 'true');
 const browserRetryMs = Math.max(15_000, Number(process.env.LMWARES_DEMO_BROWSER_RETRY_MS ?? 60_000));
+const browserMode = browserModeForRun(null, process.env.LMWARES_DEMO_BROWSER_MODE ?? 'isolated-desktop');
 
 export async function runOnce(options = {}) {
   if (!runnerToken) throw new Error('Falta LMWARES_COMMERCIAL_DEMO_RUNNER_TOKEN.');
@@ -57,7 +59,7 @@ export async function runOnce(options = {}) {
     const run = {
       schemaVersion: 'lmwares.demo-studio-active-run.v1', runId: creativeRun.id, status: 'awaiting_chat', runnerId,
       jobId: job.id, leaseToken: job.leaseToken, executionGeneration: job.executionGeneration,
-      lifecycleId: lifecycle.id, intakeId: intake.id, offerId: acceptedOffer.id, projectPath, createdAt: new Date().toISOString(),
+      lifecycleId: lifecycle.id, intakeId: intake.id, offerId: acceptedOffer.id, projectPath, createdAt: new Date().toISOString(), browserMode,
       buildSpec: { id: buildSpec.id, digest: buildSpec.specDigest, schemaVersion: buildSpec.schemaVersion },
       generationManifest: { id: generationManifest.id, digest: generationManifest.manifestDigest, schemaVersion: generationManifest.schemaVersion, manifest: generationManifest.manifest },
     };
@@ -101,7 +103,7 @@ async function ensureBrowserLaunched(run) {
     browserLaunch: { attemptedAt: new Date().toISOString(), launcher: browserLauncher },
   });
   try {
-    await runCommand('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', browserLauncher]);
+    await runCommand('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', browserLauncher, '-ExecutionMode', browserModeForRun(run, browserMode)]);
     current = await updateActiveRun(activeRunPath, run.runId, {
       browserLaunch: { ...current.browserLaunch, launchedAt: new Date().toISOString(), error: null },
     });

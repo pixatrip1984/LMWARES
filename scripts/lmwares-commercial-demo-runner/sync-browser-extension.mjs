@@ -6,6 +6,8 @@ for (let index = 2; index < process.argv.length; index += 2) args.set(process.ar
 const extensionPath = args.get('--extension-path');
 const extensionId = args.get('--extension-id');
 const endpoint = args.get('--debug-url') ?? 'http://127.0.0.1:9223';
+const executionMode = args.get('--execution-mode') ?? 'isolated-desktop';
+if (!['headless', 'interactive', 'isolated-desktop'].includes(executionMode)) throw new Error('Invalid Demo Studio execution mode.');
 if (!extensionPath || !/^[a-p]{32}$/.test(extensionId || '')) throw new Error('Faltan la ruta o el id válido de Demo Studio.');
 
 const diskManifest = JSON.parse(await readFile(path.join(extensionPath, 'manifest.json'), 'utf8'));
@@ -24,8 +26,9 @@ if (loadedVersion !== diskManifest.version) {
   throw new Error(`Brave conserva Demo Studio ${loadedVersion || 'desconocida'}; se esperaba ${diskManifest.version}.`);
 }
 
+await setExecutionMode(loadedTarget, executionMode);
 await closePersistentSupervisorTabs();
-console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, reloaded: true }));
+console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, reloaded: true }));
 
 async function listTargets() {
   const response = await fetch(`${endpoint}/json/list`);
@@ -52,6 +55,13 @@ async function extensionVersion(target) {
   if (!target?.webSocketDebuggerUrl) return '';
   const value = await evaluate(target.webSocketDebuggerUrl, 'chrome.runtime.getManifest().version').catch(() => '');
   return typeof value === 'string' ? value : '';
+}
+
+async function setExecutionMode(target, mode) {
+  const runtimeMode = mode === 'headless' ? 'headless' : 'interactive';
+  const expression = `(async () => { const key = 'lmwares.demo-studio.runtime.v1'; await chrome.storage.local.set({ [key]: { executionMode: ${JSON.stringify(runtimeMode)}, configuredAt: new Date().toISOString() } }); return ${JSON.stringify(runtimeMode)}; })()`;
+  const saved = await evaluate(target.webSocketDebuggerUrl, expression);
+  if (saved !== runtimeMode) throw new Error('Could not persist Demo Studio execution mode.');
 }
 
 async function closePersistentSupervisorTabs() {

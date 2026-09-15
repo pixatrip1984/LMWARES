@@ -2,7 +2,9 @@
 
 Fecha del documento: 2026-09-15 (continuación del documento solicitado).
 Análisis realizado: 2026-09-14, fecha del entorno.
-Estado: arquitectura propuesta; fix no implementado ni desplegado.
+Estado: primer corte local implementado; validación real del perfil dedicado pendiente.
+
+Actualización de implementación (2026-09-14): se implementó el primer corte local en el runner/bridge y en la fuente instalada de la extensión. La ruta `headless` se probó dos veces con un perfil desechable; Brave 153 reportó `HeadlessChrome` y ChatGPT entregó un desafío de Cloudflare, sin worker de la extensión. Por tanto queda como diagnóstico, no como modo de producción. Se agregó `isolated-desktop` como modo por defecto: crea un escritorio Win32 separado y ejecuta allí Brave gráfico, de forma que su pestaña puede mantenerse activa sin ocupar el escritorio del operador. El host C# compiló y ejecutó un proceso de prueba en ese escritorio. La validación con el perfil dedicado quedó diferida porque hay un run comercial activo en `awaiting_chat` / `attention`; no se debe arrancar ese perfil hasta aislar o resolver ese run.
 
 ## 0. Corrección de alcance: segundo plano real en Windows
 

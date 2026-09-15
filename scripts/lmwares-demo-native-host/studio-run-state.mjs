@@ -22,6 +22,7 @@ export function readPublicActiveRun(activeRunPath) {
     executionGeneration: Number.isSafeInteger(parsed.executionGeneration) ? parsed.executionGeneration : 0,
     status: typeof parsed.studioStatus === 'string' ? parsed.studioStatus : (typeof parsed.status === 'string' ? parsed.status : 'pending'),
     mode: parsed.mode === 'initialization_only' ? 'initialization_only' : 'production',
+    executionMode: parsed.browserMode === 'headless' ? 'headless' : 'interactive',
     generationManifest: { id: creative.id, digest: creative.digest, schemaVersion: creative.schemaVersion, manifest: creative.manifest },
   };
 }

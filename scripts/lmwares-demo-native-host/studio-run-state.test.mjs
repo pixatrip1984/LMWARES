@@ -23,6 +23,19 @@ test('bridge reports progress without exposing or replacing lease authority', as
   const publicRun = readPublicActiveRun(target);
   assert.equal(publicRun.status, 'creative-plan-generating');
   assert.equal(publicRun.executionGeneration, 4);
+  assert.equal(publicRun.executionMode, 'interactive');
+  assert.equal('leaseToken' in publicRun, false);
+});
+
+test('bridge exposes headless execution mode without exposing the run internals', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'lmwares-studio-mode-'));
+  const target = path.join(root, 'active-run.json');
+  await writeFile(target, JSON.stringify({
+    runId: 'run_demo_123', browserMode: 'headless', leaseToken: 'private-token-value',
+    generationManifest: { id: 'manifest_demo', digest: 'a'.repeat(64), manifest: {} },
+  }));
+  const publicRun = readPublicActiveRun(target);
+  assert.equal(publicRun.executionMode, 'headless');
   assert.equal('leaseToken' in publicRun, false);
 });
 

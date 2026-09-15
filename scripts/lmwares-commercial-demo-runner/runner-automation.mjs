@@ -7,6 +7,12 @@ const IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
 const RECOVERABLE_BROWSER_STATES = new Set([
   '', 'opening-chat', 'initializing-chat', 'refreshing-chat', 'checking-chat', 'bridge-unavailable', 'ready',
 ]);
+const BROWSER_MODES = new Set(['headless', 'interactive', 'isolated-desktop']);
+
+export function browserModeForRun(run, configuredMode = 'isolated-desktop') {
+  const candidate = String(run?.browserMode || configuredMode || '').toLowerCase();
+  return BROWSER_MODES.has(candidate) ? candidate : 'isolated-desktop';
+}
 
 export function defaultRunnerId(machineName = hostname()) {
   const safeHost = String(machineName || 'local').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72) || 'local';

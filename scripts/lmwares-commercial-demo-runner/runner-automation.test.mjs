@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   archiveAbandonedRun,
+  browserModeForRun,
   defaultRunnerId,
   findCompleteIncomingOutput,
   runnerIdForRun,
@@ -21,6 +22,12 @@ test('runner identity is stable across process restarts and honors the persisted
   assert.equal(defaultRunnerId('DELL OFFICE'), 'local-commercial-demo-dell-office');
   assert.equal(runnerIdForRun({ runnerId: 'local-commercial-demo-18420' }, 'new-runner'), 'local-commercial-demo-18420');
   assert.equal(runnerIdForRun({}, 'configured-runner'), 'configured-runner');
+});
+
+test('browser execution mode defaults to the isolated desktop and preserves only an explicit valid run mode', () => {
+  assert.equal(browserModeForRun({}, 'isolated-desktop'), 'isolated-desktop');
+  assert.equal(browserModeForRun({ browserMode: 'interactive' }, 'headless'), 'interactive');
+  assert.equal(browserModeForRun({ browserMode: 'unknown' }, 'interactive'), 'isolated-desktop');
 });
 
 test('browser launches once and retries only failed attempts after the cooldown', () => {
