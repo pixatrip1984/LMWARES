@@ -9,6 +9,8 @@ test('extension synchronizer verifies the worker without opening a persistent su
   assert.match(source, /closePersistentSupervisorTabs/);
   assert.match(source, /setExecutionMode/);
   assert.match(source, /execution-mode/);
+  assert.match(source, /activeJobSummary/);
+  assert.match(source, /awaitPromise: true/);
   assert.doesNotMatch(source, /async function openSupervisor/);
   assert.doesNotMatch(source, /const supervisorUrl/);
   assert.doesNotMatch(source, /\/json\/new\?/);

@@ -43,6 +43,7 @@
     "lmwares:free:test": "node --test scripts/lmwares-free-site-runner/*.test.mjs",
     "lmwares:demos:run": "node scripts/lmwares-commercial-demo-runner/cli.mjs",
     "lmwares:demos:watch": "node --env-file-if-exists=scripts/lmwares-commercial-demo-runner/.env scripts/lmwares-commercial-demo-runner/daemon.mjs",
+    "lmwares:demos:access": "node --env-file-if-exists=scripts/lmwares-commercial-demo-runner/.env scripts/lmwares-commercial-demo-runner/browser-access-supervisor.mjs",
     "lmwares:demos:install-listener": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lmwares-commercial-demo-runner/install-at-logon.ps1 -StartNow",
     "lmwares:maintenance:validate": "pwsh -NoProfile -File ./scripts/validate-lmwares-maintenance-policy.ps1",
     "release:validate": "powershell -ExecutionPolicy Bypass -File ./scripts/lmwares-release-validate.ps1",

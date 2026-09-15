@@ -13,13 +13,14 @@ if (!extensionPath || !/^[a-p]{32}$/.test(extensionId || '')) throw new Error('F
 const diskManifest = JSON.parse(await readFile(path.join(extensionPath, 'manifest.json'), 'utf8'));
 const extensionTarget = await waitForExtensionTarget(12_000);
 const previousVersion = await extensionVersion(extensionTarget);
+const activeJob = await activeJobSummary(extensionTarget);
 // Unpacked extensions can keep an old service-worker script even after their
 // manifest version changes on disk. Reload before a prompt exists. The action
 // popup is deliberately not a persistent tab: it can hide ChatGPT and leave
 // its DOM unsuitable for lifecycle decisions.
-await evaluate(extensionTarget.webSocketDebuggerUrl, 'chrome.runtime.reload(); "reload-requested"').catch(() => null);
-await delay(900);
-const loadedTarget = await waitForExtensionTarget(12_000);
+if (!activeJob) await evaluate(extensionTarget.webSocketDebuggerUrl, 'chrome.runtime.reload(); "reload-requested"').catch(() => null);
+if (!activeJob) await delay(900);
+const loadedTarget = activeJob ? extensionTarget : await waitForExtensionTarget(12_000);
 const loadedVersion = await extensionVersion(loadedTarget);
 
 if (loadedVersion !== diskManifest.version) {
@@ -28,7 +29,7 @@ if (loadedVersion !== diskManifest.version) {
 
 await setExecutionMode(loadedTarget, executionMode);
 await closePersistentSupervisorTabs();
-console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, reloaded: true }));
+console.log(JSON.stringify({ status: 'extension_ready', version: loadedVersion, previousVersion, executionMode, activeJob, reloaded: !activeJob }));
 
 async function listTargets() {
   const response = await fetch(`${endpoint}/json/list`);
@@ -57,6 +58,11 @@ async function extensionVersion(target) {
   return typeof value === 'string' ? value : '';
 }
 
+async function activeJobSummary(target) {
+  const expression = `(async () => { const value = await chrome.storage.local.get('lmwares.demo-studio.state.v1'); const active = value['lmwares.demo-studio.state.v1']?.activeJob; return active ? { attemptId: String(active.attemptId || ''), stage: String(active.stage || '') } : null; })()`;
+  return evaluate(target.webSocketDebuggerUrl, expression).catch(() => null);
+}
+
 async function setExecutionMode(target, mode) {
   const runtimeMode = mode === 'headless' ? 'headless' : 'interactive';
   const expression = `(async () => { const key = 'lmwares.demo-studio.runtime.v1'; await chrome.storage.local.set({ [key]: { executionMode: ${JSON.stringify(runtimeMode)}, configuredAt: new Date().toISOString() } }); return ${JSON.stringify(runtimeMode)}; })()`;
@@ -82,7 +88,7 @@ function evaluate(url, expression) {
     socket.addEventListener('open', () => socket.send(JSON.stringify({
       id: 1,
       method: 'Runtime.evaluate',
-      params: { expression, returnByValue: true },
+      params: { expression, returnByValue: true, awaitPromise: true },
     })));
     socket.addEventListener('message', (event) => {
       const message = JSON.parse(event.data);

@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assembleRelease } from './assemble-release.mjs';
+import { superviseBrowserAccess } from './browser-access-supervisor.mjs';
 import { submitRelease } from './submit-release.mjs';
 import {
   archiveAbandonedRun,
@@ -29,6 +30,13 @@ const browserCloser = process.env.LMWARES_DEMO_BROWSER_CLOSER ?? path.join(path.
 const browserAutoLaunch = !/^(?:0|false|off)$/i.test(process.env.LMWARES_DEMO_BROWSER_AUTO_LAUNCH ?? 'true');
 const browserRetryMs = Math.max(15_000, Number(process.env.LMWARES_DEMO_BROWSER_RETRY_MS ?? 60_000));
 const browserMode = browserModeForRun(null, process.env.LMWARES_DEMO_BROWSER_MODE ?? 'isolated-desktop');
+const browserDebugUrl = process.env.LMWARES_DEMO_BROWSER_DEBUG_URL ?? 'http://127.0.0.1:9223';
+const browserDebugPort = Number(process.env.LMWARES_DEMO_BROWSER_DEBUG_PORT ?? 9223);
+const browserExtensionId = process.env.LMWARES_DEMO_EXTENSION_ID ?? 'onnphmgblmlnecgmnknbhgflibbpckln';
+const browserAccessStatePath = process.env.LMWARES_DEMO_ACCESS_STATE_PATH ?? path.join(projectsRoot, 'control', 'browser-access-state.json');
+// The monitor is always safe to run.  A real profile handoff stays explicit
+// until the extension publishes a durable execution checkpoint.
+const browserAccessAutomation = /^(?:1|true|on)$/i.test(process.env.LMWARES_DEMO_ACCESS_AUTOMATION ?? 'false');
 
 export async function runOnce(options = {}) {
   if (!runnerToken) throw new Error('Falta LMWARES_COMMERCIAL_DEMO_RUNNER_TOKEN.');
@@ -86,14 +94,33 @@ async function renewActiveRun(active) {
   try {
     await post(`/internal/commercial-demo-jobs/${encodeURIComponent(active.jobId)}/heartbeat`, { runnerId: leaseRunnerId, leaseToken: active.leaseToken });
     let current = await ensureBrowserLaunched(active);
+    const browserAccess = await monitorBrowserAccess(current);
     current = await advanceDownloadedOutput(current);
-    console.log(JSON.stringify({ status: current.status, studioStatus: current.studioStatus ?? null, runId: current.runId, jobId: current.jobId, projectPath: current.projectPath }));
+    console.log(JSON.stringify({ status: current.status, studioStatus: current.studioStatus ?? null, browserAccess: browserAccess?.state ?? null, runId: current.runId, jobId: current.jobId, projectPath: current.projectPath }));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'No se pudo renovar el lease.';
     if (/lease|trabajo ya no pertenece|HTTP 409|HTTP 403/i.test(message)) {
       await writeJson(activeRunPath, { ...active, status: 'lease_lost', lastError: message, updatedAt: new Date().toISOString() });
     }
     throw new Error(`El lease de la demo activa se perdió: ${message}`);
+  }
+}
+
+async function monitorBrowserAccess(run) {
+  try {
+    return await superviseBrowserAccess({
+      activeRunPath,
+      statePath: browserAccessStatePath,
+      endpoint: browserDebugUrl,
+      extensionId: browserExtensionId,
+      launcherPath: browserLauncher,
+      debuggingPort: browserDebugPort,
+      automate: browserAccessAutomation,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`No se pudo observar el acceso de Demo Studio para ${run.runId}: ${message}`);
+    return null;
   }
 }
 
