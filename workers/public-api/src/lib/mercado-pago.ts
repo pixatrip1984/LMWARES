@@ -451,8 +451,10 @@ export async function expireMercadoPagoPreference(input: {
 export async function getMercadoPagoPayment(input: {
   accessToken: string;
   paymentId: string;
+  /** El Worker usa globalThis.fetch; los harnesses inyectan un transporte local. */
+  fetchImpl?: typeof fetch;
 }): Promise<MercadoPagoPayment> {
-  const response = await fetch(
+  const response = await (input.fetchImpl ?? globalThis.fetch)(
     `${MERCADO_PAGO_API}/v1/payments/${encodeURIComponent(input.paymentId)}`,
     {
       headers: {

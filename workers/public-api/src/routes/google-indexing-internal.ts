@@ -13,7 +13,7 @@ import type { Bindings, Variables } from '../env';
  */
 export const googleIndexingInternal = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-googleIndexingInternal.use('*', async (c, next) => {
+googleIndexingInternal.use('/google-indexing/*', async (c, next) => {
   const header = c.req.header('Authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
   if (!(await safeTokenEqual(token, c.env.OPS_RECOVERY_TOKEN ?? ''))) {

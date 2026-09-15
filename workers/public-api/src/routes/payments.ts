@@ -101,8 +101,9 @@ payments.post('/webhooks/mercado-pago', async (c) => {
           ? mercadoPagoCommercialAccessToken(c.env)
           : maintenanceScope
           ? mercadoPagoMaintenanceAccessToken(c.env)
-          : c.env.MERCADO_PAGO_ACCESS_TOKEN,
+        : c.env.MERCADO_PAGO_ACCESS_TOKEN,
         paymentId,
+        fetchImpl: c.get('mercadoPagoFetch'),
       });
     if (payment.externalReference.startsWith('lmw-implementation:')) {
       if (!commercialScope) {

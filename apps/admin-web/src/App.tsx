@@ -11,10 +11,13 @@ import { SiteModulesPage } from './pages/SiteModulesPage';
 import { CommercialIntakesPage } from './pages/CommercialIntakesPage';
 import { StarterDomainsPage } from './pages/StarterDomainsPage';
 import { DiscountCodesPage } from './pages/DiscountCodesPage';
+import { SalesPage } from './pages/SalesPage';
+import { SalesActorsPage } from './pages/SalesActorsPage';
 
 export function App() {
   return (
     <Routes>
+      <Route path="/sales" element={<SalesPage />} />
       <Route element={<AdminLayout />}>
         <Route index element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
@@ -31,6 +34,7 @@ export function App() {
         <Route path="/commercial-intakes" element={<CommercialIntakesPage />} />
         <Route path="/starter-domains" element={<StarterDomainsPage />} />
         <Route path="/discount-codes" element={<DiscountCodesPage />} />
+        <Route path="/sales-actors" element={<SalesActorsPage />} />
       </Route>
     </Routes>
   );

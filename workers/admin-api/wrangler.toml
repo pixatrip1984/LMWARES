@@ -47,6 +47,7 @@ bucket_name = "starter-media"
 name = "starter-admin-api"
 routes = [
   { pattern = "admin.lmwares.com/admin/*", zone_name = "lmwares.com" },
+  { pattern = "admin.lmwares.com/sales/*", zone_name = "lmwares.com" },
   { pattern = "admin.lmwares.com/health", zone_name = "lmwares.com" }
 ]
 

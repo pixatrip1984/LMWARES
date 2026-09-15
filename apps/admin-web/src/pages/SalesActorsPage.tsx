@@ -1,0 +1,14 @@
+import { useEffect, useState } from 'react';
+import type { SalesActor } from '@starter/domain';
+import { api } from '../lib/api';
+
+export function SalesActorsPage() {
+  const [actors, setActors] = useState<SalesActor[]>([]);
+  const [name, setName] = useState(''); const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const load = async () => { try { setActors((await api.listSalesActors()).actors); } catch (cause) { setError(message(cause)); } };
+  useEffect(() => { void load(); }, []);
+  const add = async () => { setBusy(true); setError(null); try { const result = await api.provisionSalesActor({ displayName: name.trim(), email: email.trim() }); setActors((current) => current.some((actor) => actor.id === result.actor.id) ? current : [...current, result.actor]); setName(''); setEmail(''); } catch (cause) { setError(message(cause)); } finally { setBusy(false); } };
+  return <section className="mx-auto max-w-2xl space-y-6"><header><p className="text-xs font-semibold uppercase tracking-widest text-brand-700">Oracle · Sales</p><h1 className="mt-1 text-2xl font-bold">Vendedores</h1><p className="mt-2 text-sm text-gray-600">Autoriza quién puede abrir y llevar operaciones comerciales. Un vendedor no recibe permisos de administración.</p></header>{error ? <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}<section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"><h2 className="font-semibold">Agregar vendedor</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><input className="rounded border border-gray-300 px-3 py-2" onChange={(event) => setName(event.target.value)} placeholder="Nombre" value={name}/><input className="rounded border border-gray-300 px-3 py-2" onChange={(event) => setEmail(event.target.value)} placeholder="correo@ejemplo.com" type="email" value={email}/></div><button className="mt-4 rounded bg-brand-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !name.trim() || !email.trim()} onClick={() => void add()} type="button">{busy ? 'Guardando…' : 'Autorizar vendedor'}</button></section><section className="space-y-2">{actors.map((actor) => <article className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4" key={actor.id}><div><strong>{actor.displayName}</strong><p className="text-sm text-gray-500">{actor.emailNormalized}</p></div><span className="rounded-full bg-gray-100 px-3 py-1 text-xs">{actor.status}</span></article>)}{!actors.length ? <p className="rounded border border-dashed border-gray-300 bg-white p-5 text-sm text-gray-500">Aún no hay vendedores autorizados.</p> : null}</section></section>;
+}
+function message(error: unknown) { return error instanceof Error ? error.message : 'No se pudo actualizar vendedores.'; }

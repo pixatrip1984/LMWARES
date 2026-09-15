@@ -19,18 +19,7 @@ export function accessMiddleware(): MiddlewareHandler<{
   Variables: Variables;
 }> {
   return async (c, next) => {
-    let identity: Identity;
-
-    if (c.env.ACCESS_DISABLED === '1') {
-      const devEmail = c.req.header('X-Dev-Email') ?? 'admin@example.com';
-      identity = { email: devEmail, name: 'Dev Admin' };
-    } else {
-      const token = c.req.header('Cf-Access-Jwt-Assertion') ?? getCookie(c, 'CF_Authorization');
-      if (!token) throw AppError.unauthorized('Falta el token de Cloudflare Access.');
-      const claims = await verifyAccessJwt(token, c.env.ACCESS_TEAM_DOMAIN, c.env.ACCESS_AUD);
-      if (!claims.email) throw AppError.unauthorized('El token no contiene email.');
-      identity = { email: claims.email, name: claims.name ?? null };
-    }
+    const identity = await resolveAccessIdentity(c);
 
     if (!isAllowlistedAdmin(identity.email, c.env.ADMIN_EMAIL_ALLOWLIST)) {
       throw AppError.forbidden('Tu identidad de Access no está autorizada para el panel.');
@@ -50,6 +39,42 @@ export function accessMiddleware(): MiddlewareHandler<{
     c.set('admin', admin);
     await next();
   };
+}
+
+/**
+ * Autoriza únicamente a un vendedor ya aprovisionado. No crea vendedores al
+ * iniciar sesión: la alta sigue siendo una decisión explícita de administración.
+ */
+export function salesAccessMiddleware(): MiddlewareHandler<{
+  Bindings: Bindings;
+  Variables: Variables;
+}> {
+  return async (c, next) => {
+    const identity = await resolveAccessIdentity(c);
+    const repos = createRepositories(c.env.DB);
+    const seller = await repos.lmwaresCommercialOperations.getSalesActorForAccess({
+      email: identity.email,
+      accessSubject: identity.accessSubject,
+    });
+    if (!seller || seller.status !== 'active') {
+      throw AppError.forbidden('Tu identidad no está autorizada para Sales.');
+    }
+    c.set('identity', identity);
+    c.set('salesActor', seller);
+    await next();
+  };
+}
+
+async function resolveAccessIdentity(c: Ctx): Promise<Identity> {
+  if (c.env.ACCESS_DISABLED === '1') {
+    const devEmail = c.req.header('X-Dev-Email') ?? 'admin@example.com';
+    return { email: devEmail, name: 'Dev Admin', accessSubject: null };
+  }
+  const token = c.req.header('Cf-Access-Jwt-Assertion') ?? getCookie(c, 'CF_Authorization');
+  if (!token) throw AppError.unauthorized('Falta el token de Cloudflare Access.');
+  const claims = await verifyAccessJwt(token, c.env.ACCESS_TEAM_DOMAIN, c.env.ACCESS_AUD);
+  if (!claims.email) throw AppError.unauthorized('El token no contiene email.');
+  return { email: claims.email, name: claims.name ?? null, accessSubject: claims.sub ?? null };
 }
 
 function isAllowlistedAdmin(email: string, rawAllowlist: string | undefined): boolean {

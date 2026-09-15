@@ -79,7 +79,7 @@ MERCADO_PAGO_MAINTENANCE_TEST_MODE = "0"
 ADMIN_ALERT_EMAIL = "lmwareservice@gmail.com"
 
 [env.production.triggers]
-crons = ["17 * * * *"]
+crons = ["17 * * * *", "* * * * *"]
 
 [[env.production.d1_databases]]
 binding = "DB"

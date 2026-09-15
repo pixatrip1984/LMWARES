@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { freeIntakeSanitizedImageKey, freeSiteArtifactKey } from '@starter/config';
 import {
   AppError,
@@ -15,14 +15,16 @@ import { buildStarterPublishedEmail } from '../lib/starter-notification-email';
 export const freeJobsInternal = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const MAX_SANITIZED_IMAGE_BYTES = 5 * 1024 * 1024;
 
-freeJobsInternal.use('*', async (c, next) => {
+const requireFreeRunner: MiddlewareHandler<{ Bindings: Bindings; Variables: Variables }> = async (c, next) => {
   const header = c.req.header('Authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
   if (!(await safeTokenEqual(token, c.env.FREE_RUNNER_TOKEN))) {
     throw AppError.forbidden('Runner Free no autorizado.');
   }
   await next();
-});
+};
+freeJobsInternal.use('/free-jobs/*', requireFreeRunner);
+freeJobsInternal.use('/free-notifications/*', requireFreeRunner);
 
 freeJobsInternal.post('/free-jobs/claim', async (c) => {
   const body = await readJson(c);

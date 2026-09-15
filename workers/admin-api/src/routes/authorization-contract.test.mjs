@@ -16,11 +16,14 @@ const ROUTES = {
   discountCodesAdmin: { file: 'discount-codes', router: 'discountCodesAdmin' },
   stuckPayments: { file: 'stuck-payments', router: 'stuckPayments' },
   starterDomainsAdmin: { file: 'starter-domains', router: 'starterDomainsAdmin' },
+  salesActorsAdmin: { file: 'sales-actors', router: 'salesActorsAdmin' },
 };
 
 test('every mounted admin mutator declares requireWrite or requireApproval', async () => {
   const index = await readFile(new URL('../index.ts', import.meta.url), 'utf8');
-  const routes = [...index.matchAll(/app\.route\('([^']+)',\s*(\w+)\)/g)].map((match) => match[2]);
+  const routes = [...index.matchAll(/app\.route\('([^']+)',\s*(\w+)\)/g)]
+    .filter((match) => match[1].startsWith('/admin/'))
+    .map((match) => match[2]);
   for (const route of routes) {
     assert.ok(ROUTES[route], `Falta registrar la ruta Admin montada: ${route}`);
     const source = await readFile(new URL(`../routes/${ROUTES[route].file}.ts`, import.meta.url), 'utf8');

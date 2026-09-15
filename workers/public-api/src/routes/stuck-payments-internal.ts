@@ -25,7 +25,7 @@ import {
  */
 export const stuckPaymentsInternal = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-stuckPaymentsInternal.use('*', async (c, next) => {
+stuckPaymentsInternal.use('/stuck-payments/*', async (c, next) => {
   const header = c.req.header('Authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
   if (!(await safeTokenEqual(token, c.env.OPS_RECOVERY_TOKEN ?? ''))) {

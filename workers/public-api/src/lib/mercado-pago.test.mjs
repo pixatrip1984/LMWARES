@@ -89,7 +89,9 @@ test('production schedules reconciliation through waitUntil', () => {
     /ctx\.waitUntil\(reconcileSubscriptionsOnSchedule\(env, controller\.scheduledTime\)\)/,
   );
   assert.match(wranglerSource, /\[env\.production\.triggers\]/);
-  assert.match(wranglerSource, /crons = \["17 \* \* \* \*"\]/);
+  assert.match(wranglerSource, /crons = \["17 \* \* \* \*", "\* \* \* \* \*"\]/);
+  assert.match(workerSource, /if \(controller\.cron === '17 \* \* \* \*'\)/);
+  assert.match(workerSource, /ctx\.waitUntil\(processQueuedScopeJob\(env\)\)/);
 });
 
 test('maintenance reconciliation continues when creation is closed', () => {

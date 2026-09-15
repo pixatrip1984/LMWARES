@@ -13,6 +13,7 @@ import {
 import type { Bindings, Variables } from '../env';
 import { assertFreeImageDimensions, inspectFreeImage } from '../lib/free-image';
 import { verifyTurnstile } from '../lib/turnstile';
+import { notifyOperator } from '../lib/operational-alerts';
 import {
   assertIntakeOwner,
   assertTrustedPublicOrigin,
@@ -269,6 +270,14 @@ freeIntakes.post('/:id/submit', async (c) => {
     kind: 'free-intake-submitted',
     intakeId: submitted.id,
     jobId: job.id,
+  });
+  await notifyOperator(c.env, {
+    title: 'LMWares · nueva solicitud Free',
+    lines: [
+      `${submitted.siteName} · ${submitted.slug}.${c.env.FREE_SITE_BASE_DOMAIN}`,
+      `Cliente: ${session.user.email}`,
+      `Solicitud: ${submitted.id}`,
+    ],
   });
 
   return c.json({

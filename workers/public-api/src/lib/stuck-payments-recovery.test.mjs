@@ -24,7 +24,7 @@ const adminRouteSource = readFileSync(
 test('the internal reconcile endpoint requires a bearer token match before doing anything', () => {
   assert.match(
     internalRouteSource,
-    /stuckPaymentsInternal\.use\('\*', async \(c, next\) => \{/,
+    /stuckPaymentsInternal\.use\('\/stuck-payments\/\*', async \(c, next\) => \{/,
   );
   assert.match(internalRouteSource, /safeTokenEqual\(token, c\.env\.OPS_RECOVERY_TOKEN/);
   assert.match(internalRouteSource, /throw AppError\.forbidden/);
