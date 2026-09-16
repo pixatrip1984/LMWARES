@@ -33,6 +33,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      - name: Validate root package manifest
+        run: node scripts/validate-root-package-json.mjs
+
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
