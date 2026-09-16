@@ -115,10 +115,29 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync('.npm-audit-router.json', 'utf8'));
+          let failed = false;
           for (const name of ['react-router', 'react-router-dom']) {
-            if (report.vulnerabilities?.[name]) {
-              throw new Error(`npm audit still reports a production vulnerability for ${name}`);
-            }
+            const vulnerability = report.vulnerabilities?.[name];
+            if (!vulnerability) continue;
+            failed = true;
+            const advisories = (Array.isArray(vulnerability.via) ? vulnerability.via : [])
+              .filter((entry) => entry && typeof entry === 'object')
+              .map((entry) => ({
+                severity: entry.severity,
+                title: entry.title,
+                url: entry.url,
+                range: entry.range,
+              }));
+            console.error(JSON.stringify({
+              package: name,
+              severity: vulnerability.severity,
+              range: vulnerability.range,
+              fixAvailable: vulnerability.fixAvailable,
+              advisories,
+            }));
+          }
+          if (failed) {
+            throw new Error('Candidate React Router 6.30.6 remains vulnerable; refusing to commit it.');
           }
           NODE
           rm -f .npm-audit-router.json
