@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const SCRIPT = new URL("./validate-npm-audit.mjs", import.meta.url);
+const SCRIPT = fileURLToPath(new URL("./validate-npm-audit.mjs", import.meta.url));
 
 function runAuditValidator(reportSource) {
   const dir = mkdtempSync(join(tmpdir(), "lmwares-audit-policy-"));
@@ -13,7 +14,7 @@ function runAuditValidator(reportSource) {
   writeFileSync(reportPath, reportSource, "utf8");
 
   try {
-    return spawnSync(process.execPath, [SCRIPT.pathname, reportPath], {
+    return spawnSync(process.execPath, [SCRIPT, reportPath], {
       encoding: "utf8",
     });
   } finally {
