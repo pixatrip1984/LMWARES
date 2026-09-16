@@ -17,7 +17,7 @@
     "@starter/db": "0.0.0",
     "@starter/domain": "0.0.0",
     "@starter/validation": "0.0.0",
-    "hono": "4.12.27"
+    "hono": "4.13.8"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260627.1",
