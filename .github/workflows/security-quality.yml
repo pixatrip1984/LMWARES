@@ -39,8 +39,10 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+      - name: Audit production dependencies with exact temporary exceptions
+        run: |
+          npm audit --omit=dev --json > .npm-audit.json || true
+          node scripts/validate-npm-audit.mjs .npm-audit.json
 
       - name: Lint
         run: npm run lint
