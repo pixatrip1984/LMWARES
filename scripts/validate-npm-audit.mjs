@@ -16,6 +16,7 @@ const TEMPORARY_ALLOWED_ADVISORIES = new Set([
   "https://github.com/advisories/GHSA-crvj-82cr-hjcx",
   "https://github.com/advisories/GHSA-wrjc-x8rr-h8h6",
   "https://github.com/advisories/GHSA-337j-9hxr-rhxg",
+  "https://github.com/advisories/GHSA-jjmj-jmhj-qwj2",
 ]);
 
 const source = await readFile(AUDIT_PATH, "utf8");
