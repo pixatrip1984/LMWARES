@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           npm install --package-lock-only --ignore-scripts --save-exact \
-            react-router-dom@6.30.6 \
+            react-router-dom@7.18.4 \
             --workspace=apps/public-web \
             --workspace=apps/admin-web
 
@@ -73,19 +73,19 @@ jobs:
           const fs = require('node:fs');
           for (const path of ['apps/admin-web/package.json', 'apps/public-web/package.json']) {
             const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-            if (pkg.dependencies?.['react-router-dom'] !== '6.30.6') {
-              throw new Error(`${path}: react-router-dom was not pinned to 6.30.6`);
+            if (pkg.dependencies?.['react-router-dom'] !== '7.18.4') {
+              throw new Error(`${path}: react-router-dom was not pinned to 7.18.4`);
             }
           }
           const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
           for (const workspace of ['apps/admin-web', 'apps/public-web']) {
-            if (lock.packages?.[workspace]?.dependencies?.['react-router-dom'] !== '6.30.6') {
-              throw new Error(`package-lock.json: ${workspace} is not pinned to react-router-dom 6.30.6`);
+            if (lock.packages?.[workspace]?.dependencies?.['react-router-dom'] !== '7.18.4') {
+              throw new Error(`package-lock.json: ${workspace} is not pinned to react-router-dom 7.18.4`);
             }
           }
           for (const [name, version] of [
-            ['node_modules/react-router', '6.30.6'],
-            ['node_modules/react-router-dom', '6.30.6'],
+            ['node_modules/react-router', '7.18.4'],
+            ['node_modules/react-router-dom', '7.18.4'],
           ]) {
             if (lock.packages?.[name]?.version !== version) {
               throw new Error(`package-lock.json: ${name} expected ${version}`);
@@ -137,7 +137,7 @@ jobs:
             }));
           }
           if (failed) {
-            throw new Error('Candidate React Router 6.30.6 remains vulnerable; refusing to commit it.');
+            throw new Error('Candidate React Router 7.18.4 remains vulnerable; refusing to commit it.');
           }
           NODE
           rm -f .npm-audit-router.json
@@ -150,5 +150,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- apps/admin-web/package.json apps/public-web/package.json package-lock.json
           git diff --cached --check
-          git commit -m "security: patch React Router to 6.30.6"
+          git commit -m "security: migrate React Router to 7.18.4"
           git push origin HEAD:security/react-router-patch-04
