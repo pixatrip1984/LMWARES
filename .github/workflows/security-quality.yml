@@ -36,10 +36,13 @@ jobs:
       - name: Validate root package manifest
         run: node scripts/validate-root-package-json.mjs
 
+      - name: Test security policy validators
+        run: node --test scripts/validate-npm-audit.test.mjs
+
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Audit production dependencies with exact temporary exceptions
+      - name: Audit production dependencies with zero known vulnerabilities
         run: |
           npm audit --omit=dev --json > .npm-audit.json || true
           node scripts/validate-npm-audit.mjs .npm-audit.json
