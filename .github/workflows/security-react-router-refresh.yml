@@ -1,0 +1,135 @@
+name: One-shot React Router lock refresh
+
+on:
+  push:
+    branches:
+      - security/react-router-patch-04
+    paths:
+      - .github/workflows/security-react-router-refresh.yml
+
+# This workflow exists only on the remediation branch and is deleted before merge.
+# It has no access to production secrets and may write only repository contents.
+permissions:
+  contents: write
+
+concurrency:
+  group: security-react-router-lock-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: >-
+      github.repository == 'pixatrip1984/LMWARES' &&
+      github.ref == 'refs/heads/security/react-router-patch-04' &&
+      github.actor == 'pixatrip1984'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout remediation branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, pinned
+        with:
+          ref: security/react-router-patch-04
+          fetch-depth: 1
+          # This is a temporary mutation job, not a verification job. The token is
+          # scoped to contents:write above and the workflow is removed before merge.
+          persist-credentials: true
+
+      - name: Configure Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4, pinned
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Verify expected starting state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          for (const path of ['apps/admin-web/package.json', 'apps/public-web/package.json']) {
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            if (pkg.dependencies?.['react-router-dom'] !== '6.30.4') {
+              throw new Error(`${path}: expected react-router-dom 6.30.4 before remediation`);
+            }
+          }
+          NODE
+
+      - name: Regenerate lockfile without lifecycle scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --save-exact \
+            react-router-dom@6.30.6 \
+            --workspace=apps/public-web \
+            --workspace=apps/admin-web
+
+      - name: Verify dependency result and changed-file boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          for (const path of ['apps/admin-web/package.json', 'apps/public-web/package.json']) {
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            if (pkg.dependencies?.['react-router-dom'] !== '6.30.6') {
+              throw new Error(`${path}: react-router-dom was not pinned to 6.30.6`);
+            }
+          }
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          for (const workspace of ['apps/admin-web', 'apps/public-web']) {
+            if (lock.packages?.[workspace]?.dependencies?.['react-router-dom'] !== '6.30.6') {
+              throw new Error(`package-lock.json: ${workspace} is not pinned to react-router-dom 6.30.6`);
+            }
+          }
+          for (const [name, version] of [
+            ['node_modules/react-router', '6.30.6'],
+            ['node_modules/react-router-dom', '6.30.6'],
+          ]) {
+            if (lock.packages?.[name]?.version !== version) {
+              throw new Error(`package-lock.json: ${name} expected ${version}`);
+            }
+          }
+          NODE
+
+          mapfile -t changed < <(git diff --name-only | sort)
+          expected=(
+            "apps/admin-web/package.json"
+            "apps/public-web/package.json"
+            "package-lock.json"
+          )
+          if [[ "${changed[*]}" != "${expected[*]}" ]]; then
+            printf 'Unexpected changed files after lock refresh:\n'
+            printf '  %s\n' "${changed[@]}"
+            exit 1
+          fi
+
+          git diff --check
+
+      - name: Verify React Router advisories are removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --json > .npm-audit-router.json || true
+          node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.npm-audit-router.json', 'utf8'));
+          for (const name of ['react-router', 'react-router-dom']) {
+            if (report.vulnerabilities?.[name]) {
+              throw new Error(`npm audit still reports a production vulnerability for ${name}`);
+            }
+          }
+          NODE
+          rm -f .npm-audit-router.json
+
+      - name: Commit generated dependency state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- apps/admin-web/package.json apps/public-web/package.json package-lock.json
+          git diff --cached --check
+          git commit -m "security: patch React Router to 6.30.6"
+          git push origin HEAD:security/react-router-patch-04
