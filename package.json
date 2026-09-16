@@ -5,7 +5,7 @@
   "description": "Plantilla madre Cloudflare-first para proyectos full stack pequeños y medianos.",
   "packageManager": "npm@10.9.4",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "workspaces": [
     "apps/*",
