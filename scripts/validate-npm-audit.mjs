@@ -6,16 +6,6 @@ if (!AUDIT_PATH) {
   throw new Error("Usage: node scripts/validate-npm-audit.mjs <npm-audit.json>");
 }
 
-const TEMPORARY_ALLOWED_ADVISORIES = new Set([
-  "https://github.com/advisories/GHSA-8j4g-w8fx-2239",
-  "https://github.com/advisories/GHSA-f23p-vx2j-j53r",
-  "https://github.com/advisories/GHSA-79qm-7rj5-m7r9",
-  "https://github.com/advisories/GHSA-54fx-42gc-7vw4",
-  "https://github.com/advisories/GHSA-gqvv-2mrq-wpjv",
-  "https://github.com/advisories/GHSA-g6gw-c38x-mqfc",
-  "https://github.com/advisories/GHSA-crvj-82cr-hjcx",
-]);
-
 const source = await readFile(AUDIT_PATH, "utf8");
 let report;
 
@@ -25,80 +15,61 @@ try {
   throw new Error("npm audit did not produce valid JSON; failing closed.");
 }
 
-if (report?.auditReportVersion !== 2 || !report?.metadata?.vulnerabilities) {
+if (
+  report?.auditReportVersion !== 2 ||
+  !report?.metadata?.vulnerabilities ||
+  typeof report.metadata.vulnerabilities !== "object" ||
+  !report?.vulnerabilities ||
+  typeof report.vulnerabilities !== "object" ||
+  Array.isArray(report.vulnerabilities)
+) {
   throw new Error("Unexpected npm audit report shape; failing closed.");
 }
 
 const counts = report.metadata.vulnerabilities;
-for (const severity of ["high", "critical"]) {
-  if ((counts[severity] ?? 0) > 0) {
-    throw new Error(`npm audit reports ${counts[severity]} ${severity} vulnerability/vulnerabilities.`);
+const severities = ["info", "low", "moderate", "high", "critical"];
+
+for (const severity of severities) {
+  const count = counts[severity];
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error(`Invalid npm audit ${severity} vulnerability count; failing closed.`);
   }
 }
 
-const vulnerabilities = report.vulnerabilities ?? {};
-const memo = new Map();
-
-function validatePackage(name, trail = new Set()) {
-  if (memo.has(name)) return memo.get(name);
-  const vulnerability = vulnerabilities[name];
-  if (!vulnerability) {
-    throw new Error(`Audit report references missing vulnerability package: ${name}`);
-  }
-  if (trail.has(name)) {
-    throw new Error(`Cyclic npm audit dependency chain detected at ${name}.`);
-  }
-
-  const nextTrail = new Set(trail);
-  nextTrail.add(name);
-  const via = Array.isArray(vulnerability.via) ? vulnerability.via : [];
-
-  if (via.length === 0) {
-    throw new Error(`Vulnerability ${name} has no reviewable advisory chain.`);
-  }
-
-  for (const entry of via) {
-    if (typeof entry === "string") {
-      validatePackage(entry, nextTrail);
-      continue;
-    }
-
-    const url = entry?.url;
-    const severity = entry?.severity;
-    if (severity === "high" || severity === "critical") {
-      throw new Error(`Unacceptable ${severity} advisory for ${name}: ${url ?? "unknown URL"}`);
-    }
-    if (typeof url !== "string" || !TEMPORARY_ALLOWED_ADVISORIES.has(url)) {
-      throw new Error(`Unreviewed npm advisory for ${name}: ${url ?? "missing URL"}`);
-    }
-  }
-
-  memo.set(name, true);
-  return true;
+if (!Number.isInteger(counts.total) || counts.total < 0) {
+  throw new Error("Invalid npm audit total vulnerability count; failing closed.");
 }
 
-for (const name of Object.keys(vulnerabilities)) {
-  validatePackage(name);
+const severityTotal = severities.reduce((sum, severity) => sum + counts[severity], 0);
+if (severityTotal !== counts.total) {
+  throw new Error(
+    `npm audit vulnerability counts are inconsistent: severities=${severityTotal}, total=${counts.total}.`,
+  );
 }
 
-const allowedUrlsSeen = new Set();
-for (const vulnerability of Object.values(vulnerabilities)) {
-  for (const entry of Array.isArray(vulnerability.via) ? vulnerability.via : []) {
-    if (typeof entry === "object" && typeof entry?.url === "string") {
-      allowedUrlsSeen.add(entry.url);
-    }
-  }
+const vulnerabilities = report.vulnerabilities;
+const vulnerablePackages = Object.keys(vulnerabilities);
+
+if (counts.total === 0 && vulnerablePackages.length === 0) {
+  console.log("npm audit: no production vulnerabilities reported.");
+  process.exit(0);
 }
 
-for (const seen of allowedUrlsSeen) {
-  if (!TEMPORARY_ALLOWED_ADVISORIES.has(seen)) {
-    throw new Error(`Audit advisory escaped allowlist validation: ${seen}`);
-  }
-}
+const findings = vulnerablePackages.map((name) => {
+  const vulnerability = vulnerabilities[name] ?? {};
+  const advisoryUrls = (Array.isArray(vulnerability.via) ? vulnerability.via : [])
+    .filter((entry) => entry && typeof entry === "object" && typeof entry.url === "string")
+    .map((entry) => entry.url);
 
-const total = counts.total ?? 0;
-console.log(
-  total === 0
-    ? "npm audit: no production vulnerabilities reported."
-    : `npm audit: ${total} known vulnerability record(s) match the exact temporary advisory exceptions tracked in issue #3.`,
+  return {
+    package: name,
+    severity: vulnerability.severity ?? "unknown",
+    range: vulnerability.range ?? "unknown",
+    advisories: advisoryUrls,
+  };
+});
+
+console.error(JSON.stringify({ counts, findings }, null, 2));
+throw new Error(
+  `npm audit reports ${counts.total} production vulnerability record(s); zero known production vulnerabilities are allowed.`,
 );
